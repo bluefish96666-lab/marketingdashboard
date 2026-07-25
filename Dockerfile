@@ -11,9 +11,12 @@ RUN apk add --no-cache curl
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000
-COPY --from=build /app/dist ./dist
-COPY --from=build /app/server ./server
+COPY --from=build --chown=node:node /app/dist ./dist
+COPY --from=build --chown=node:node /app/server ./server
 COPY --from=build /app/node_modules ./node_modules
 COPY package.json ./
+# 运行期需写 server/data/(现货/OpenRouter 历史积累), 降权前建好并授权
+RUN mkdir -p /app/server/data && chown -R node:node /app/server
+USER node
 EXPOSE 3000
 CMD ["node", "server/index.cjs"]

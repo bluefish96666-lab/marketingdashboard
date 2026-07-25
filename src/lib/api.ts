@@ -227,8 +227,16 @@ const num = (v: unknown) => {
   return Number.isFinite(n) ? n : 0;
 };
 
+/** AbortSignal.timeout 兼容封装(Safari <16 无此静态方法, 旧设备直接抛 TypeError) */
+function timeoutSignal(ms: number): AbortSignal {
+  if (typeof AbortSignal.timeout === "function") return AbortSignal.timeout(ms);
+  const ctrl = new AbortController();
+  setTimeout(() => ctrl.abort(), ms);
+  return ctrl.signal;
+}
+
 async function get<T>(path: string): Promise<T> {
-  const r = await fetch(path, { signal: AbortSignal.timeout(10000) });
+  const r = await fetch(path, { signal: timeoutSignal(10000) });
   const j = await r.json().catch(() => null);
   if (!r.ok) throw new Error(j?.error || `HTTP ${r.status}`);
   if (!j?.ok) throw new Error(j?.error || "api error");
@@ -240,7 +248,7 @@ async function post<T>(path: string, body: unknown): Promise<T> {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
-    signal: AbortSignal.timeout(10000),
+    signal: timeoutSignal(10000),
   });
   const j = await r.json().catch(() => null);
   if (!r.ok) throw new Error(j?.error || `HTTP ${r.status}`);
@@ -250,7 +258,7 @@ async function post<T>(path: string, body: unknown): Promise<T> {
 
 /** 大宗商品浏览器直连兜底:腾讯 hf_ 外盘期货(CORS 开放) */
 function parseFuturesText(text: string): Record<string, FutureQuote> {
-  const out: Record<string, FutureQuote> = {};
+  const out: Record<string, FutureQuote> = Object.create(null); // 上游 symbol 作 key, 防 __proto__ 污染
   const re = /(?:hq_str_|v_)(\w+)="([^"]*)"/g;
   let m;
   while ((m = re.exec(text))) {
@@ -276,7 +284,7 @@ function parseFuturesText(text: string): Record<string, FutureQuote> {
 
 /** 内盘期货(沪金等 nf_)直连解析: 字段布局与外盘 hf_ 不同, 与服务端 parseSinaDomestic 对齐 */
 function parseDomesticFuturesText(text: string): Record<string, FutureQuote> {
-  const out: Record<string, FutureQuote> = {};
+  const out: Record<string, FutureQuote> = Object.create(null); // 上游 symbol 作 key, 防 __proto__ 污染
   const re = /(?:hq_str_|v_)(nf_\w+)="([^"]*)"/g;
   let m;
   while ((m = re.exec(text))) {
@@ -331,7 +339,7 @@ async function directFutures(): Promise<Record<string, FutureQuote>> {
 /* ---------- 浏览器直连腾讯(兜底) ---------- */
 
 function parseTencent(text: string): Record<string, Quote> {
-  const out: Record<string, Quote> = {};
+  const out: Record<string, Quote> = Object.create(null); // 上游 symbol 作 key, 防 __proto__ 污染
   for (const line of text.split(";")) {
     const m = line.match(/v_([a-zA-Z0-9_]+)="([^"]*)"/);
     if (!m) continue;

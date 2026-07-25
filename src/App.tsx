@@ -15,7 +15,6 @@ import { ChainPanel } from "@/components/dash/ChainPanel";
 import { WatchlistPanel } from "@/components/dash/WatchlistPanel";
 import AiDashboard from "./AiDashboard";
 import GoodsDashboard from "./GoodsDashboard";
-import { usePolling } from "@/hooks/usePolling";
 import { useSharedPolling } from "@/hooks/useSharedPolling";
 import { useFullscreen } from "@/hooks/useFullscreen";
 import { api } from "@/lib/api";
@@ -23,10 +22,10 @@ import { INDICES, FOREX, COMMODITIES } from "@/config/dashboard";
 
 function Tape() {
   const codes = useMemo(() => [...INDICES.map((i) => i.code), ...FOREX.map((i) => i.code)], []);
-  // 与 IndexPanel 共享同 key 轮询, 避免重复请求
+  // 与 IndexPanel / CommodityPanel / TreasuryPanel 共享同 key 轮询, 避免重复请求
   const { data: quotes } = useSharedPolling(`quotes:${codes.join(",")}`, () => api.quotes(codes), 5000);
-  const { data: futures } = usePolling(() => api.futures(), 10000);
-  const { data: treasuries } = usePolling(() => api.treasuries(), 60000);
+  const { data: futures } = useSharedPolling("futures", () => api.futures(), 10000);
+  const { data: treasuries } = useSharedPolling("treasuries", () => api.treasuries(), 60000);
 
   const items: TapeItem[] = useMemo(() => {
     const list: TapeItem[] = [];
@@ -45,7 +44,7 @@ function Tape() {
           key: sym,
           label: `美债${sym.replace("US", "")}收益率`,
           price: t.yield,
-          pct: (t.change / t.yield) * 100,
+          pct: t.yield ? (t.change / t.yield) * 100 : 0, // yield 缺失(接口异常归一为 0)时不产生 Infinity%
           digits: 3,
         });
     }

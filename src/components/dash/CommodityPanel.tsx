@@ -1,13 +1,15 @@
 import { Panel, type PanelZoomProps } from "./Panel";
 import { Spark } from "./Spark";
 import { usePolling } from "@/hooks/usePolling";
+import { useSharedPolling } from "@/hooks/useSharedPolling";
 import { api, type MinuteData } from "@/lib/api";
 import { COMMODITIES } from "@/config/dashboard";
 import { clsChg, fmtPct, fmtPrice } from "@/lib/format";
 
 /** 大宗商品纵向紧凑面板:金 / 银 / 铜 / 油 / 沪金 / BTC */
 export function CommodityPanel({ className = "", ...zoomProps }: { className?: string } & PanelZoomProps) {
-  const { data } = usePolling(() => api.futures(), 10000);
+  // 与顶部跑马灯共享同 key 轮询
+  const { data } = useSharedPolling("futures", () => api.futures(), 10000);
   const { data: minutes } = usePolling(
     async () => {
       const results = await Promise.allSettled(COMMODITIES.map((c) => api.futureMinute(c.code)));
@@ -22,7 +24,7 @@ export function CommodityPanel({ className = "", ...zoomProps }: { className?: s
 
   return (
     <Panel className={className} {...zoomProps} title="大宗商品" icon="◆" accent="#f5c542"
-      right={<span className="text-[10px] text-slate-500">8s</span>}>
+      right={<span className="text-[10px] text-slate-500">10s</span>}>
       <div className="flex h-full flex-col divide-y divide-slate-800/60">
         {COMMODITIES.map((c) => {
           const q = data?.[c.code];

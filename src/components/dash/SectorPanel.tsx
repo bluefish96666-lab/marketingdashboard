@@ -8,6 +8,10 @@ import { clsChg, fmtPct, fmtYuan, hexChg } from "@/lib/format";
 type Kind = "01" | "02";
 
 const ROTATE_MS = 10000;
+// 概念榜近千行, 全量渲染会让千级 DOM 每 15s 重渲染; 截断显示, 搜索可定位完整集合
+const MAX_BOARD_ROWS = 200;
+// 成分股侧栏行数上限: 每个 QuoteRow 带 2 个 Observer + 3 个轮询 hook, 行数直接决定定时器规模
+const MAX_STOCK_ROWS = 100;
 
 function BoardRow({ b, maxAbs, active, onClick }: { b: Board; maxAbs: number; active: boolean; onClick: () => void }) {
   const w = maxAbs > 0 ? Math.min(100, (Math.abs(b.pct) / maxAbs) * 100) : 0;
@@ -56,6 +60,7 @@ export function SectorPanel({ className = "", ...zoomProps }: { className?: stri
   const { data: boards, error } = usePolling(() => api.boards(kind, dir, kind === "01" ? 300 : 1000), 15000, [kind, dir]);
 
   const filtered = useMemo(() => boards?.filter((b) => !q || b.name.includes(q)), [boards, q]);
+  const visibleBoards = useMemo(() => filtered?.slice(0, MAX_BOARD_ROWS), [filtered]);
   const maxAbs = filtered ? Math.max(...filtered.map((b) => Math.abs(b.pct)), 0.01) : 1;
 
   // 榜单/搜索变化时轮播索引归零(render-time 派生态调整)
@@ -85,7 +90,7 @@ export function SectorPanel({ className = "", ...zoomProps }: { className?: stri
   }, [auto, filtered, idx, selected]);
 
   const { data: stocks } = usePolling(
-    () => (activeBoard ? api.boardStocks(activeBoard.code, 300) : Promise.resolve(null)),
+    () => (activeBoard ? api.boardStocks(activeBoard.code, MAX_STOCK_ROWS) : Promise.resolve(null)),
     15000,
     [activeBoard?.code]
   );
@@ -145,10 +150,15 @@ export function SectorPanel({ className = "", ...zoomProps }: { className?: stri
           <div className="grid grid-cols-[24px_1fr_76px_96px] gap-2 px-2 py-1 text-[10px] text-slate-500">
             <span>代码</span><span>板块 / 强度{filtered ? ` (${filtered.length})` : ""}</span><span className="text-right">涨跌幅</span><span className="text-right">领涨股</span>
           </div>
-          {filtered?.map((b) => (
+          {visibleBoards?.map((b) => (
             <BoardRow key={b.code} b={b} maxAbs={maxAbs} active={activeBoard?.code === b.code}
               onClick={() => pick(b)} />
           ))}
+          {filtered && filtered.length > MAX_BOARD_ROWS && (
+            <div className="p-2 text-center text-[10px] text-slate-600">
+              仅显示前 {MAX_BOARD_ROWS} / 共 {filtered.length} 个板块, 搜索可定位其余
+            </div>
+          )}
           {!filtered && (
             <div className="p-6 text-center text-[11px] text-slate-600">
               {error ? <span className="text-rose-400/80">数据源连接失败,自动重试中…<br />{error}</span> : "板块数据加载中…"}
@@ -183,7 +193,7 @@ export function SectorPanel({ className = "", ...zoomProps }: { className?: stri
                   spark boards flow
                 />
               ))}
-              {stocks && <div className="px-1.5 pt-1 text-right text-[9px] text-slate-600">全量 {stocks.length} 只成分股</div>}
+              {stocks && <div className="px-1.5 pt-1 text-right text-[9px] text-slate-600">领涨前 {stocks.length} 只成分股</div>}
               {!stocks && <div className="p-4 text-center text-[10px] text-slate-600">成分股加载中…</div>}
             </div>
           </div>

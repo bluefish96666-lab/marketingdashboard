@@ -118,14 +118,14 @@ docker run -p 3000:3000 market-cockpit
 | `/api/stock-boards?code=...` | 个股所属板块（行业 / 地域 / 概念） |
 | `/api/news?page=...&size=...` | 7×24 财经快讯 |
 | `/api/treasuries` | 美债收益率实时值 |
-| `/api/treasury-history` | 美债收益率历史曲线 |
+| `/api/treasury-history` | 美债收益率历史月末曲线（2001 年至今，代码库本地存档 `server/treasury-rates/` + 当年在线补充） |
 | `/api/mystery-select?query=...&limit=...` | 问财股票筛选（按概念/行业查询） |
 | `/api/chain-parse` | 产业链文本解析（按段落标题自动分配上中下游） |
 | `/api/openrouter-usage` | OpenRouter 日度榜单（厂商 Token 消耗量，本地缓存持久化积累） |
 | `/api/stock-search?q=...` | 股票搜索（名称/拼音首字母→代码，新浪建议代理） |
 | `/api/health` | 健康检查 |
 
-> 注：`/api/mystery-select` 与 `/api/openrouter-usage` 消耗服务端私有 API Key，仅接受同源页面请求（跨源 403）；POST 请求体上限 256KB；`/api/` 未命中路由返回 404 JSON。
+> 注：`/api/mystery-select` 与 `/api/openrouter-usage` 消耗服务端私有 API Key，仅接受同源页面请求（跨源 403）；全站 API 仅向同源页面反射 CORS Origin（跨源浏览器读取不授权），并按客户端 IP 限流（公开端点 240 次/分、私有端点 20 次/分，超限 429；经 Cloudflare Tunnel 部署时真实 IP 取 `CF-Connecting-IP`）；POST 请求体上限 256KB；`/api/` 未命中路由返回 404 JSON。
 
 ## 🗂️ 项目结构
 

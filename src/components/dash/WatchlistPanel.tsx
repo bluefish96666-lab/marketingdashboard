@@ -75,8 +75,11 @@ export function WatchlistPanel({ className = "", ...zoomProps }: { className?: s
   );
 
   useEffect(() => {
-    localStorage.setItem(LS_KEY, JSON.stringify(codes));
+    try { localStorage.setItem(LS_KEY, JSON.stringify(codes)); } catch { /* 隐私模式/配额满时忽略 */ }
   }, [codes]);
+
+  // 卸载时清理搜索防抖定时器
+  useEffect(() => () => clearTimeout(timerRef.current), []);
 
   // 防抖搜索
   const triggerSearch = (val: string) => {

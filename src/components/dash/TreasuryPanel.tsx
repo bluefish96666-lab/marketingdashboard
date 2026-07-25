@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Panel, type PanelZoomProps } from "./Panel";
 import { usePolling } from "@/hooks/usePolling";
+import { useSharedPolling } from "@/hooks/useSharedPolling";
 import { api, type Treasury } from "@/lib/api";
 import { clsChg } from "@/lib/format";
 
@@ -9,12 +10,21 @@ const LABEL: Record<string, string> = {
   US3M: "3月", US6M: "6月", US1Y: "1年", US2Y: "2年", US3Y: "3年",
   US5Y: "5年", US7Y: "7年", US10Y: "10年", US20Y: "20年", US30Y: "30年",
 };
-/** 里程碑历史曲线配色: 最早 / 中间 / 最近 */
-const MILE_COLORS = ["#60a5fa", "#fbbf24", "#fb7185"];
+/** 高亮年份配色(关键利率周期: 2001互联网泡沫 / 2006加息顶点 / 2011扭曲操作 / 2016低利率 / 2021零利率 / 2023倒挂峰值 / 2025 / 2026当前) */
+const HIGHLIGHT_COLORS: Record<string, string> = {
+  "2001": "#f472b6",
+  "2006": "#fb923c",
+  "2011": "#fbbf24",
+  "2016": "#a3e635",
+  "2021": "#34d399",
+  "2023": "#22d3ee",
+  "2025": "#818cf8",
+  "2026": "#fb7185",
+};
 
 /** 美债收益率曲线 */
 export function TreasuryPanel({ className = "", ...zoomProps }: { className?: string } & PanelZoomProps) {
-  const { data, error } = usePolling(() => api.treasuries(), 60000);
+  const { data, error } = useSharedPolling("treasuries", () => api.treasuries(), 60000); // 与顶部跑马灯共享
   const { data: hist } = usePolling(() => api.treasuryHistory(), 3600000);
 
   // 容器实际像素尺寸 — SVG 坐标按真实尺寸计算, 避免 viewBox 拉伸导致文字变形
@@ -36,22 +46,32 @@ export function TreasuryPanel({ className = "", ...zoomProps }: { className?: st
     [data]
   );
 
-  /** 历史月度曲线(与 ORDER 对齐的收益率序列) */
+  // 只看与当前月份相同的历史月份(如 7 月 → 历年 7 月), 避免百余条曲线糊成一片
+  const currentMonth = String(new Date().getMonth() + 1).padStart(2, "0");
+
+  /** 历史同期月度曲线(与 ORDER 对齐的收益率序列) */
   const histCurves = useMemo(
     () =>
-      (hist || []).map((h) => ({
-        date: h.date,
-        ys: ORDER.map((s) => h.yields[s]).filter((v) => Number.isFinite(v) && v > 0),
-      })).filter((c) => c.ys.length === ORDER.length),
-    [hist]
+      (hist || [])
+        .filter((h) => h.date.slice(5, 7) === currentMonth)
+        .map((h) => ({
+          date: h.date,
+          ys: ORDER.map((s) => h.yields[s]).filter((v) => Number.isFinite(v) && v > 0),
+        }))
+        .filter((c) => c.ys.length === ORDER.length),
+    [hist, currentMonth]
   );
 
-  /** 里程碑曲线: 最早 / 中间 / 最近月份 */
-  const milestones = useMemo(() => {
-    const n = histCurves.length;
-    if (!n) return [];
-    const idxs = [...new Set([0, Math.floor((n - 1) / 2), n - 1])];
-    return idxs.map((i, k) => ({ ...histCurves[i], color: MILE_COLORS[k] }));
+  /** 高亮年份曲线 / 其余年份作底色 */
+  const { highlights, backgrounds } = useMemo(() => {
+    const hi: ({ date: string; ys: number[] } & { color: string })[] = [];
+    const bg: { date: string; ys: number[] }[] = [];
+    for (const c of histCurves) {
+      const color = HIGHLIGHT_COLORS[c.date.slice(0, 4)];
+      if (color) hi.push({ ...c, color });
+      else bg.push(c);
+    }
+    return { highlights: hi, backgrounds: bg };
   }, [histCurves]);
 
   const curve = useMemo(() => {
@@ -99,20 +119,20 @@ export function TreasuryPanel({ className = "", ...zoomProps }: { className?: st
           </div>
         </div>
 
-        {/* 收益率曲线(叠加历史月度曲线) */}
-        {milestones.length > 0 && (
-          <div className="mb-0.5 flex items-center gap-2 text-[8px] leading-none text-slate-500">
-            {milestones.map((m) => (
+        {/* 收益率曲线(叠加历史同期曲线) */}
+        {highlights.length > 0 && (
+          <div className="mb-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[8px] leading-none text-slate-500">
+            {highlights.map((m) => (
               <span key={m.date} className="flex items-center gap-1">
                 <i className="inline-block h-[2px] w-2.5 rounded" style={{ background: m.color }} />
-                {m.date.slice(0, 7)}
+                {m.date.slice(0, 4)}
               </span>
             ))}
             <span className="flex items-center gap-1">
               <i className="inline-block h-[2px] w-2.5 rounded" style={{ background: "#c4b5fd" }} />
               当前
             </span>
-            <span className="ml-auto text-slate-600">历史为月末曲线 · 财政部</span>
+            <span className="ml-auto text-slate-600">历年{Number(currentMonth)}月曲线 · 财政部存档</span>
           </div>
         )}
         <div ref={boxRef} className="min-h-[110px] flex-1">
@@ -128,13 +148,13 @@ export function TreasuryPanel({ className = "", ...zoomProps }: { className?: st
                   </g>
                 );
               })}
-              {/* 历史月度曲线(底层) */}
-              {histCurves.map((c) => (
+              {/* 历史同期曲线(底层, 未高亮年份) */}
+              {backgrounds.map((c) => (
                 <polyline key={c.date} points={curve.line(c.ys)} fill="none"
-                  stroke="#475569" strokeOpacity={0.35} strokeWidth={1} strokeLinejoin="round" />
+                  stroke="#475569" strokeOpacity={0.3} strokeWidth={1} strokeLinejoin="round" />
               ))}
-              {/* 里程碑月份(高亮,颜色见图例) */}
-              {milestones.map((m) => (
+              {/* 高亮年份(颜色见图例) */}
+              {highlights.map((m) => (
                 <polyline key={m.date} points={curve.line(m.ys)} fill="none"
                   stroke={m.color} strokeOpacity={0.85} strokeWidth={1.5} strokeLinejoin="round" />
               ))}

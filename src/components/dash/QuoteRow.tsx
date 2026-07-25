@@ -207,13 +207,13 @@ export const QuoteRow = memo(function QuoteRow({
           {tag && (
             <span className="shrink-0 rounded-sm bg-slate-700/40 px-1 py-px text-[8px] text-slate-400">{tag}</span>
           )}
-          {boards && bd && (bd.industry || bd.concepts.length > 0) && (
+          {boards && bd && (bd.industry || (bd.concepts?.length ?? 0) > 0) && (
             <span className="truncate">
               {bd.industry && <span className="text-cyan-500/80">{bd.industry}</span>}
-              {bd.concepts.length > 0 && (
+              {(bd.concepts?.length ?? 0) > 0 && (
                 <span className="text-slate-600">
                   {bd.industry ? " · " : ""}
-                  {bd.concepts.join("/")}
+                  {(bd.concepts ?? []).join("/")}
                 </span>
               )}
             </span>

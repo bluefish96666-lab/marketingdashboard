@@ -24,11 +24,15 @@ try {
 
 function curlText(url, { referer, timeout = 8000, encoding = "gbk" } = {}) {
   return new Promise((resolve, reject) => {
-    const args = ["-s", "--max-time", String(Math.ceil(timeout / 1000)), "-H", `User-Agent: ${UA}`];
+    // -sS: 静默进度但保留错误信息到 stderr, 失败原因可诊断(28=超时, 35=TLS握手, 6=DNS...)
+    const args = ["-sS", "--max-time", String(Math.ceil(timeout / 1000)), "-H", `User-Agent: ${UA}`];
     if (referer) args.push("-H", `Referer: ${referer}`);
     args.push(url);
-    execFile("curl", args, { maxBuffer: 4 * 1024 * 1024, encoding: "buffer" }, (err, stdout) => {
-      if (err) return reject(err);
+    execFile("curl", args, { maxBuffer: 4 * 1024 * 1024, encoding: "buffer" }, (err, stdout, stderr) => {
+      if (err) {
+        const detail = stderr && stderr.length ? String(stderr).trim().slice(0, 200) : err.message;
+        return reject(new Error(`curl(${err.code ?? "?"}) ${url} -> ${detail}`));
+      }
       resolve(iconv.decode(stdout, encoding));
     });
   });
@@ -54,15 +58,25 @@ async function fetchText(url, { referer, gbk = false, timeout = 8000 } = {}) {
   }
 }
 
+/* node fetch 被拦/失败时回退 curl(与 emGet / fetchSinaJson 同模式);
+   适用于对 TLS 指纹敏感、对 node fetch 间歇性断连的上游(CNBC 等) */
+async function fetchTextAny(url, { referer, gbk = false, timeout = 8000 } = {}) {
+  try {
+    return await fetchText(url, { referer, gbk, timeout });
+  } catch {
+    return curlText(url, { referer, timeout, encoding: gbk ? "gbk" : "utf-8" });
+  }
+}
+
 function send(res, code, obj, extra = {}) {
   const body = typeof obj === "string" ? obj : JSON.stringify(obj);
   const headers = {
     "Content-Type": "application/json; charset=utf-8",
-    "Access-Control-Allow-Origin": "*",
     "Cache-Control": "no-store",
+    "X-Content-Type-Options": "nosniff",
     ...extra,
   };
-  // extra 中值为 null 的头表示显式移除(用于私有端点不下发 ACAO:*)
+  // extra 中值为 null 的头表示显式移除; ACAO 不默认下发, 仅同源请求由 corsHeadersFor 反射
   for (const k of Object.keys(headers)) if (headers[k] == null) delete headers[k];
   res.writeHead(code, headers);
   res.end(body);
@@ -119,7 +133,7 @@ function parseTencentLine(line) {
 async function handleQuotes(codes) {
   const url = `https://qt.gtimg.cn/q=${encodeURIComponent(codes)}`;
   const text = await fetchText(url, { gbk: true });
-  const out = {};
+  const out = Object.create(null); // 无原型对象: 上游 symbol 作为 key, 杜绝 __proto__ 污染
   for (const line of text.split(";")) {
     const q = parseTencentLine(line.trim());
     if (q) out[q.symbol] = q;
@@ -219,7 +233,7 @@ async function handleBoardStocks(code, dir, n) {
 
 /* ---------------- 外盘期货(金银铜油):腾讯主源 + 新浪兜底 ---------------- */
 function parseFutures(text) {
-  const out = {};
+  const out = Object.create(null); // 无原型对象: 上游 symbol 作为 key, 杜绝 __proto__ 污染
   const re = /(?:hq_str_|v_)(\w+)="([^"]*)"/g;
   let m;
   while ((m = re.exec(text))) {
@@ -360,7 +374,7 @@ async function handleMysterySelect(query, limit = "30", page = "1") {
 
 /* ---------------- 内盘期货(沪金等):新浪 nf_ ---------------- */
 function parseSinaDomestic(text) {
-  const out = {};
+  const out = Object.create(null); // 无原型对象: 上游 symbol 作为 key, 杜绝 __proto__ 污染
   const re = /hq_str_(nf_\w+)="([^"]*)"/g;
   let m;
   while ((m = re.exec(text))) {
@@ -431,7 +445,12 @@ async function fetchBtc() {
 }
 
 async function handleFutures(list) {
-  const codes = String(list || "").split(",").map((s) => s.trim()).filter(Boolean);
+  // 代码白名单 + 数量上限: 防止畸形代码注入上游 URL 或制造超长请求
+  const codes = String(list || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => /^(hf|nf)_[A-Za-z0-9]{1,12}$/.test(s) || s === "BTCUSDT")
+    .slice(0, 60);
   const hf = codes.filter((c) => c.startsWith("hf_"));
   const nf = codes.filter((c) => c.startsWith("nf_"));
   const out = {};
@@ -440,11 +459,11 @@ async function handleFutures(list) {
     jobs.push((async () => {
       // 主源:腾讯(稳定,无WAF)
       try {
-        const r = parseFutures(await fetchText(`https://qt.gtimg.cn/q=${hf.join(",")}`, { gbk: true }));
+        const r = parseFutures(await fetchText(`https://qt.gtimg.cn/q=${hf.map(encodeURIComponent).join(",")}`, { gbk: true }));
         if (Object.keys(r).length >= Math.min(2, hf.length)) return Object.assign(out, r);
       } catch { /* fallthrough */ }
       // 兜底:新浪
-      const url = `https://hq.sinajs.cn/list=${hf.join(",")}`; // 新浪要求逗号不转码
+      const url = `https://hq.sinajs.cn/list=${hf.map(encodeURIComponent).join(",")}`; // 新浪要求逗号不转码
       const opts = { referer: "https://finance.sina.com.cn/futures/quotes/CL.shtml" };
       let r = parseFutures(await curlText(url, opts));
       if (Object.keys(r).length === 0) {
@@ -456,7 +475,7 @@ async function handleFutures(list) {
   }
   if (nf.length) {
     jobs.push((async () => {
-      const url = `https://hq.sinajs.cn/list=${nf.join(",")}`;
+      const url = `https://hq.sinajs.cn/list=${nf.map(encodeURIComponent).join(",")}`;
       const opts = { referer: "https://finance.sina.com.cn/futures/quotes/AU0.shtml" };
       let r = parseSinaDomestic(await curlText(url, opts));
       if (Object.keys(r).length === 0) {
@@ -886,7 +905,7 @@ async function handleNews(page, size) {
 const TREASURY_SYMBOLS = ["US3M", "US6M", "US1Y", "US2Y", "US3Y", "US5Y", "US7Y", "US10Y", "US20Y", "US30Y"];
 async function handleTreasuries() {
   const url = `https://quote.cnbc.com/quote-html-webservice/restQuote/symbolType/symbol?symbols=${TREASURY_SYMBOLS.join("|")}&requestMethod=quick&noform=1&partnerId=2&fund=1&output=json`;
-  const text = await fetchText(url);
+  const text = await fetchTextAny(url); // CNBC 对 node fetch 间歇断连, fetch/curl 双通道
   const json = JSON.parse(text);
   const list = json?.FormattedQuoteResult?.FormattedQuote || [];
   return list
@@ -900,35 +919,72 @@ async function handleTreasuries() {
     }));
 }
 
-/* ---------------- 美债收益率历史曲线(美国财政部官方 CSV) ---------------- */
+/* ---------------- 美债收益率历史曲线(近10年月度曲线: 本地存档 + 当年在线补充) ---------------- */
 const TREASURY_CSV_COLS = {
   US3M: "3 Mo", US6M: "6 Mo", US1Y: "1 Yr", US2Y: "2 Yr", US3Y: "3 Yr",
   US5Y: "5 Yr", US7Y: "7 Yr", US10Y: "10 Yr", US20Y: "20 Yr", US30Y: "30 Yr",
 };
-async function handleTreasuryHistory() {
-  const year = new Date().getFullYear();
-  const byMonth = new Map(); // "2026-07" -> { date, yields }
-  for (const y of [year - 1, year]) {
-    const url = `https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/${y}/all?type=daily_treasury_yield_curve&field_tdr_date_value=${y}&_format=csv`;
-    const text = await fetchText(url);
-    const lines = text.trim().split(/\r?\n/);
-    const header = lines[0].split(",").map((h) => h.replace(/"/g, ""));
-    const colIdx = Object.fromEntries(TREASURY_SYMBOLS.map((s) => [s, header.indexOf(TREASURY_CSV_COLS[s])]));
-    for (const line of lines.slice(1)) {
-      const f = line.split(",");
-      const m = f[0].match(/(\d{2})\/(\d{2})\/(\d{4})/); // MM/DD/YYYY, 数据按日期降序
-      if (!m) continue;
-      const key = `${m[3]}-${m[1]}`;
-      if (byMonth.has(key)) continue; // 首个命中即该月最后一个交易日
-      const yields = {};
-      for (const s of TREASURY_SYMBOLS) yields[s] = num(f[colIdx[s]]);
-      byMonth.set(key, { date: `${m[3]}-${m[1]}-${m[2]}`, yields });
+// 完整年份官方存档随代码库分发(scripts/update-treasury-archive.cjs 生成), 数据不再变化
+const TREASURY_ARCHIVE_DIR = path.join(__dirname, "treasury-rates");
+let treasuryArchiveCache = null; // 解析一次, 进程内常驻
+
+// 解析一年份 CSV 到 byMonth(首列 MM/DD/YYYY 降序; 每月首个命中即该月最后一个交易日)
+function parseTreasuryCsv(text, byMonth) {
+  const lines = text.trim().split(/\r?\n/);
+  const header = lines[0].split(",").map((h) => h.replace(/"/g, ""));
+  const colIdx = Object.fromEntries(TREASURY_SYMBOLS.map((s) => [s, header.indexOf(TREASURY_CSV_COLS[s])]));
+  for (const line of lines.slice(1)) {
+    const f = line.split(",");
+    const m = f[0].match(/(\d{2})\/(\d{2})\/(\d{4})/);
+    if (!m) continue;
+    const key = `${m[3]}-${m[1]}`;
+    if (byMonth.has(key)) continue;
+    const yields = {};
+    for (const s of TREASURY_SYMBOLS) {
+      const idx = colIdx[s];
+      if (idx >= 0) yields[s] = num(f[idx]); // 列缺失则缺省(前端要求全期限齐整才采用该曲线), 不静默造 0
     }
+    byMonth.set(key, { date: `${m[3]}-${m[1]}-${m[2]}`, yields });
   }
-  return [...byMonth.entries()]
+}
+
+function loadTreasuryArchive() {
+  if (treasuryArchiveCache) return treasuryArchiveCache;
+  const byMonth = new Map();
+  try {
+    for (const f of fs.readdirSync(TREASURY_ARCHIVE_DIR)) {
+      if (!/^\d{4}\.csv$/.test(f)) continue;
+      try {
+        parseTreasuryCsv(fs.readFileSync(path.join(TREASURY_ARCHIVE_DIR, f), "utf-8"), byMonth);
+      } catch (e) {
+        console.error("[treasury-history] 存档解析失败:", f, e?.message || e);
+      }
+    }
+    console.log(`[treasury-history] 本地存档加载: ${byMonth.size} 个月度曲线`);
+  } catch (e) {
+    console.error("[treasury-history] 存档目录读取失败:", e?.message || e);
+  }
+  treasuryArchiveCache = byMonth;
+  return byMonth;
+}
+
+async function handleTreasuryHistory() {
+  // 复制存档, 当年在线数据不污染常驻缓存
+  const byMonth = new Map(loadTreasuryArchive());
+  const year = new Date().getFullYear();
+  // 当年数据仍在增长, 在线补充(跨境慢且不稳, 30s 超时; 失败时降级为纯存档)
+  try {
+    const url = `https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/${year}/all?type=daily_treasury_yield_curve&field_tdr_date_value=${year}&_format=csv`;
+    parseTreasuryCsv(await fetchTextAny(url, { timeout: 30000 }), byMonth);
+  } catch (e) {
+    console.error(`[treasury-history] ${year} 在线拉取失败, 使用本地存档:`, e?.message || e);
+  }
+  // 存档全量返回(2001 年至今), 同期月份过滤与高亮由前端按当前月份处理
+  const out = [...byMonth.entries()]
     .sort(([a], [b]) => (a < b ? -1 : 1))
-    .slice(-13)
     .map(([, v]) => v);
+  if (!out.length) throw new Error("treasury history unavailable");
+  return out;
 }
 
 /* ---------------- TTL 缓存 + 并发合并(防上游限流) ---------------- */
@@ -1181,6 +1237,8 @@ async function handleSpotTable() {
 
 /* ---------------- 生意社化工现货(报价中心 plist 页, 中位数为代表价) ---------------- */
 async function handleChemSpot(id, name) {
+  if (!/^\d{1,10}$/.test(id)) { const e = new Error("bad id"); e.status = 400; throw e; }
+  name = String(name || id).slice(0, 40); // name 来自用户输入并写入历史文件, 限长
   const html = await fetchSunsir(`https://www.100ppi.com/mprice/plist-1-${encodeURIComponent(id)}-1.html`);
   // 行结构: 品名/规格/产地/价格(元/吨)/价格类型/交货地/企业/日期
   const market = []; // 市场价(真实行情)
@@ -1200,19 +1258,22 @@ async function handleChemSpot(id, name) {
   const mid = pool.length >> 1;
   const price = pool.length % 2 ? pool[mid] : +((pool[mid - 1] + pool[mid]) / 2).toFixed(2);
   const dm = html.match(/>(20\d{2}-\d{2}-\d{2})</);
-  // 历史积累(与现货表同一文件)
+  // 历史积累(与现货表同一文件); 条目总数有界, 防止恶意 name 缓慢填满磁盘
   let history = {};
   try { history = JSON.parse(fs.readFileSync(SPOT_DATA_FILE, "utf-8") || "{}"); } catch {}
-  const arr = history[name] || (history[name] = []);
   const today = bjToday();
-  if (arr.length && arr[arr.length - 1].t === today) arr[arr.length - 1].p = price;
-  else arr.push({ t: today, p: price });
-  if (arr.length > 400) arr.splice(0, arr.length - 400);
-  try {
-    fs.mkdirSync(path.dirname(SPOT_DATA_FILE), { recursive: true });
-    await fs.promises.writeFile(SPOT_DATA_FILE, JSON.stringify(history));
-  } catch (e) { console.error("[chem-spot] write history error:", e?.message || e); }
-  return { id, name, price, quotes: all.length, date: dm ? dm[1] : today, history: arr };
+  let arr = history[name];
+  if (!arr && Object.keys(history).length < 500) arr = history[name] = [];
+  if (arr) {
+    if (arr.length && arr[arr.length - 1].t === today) arr[arr.length - 1].p = price;
+    else arr.push({ t: today, p: price });
+    if (arr.length > 400) arr.splice(0, arr.length - 400);
+    try {
+      fs.mkdirSync(path.dirname(SPOT_DATA_FILE), { recursive: true });
+      await fs.promises.writeFile(SPOT_DATA_FILE, JSON.stringify(history));
+    } catch (e) { console.error("[chem-spot] write history error:", e?.message || e); }
+  }
+  return { id, name, price, quotes: all.length, date: dm ? dm[1] : today, history: arr || [] };
 }
 
 /* ---------------- 现货每日定时采集(服务端自驱, 无需前端在线) ---------------- */
@@ -1399,7 +1460,8 @@ const routes = {
     ), // 日线K线(默认近400根), 1h缓存
   "/api/spot-table": async () => cached("spot:table", 8 * 3600000, () => handleSpotTable()), // 生意社现期表, 8h缓存(每日16:30更新)
   "/api/chem-spot": async (q) =>
-    cached(`chem:${q.get("id")}`, 8 * 3600000, () => handleChemSpot(q.get("id") || "", q.get("name") || q.get("id") || "")), // 生意社化工现货, 8h缓存
+    cached(`chem:${q.get("id")}:${q.get("name") || ""}`, 8 * 3600000, () =>
+      handleChemSpot(q.get("id") || "", q.get("name") || q.get("id") || "")), // 生意社化工现货, 8h缓存
   "/api/future-minute": async (q) =>
     cached(`fmin:${q.get("code")}`, 60000, () => handleFutureMinute(q.get("code") || "")),
   "/api/rank": async (q) =>
@@ -1452,17 +1514,41 @@ const MIME = {
   ".mp4": "video/mp4",
 };
 
-/* ---------------- 私有 API key 端点的同源防护 ---------------- */
+// 静态资源安全头; CSP 仅随 HTML 下发(脚本均为构建产物, 内联 style 属性需 unsafe-inline)
+const CSP = [
+  "default-src 'self'",
+  "script-src 'self'",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data:",
+  "font-src 'self' data:",
+  "connect-src 'self' https:", // 浏览器直连兜底源(qt.gtimg.cn / wscn / binance 等)
+  "manifest-src 'self'",
+  "worker-src 'self'",
+  "frame-ancestors 'none'",
+  "base-uri 'self'",
+].join("; ");
+
+const STATIC_HEADERS = {
+  "X-Content-Type-Options": "nosniff",
+  "X-Frame-Options": "DENY",
+  "Referrer-Policy": "same-origin",
+};
+
+/* ---------------- 同源校验与 CORS(经 CF Tunnel 公网可达, 默认不授权任何跨源浏览器读取) ---------------- */
 const PROTECTED_ROUTES = new Set(["/api/mystery-select", "/api/openrouter-usage"]);
 
-// 带 Origin/Referer 时其 host 必须与请求 Host 一致; 都不带(curl/同源导航)则放行
+// 环回地址互认: 开发期 vite 代理(:3000→:3001)跨端口转发, Origin/Host 端口必然不同, 视为同源
+const isLoopbackHost = (h) => /^(localhost|127\.\d{1,3}\.\d{1,3}\.\d{1,3}|\[::1\])(:\d+)?$/.test(h);
+
+// 带 Origin/Referer 时其 host 必须与请求 Host 一致(或同为环回); 都不带(curl/同源导航)则放行
 function isSameOrigin(req) {
   const host = req.headers.host;
   if (!host) return true;
   for (const h of [req.headers.origin, req.headers.referer]) {
     if (!h) continue;
     try {
-      if (new URL(h).host !== host) return false;
+      const oh = new URL(h).host;
+      if (oh !== host && !(isLoopbackHost(oh) && isLoopbackHost(host))) return false;
     } catch {
       return false;
     }
@@ -1470,12 +1556,43 @@ function isSameOrigin(req) {
   return true;
 }
 
-// 受保护端点不下发 ACAO:*; 同源且带 Origin 时反射该 Origin
-function corsHeadersFor(req, pathname) {
-  if (!PROTECTED_ROUTES.has(pathname)) return {};
+// 全端点统一: 仅同源(或环回开发)浏览器请求反射 Origin, 跨源一律不下发 ACAO
+function corsHeadersFor(req) {
   const origin = req.headers.origin;
   return { "Access-Control-Allow-Origin": origin && isSameOrigin(req) ? origin : null };
 }
+
+/* ---------------- 按客户端 IP 限流(CF Tunnel 后真实 IP 取 CF-Connecting-IP 头) ---------------- */
+function clientIp(req) {
+  const cf = req.headers["cf-connecting-ip"];
+  if (typeof cf === "string" && cf.trim()) return cf.trim();
+  const xff = req.headers["x-forwarded-for"];
+  if (typeof xff === "string" && xff.trim()) return xff.split(",")[0].trim();
+  return req.socket.remoteAddress || "unknown";
+}
+
+// 固定窗口计数器: windowMs 内超过 max 次返回 false; 定时清扫防 Map 无界增长
+function makeLimiter(windowMs, max) {
+  const hits = new Map(); // ip -> { ts, count }
+  const sweeper = setInterval(() => {
+    const now = Date.now();
+    for (const [ip, h] of hits) if (now - h.ts > windowMs) hits.delete(ip);
+  }, windowMs);
+  sweeper.unref();
+  return (ip) => {
+    const now = Date.now();
+    const h = hits.get(ip);
+    if (!h || now - h.ts > windowMs) {
+      hits.set(ip, { ts: now, count: 1 });
+      return true;
+    }
+    h.count++;
+    return h.count <= max;
+  };
+}
+
+const apiLimiter = makeLimiter(60 * 1000, 240); // 公开 /api: 每 IP 每分钟 240 次(单大屏客户端实测约 100+)
+const protectedLimiter = makeLimiter(60 * 1000, 20); // 私有 key 端点: 每 IP 每分钟 20 次, 防脚本刷配额
 
 // 读取 POST body, 超过 limit 字节即停止累积({ tooBig: true }), 防止无限读入
 function readBodyWithLimit(req, limit) {
@@ -1504,7 +1621,13 @@ const server = http.createServer(async (req, res) => {
   try {
     const u = new URL(req.url, "http://localhost");
     if (routes[u.pathname]) {
-      const cors = corsHeadersFor(req, u.pathname);
+      const cors = corsHeadersFor(req);
+      // 按 IP 限流(先于缓存命中判断, 防唯一 key 旋转造成的上游请求放大)
+      const allowed = (PROTECTED_ROUTES.has(u.pathname) ? protectedLimiter : apiLimiter)(clientIp(req));
+      if (!allowed) {
+        send(res, 429, { ok: false, error: "too many requests" }, cors);
+        return;
+      }
       // 私有 API key 端点: 跨源请求直接拒绝, 防止被刷配额
       if (PROTECTED_ROUTES.has(u.pathname) && !isSameOrigin(req)) {
         send(res, 403, { ok: false, error: "forbidden" }, cors);
@@ -1552,18 +1675,26 @@ const server = http.createServer(async (req, res) => {
     }
     fs.readFile(file, (err, buf) => {
       if (err) {
+        // 带扩展名的资源未命中: 直接 404, 不回退 index.html(避免 200+HTML 伪装成 JS/CSS)
+        if (path.extname(file)) return send(res, 404, { ok: false, error: "not found" });
         fs.readFile(path.join(DIST, "index.html"), (e2, html) => {
           if (e2) return send(res, 404, { ok: false });
-          res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "X-Content-Type-Options": "nosniff" });
+          res.writeHead(200, {
+            "Content-Type": "text/html; charset=utf-8",
+            "Content-Security-Policy": CSP,
+            ...STATIC_HEADERS,
+          });
           res.end(html);
         });
         return;
       }
-      res.writeHead(200, {
+      const headers = {
         "Content-Type": MIME[path.extname(file).toLowerCase()] || "application/octet-stream",
         "Cache-Control": file.includes("/assets/") ? "public, max-age=31536000, immutable" : "no-cache",
-        "X-Content-Type-Options": "nosniff",
-      });
+        ...STATIC_HEADERS,
+      };
+      if (file.endsWith(".html")) headers["Content-Security-Policy"] = CSP;
+      res.writeHead(200, headers);
       res.end(buf);
     });
   } catch (e) {

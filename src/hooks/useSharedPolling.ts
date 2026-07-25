@@ -18,17 +18,20 @@ interface SharedEntry<T> {
 const registry = new Map<string, SharedEntry<unknown>>();
 
 async function tick<T>(key: string, entry: SharedEntry<T>) {
+  // 存活判断必须用 entry 同一性而非 key 存在性:
+  // 全部订阅者卸载(release 删 key)后同 key 新订阅者会重建 entry,
+  // 旧 tick 若只看 has(key) 会给已摘除的旧 entry 继续排定时器, 形成永不停止的僵尸轮询
   try {
     const data = await entry.fn();
-    if (!registry.has(key)) return; // 等待期间已无订阅者
+    if (registry.get(key) !== entry) return;
     entry.snapshot = { data, error: null, updated: Date.now() };
   } catch (e) {
-    if (!registry.has(key)) return;
+    if (registry.get(key) !== entry) return;
     entry.snapshot = { ...entry.snapshot, error: e instanceof Error ? e.message : String(e) };
   }
   entry.listeners.forEach((l) => l());
   // 后台标签页不排下一轮, 等 visibilitychange 唤醒
-  if (registry.has(key) && !document.hidden) {
+  if (registry.get(key) === entry && !document.hidden) {
     entry.timer = setTimeout(() => void tick(key, entry), entry.intervalMs);
   }
 }

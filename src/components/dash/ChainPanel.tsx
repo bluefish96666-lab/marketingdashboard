@@ -19,7 +19,7 @@ function loadJson<T>(key: string, fallback: T): T {
 }
 function saveJson(key: string, value: unknown) {
   if (typeof window === "undefined") return;
-  window.localStorage.setItem(key, JSON.stringify(value));
+  try { window.localStorage.setItem(key, JSON.stringify(value)); } catch { /* 隐私模式/配额满时静默失败 */ }
 }
 
 function marketCode(code: string) {
@@ -81,10 +81,17 @@ export function ChainPanel({ className = "", ...zoomProps }: { className?: strin
         segments.push({ name: seg.name, source: stocks.length > 0 ? "iwencai" : "local", stocks: stocks.length > 0 ? stocks : fallback });
       } catch { segments.push({ name: seg.name, source: "local", stocks: fallback }); }
     }
-    return segments;
+    return { chainId, segments };
   }, 30 * 60 * 1000, [chainId, refreshTick]);
 
-  const segmentData = useMemo(() => dynamicData || chain.segments.map((seg) => ({ name: seg.name, source: "local" as const, stocks: seg.stocks || [] })), [dynamicData, chain]);
+  // 切链期间 dynamicData 仍是上一条链的数据: 仅 chainId 匹配才采用, 否则回退本地静态股票
+  const dynMatched = dynamicData?.chainId === chainId;
+  const segmentData = useMemo(
+    () =>
+      (dynMatched && dynamicData ? dynamicData.segments : null) ||
+      chain.segments.map((seg) => ({ name: seg.name, source: "local" as const, stocks: seg.stocks || [] })),
+    [dynMatched, dynamicData, chain]
+  );
 
   const codes = useMemo(() => segmentData.flatMap((s) => s.stocks.map((x) => x.code)), [segmentData]);
   const { data: quotes } = usePolling(() => api.quotes(codes), 8000, [chainId]);
@@ -265,9 +272,9 @@ export function ChainPanel({ className = "", ...zoomProps }: { className?: strin
                     </div>
                   </div>
                   <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto">
-                    {!dynamicData && seg.query && refreshTick > 0 && <div className="flex h-9 items-center justify-center rounded border border-slate-700/30 bg-slate-800/15 text-[10px] text-slate-500">问财筛选中...</div>}
+                    {!dynMatched && seg.query && refreshTick > 0 && <div className="flex h-9 items-center justify-center rounded border border-slate-700/30 bg-slate-800/15 text-[10px] text-slate-500">问财筛选中...</div>}
                     {stocks.map((st) => (<StockCell key={st.code} code={st.code} name={st.name} tag={st.tag} q={quotes?.[st.code]} />))}
-                    {dynamicData && stocks.length === 0 && <div className="flex h-9 items-center justify-center rounded border border-slate-700/30 bg-slate-800/15 text-[10px] text-slate-500">暂无匹配股票</div>}
+                    {dynMatched && stocks.length === 0 && <div className="flex h-9 items-center justify-center rounded border border-slate-700/30 bg-slate-800/15 text-[10px] text-slate-500">暂无匹配股票</div>}
                   </div>
                 </div>
               );
