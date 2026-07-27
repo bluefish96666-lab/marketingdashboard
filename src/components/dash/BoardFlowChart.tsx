@@ -60,17 +60,17 @@ export function BoardFlowChart({ flows, progress = 1 }: { flows: BoardFlow[]; pr
       const last = seg[seg.length - 1];
       return { s, color, pts, lastY: Y(last.v), lastV: last.v, lastT: last.t };
     });
-    // 端点标签去重叠: 按 y 排序后推开(最小间距 11px)
+    // 端点标签去重叠: 按 y 排序后在可视区内推开(标签多于可用高度时压缩间距, 保证不被裁剪出画布)
     const labels = [...lines]
       .sort((a, b) => a.lastY - b.lastY)
       .map((l) => ({ line: l, labelY: l.lastY }));
-    let prevY = -Infinity;
-    for (const l of labels) {
-      l.labelY = Math.max(l.labelY, prevY + 11);
-      prevY = l.labelY;
-    }
-    const overflow = labels.length ? labels[labels.length - 1].labelY - (H - 18) : 0;
-    if (overflow > 0) for (const l of labels) l.labelY -= overflow;
+    const TOP = 10, BOTTOM = H - 18;
+    const gap = labels.length > 1 ? Math.min(11, (BOTTOM - TOP) / (labels.length - 1)) : 11;
+    // 起始 y 尽量贴合首条线末端, 但整组必须落在 [TOP, BOTTOM] 内
+    let sy = Math.max(labels.length ? labels[0].labelY : TOP, TOP);
+    sy = Math.min(sy, BOTTOM - gap * (labels.length - 1));
+    sy = Math.max(sy, TOP);
+    for (const l of labels) { l.labelY = sy; sy += gap; }
     // Y 刻度: 4 档
     const ticks = [0.2, 0.4, 0.6, 0.8].map((f) => {
       const v = max - f * (max - min);
