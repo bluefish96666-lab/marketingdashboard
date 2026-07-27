@@ -130,41 +130,62 @@ function parseTencentLine(line) {
   };
 }
 
+const QUOTE_CACHE_TTL = 1500;
+
 async function handleQuotes(codes) {
-  // 按 60 个/块分块并发(报价中心全集可达数百, 单 URL 过长会被上游拒绝)
-  const list = codes.split(",").map((s) => s.trim()).filter(Boolean);
-  const chunks = [];
-  for (let i = 0; i < list.length; i += 60) chunks.push(list.slice(i, i + 60));
-  const texts = await Promise.all(chunks.map((c) => fetchText(`https://qt.gtimg.cn/q=${encodeURIComponent(c.join(","))}`, { gbk: true })));
+  // 按代码独立缓存(报价中心请求集随面板订阅动态变化, 整串做 key 会每次 miss 直冲上游)
+  const now = Date.now();
   const out = Object.create(null); // 无原型对象: 上游 symbol 作为 key, 杜绝 __proto__ 污染
-  for (const text of texts) {
-    for (const line of text.split(";")) {
-      const q = parseTencentLine(line.trim());
-      if (q) out[q.symbol] = q;
-    }
+  const missing = [];
+  for (const c of codes.split(",").map((s) => s.trim()).filter(Boolean)) {
+    const hit = cache.get(`q:${c}`);
+    if (hit && hit.data !== undefined && now - hit.ts < QUOTE_CACHE_TTL) out[c] = hit.data;
+    else missing.push(c);
   }
-  // usVIX 腾讯数据已停更，从新浪期货获取实时值覆盖
-  if (codes.includes("usVIX") || out.usVIX) {
-    try {
-      const vixText = await curlText("https://hq.sinajs.cn/list=hf_VX", { referer: "https://finance.sina.com.cn/futures/", timeout: 4000, encoding: "utf-8" });
-      const m = vixText.match(/hf_VX="([^"]*)"/);
-      if (m) {
-        const f = m[1].split(",");
-        const price = parseFloat(f[0]);
-        const prev = parseFloat(f[7]);
-        if (!isNaN(price)) {
-          out.usVIX = {
-            symbol: "usVIX",
-            name: "VIX恐慌指数期货",
-            price,
-            prev,
-            change: +(price - prev).toFixed(4),
-            pct: prev ? +(((price - prev) / prev) * 100).toFixed(3) : 0,
-            time: `${f[12]} ${f[6]}`,
-          };
+  if (missing.length) {
+    // 按 60 个/块分块并发(报价中心全集可达数百, 单 URL 过长会被上游拒绝)
+    const chunks = [];
+    for (let i = 0; i < missing.length; i += 60) chunks.push(missing.slice(i, i + 60));
+    const texts = await Promise.all(chunks.map((c) => fetchText(`https://qt.gtimg.cn/q=${encodeURIComponent(c.join(","))}`, { gbk: true })));
+    const ts = Date.now();
+    for (const text of texts) {
+      for (const line of text.split(";")) {
+        const q = parseTencentLine(line.trim());
+        if (q) {
+          out[q.symbol] = q;
+          if (q.symbol !== "usVIX") cacheSet(`q:${q.symbol}`, { ts, data: q, inflight: null, ttl: QUOTE_CACHE_TTL }); // usVIX 由新浪覆盖值接管
         }
       }
-    } catch { /* keep tencent fallback */ }
+    }
+  }
+  // usVIX 腾讯数据已停更，从新浪期货获取实时值覆盖(仅缓存过期时重取)
+  if (codes.includes("usVIX")) {
+    const hit = cache.get("q:usVIX");
+    if (hit && hit.data !== undefined && now - hit.ts < QUOTE_CACHE_TTL) {
+      out.usVIX = hit.data;
+    } else {
+      try {
+        const vixText = await curlText("https://hq.sinajs.cn/list=hf_VX", { referer: "https://finance.sina.com.cn/futures/", timeout: 4000, encoding: "utf-8" });
+        const m = vixText.match(/hf_VX="([^"]*)"/);
+        if (m) {
+          const f = m[1].split(",");
+          const price = parseFloat(f[0]);
+          const prev = parseFloat(f[7]);
+          if (!isNaN(price)) {
+            out.usVIX = {
+              symbol: "usVIX",
+              name: "VIX恐慌指数期货",
+              price,
+              prev,
+              change: +(price - prev).toFixed(4),
+              pct: prev ? +(((price - prev) / prev) * 100).toFixed(3) : 0,
+              time: `${f[12]} ${f[6]}`,
+            };
+            cacheSet("q:usVIX", { ts: Date.now(), data: out.usVIX, inflight: null, ttl: QUOTE_CACHE_TTL });
+          }
+        }
+      } catch { /* keep tencent fallback */ }
+    }
   }
   return out;
 }
@@ -1445,8 +1466,7 @@ function handleChainParse(body) {
 
 /* ---------------- 主机路由表 ---------------- */
 const routes = {
-  "/api/quotes": async (q) =>
-    cached(`quotes:${q.get("codes")}`, 1500, () => handleQuotes(q.get("codes") || "")),
+  "/api/quotes": async (q) => handleQuotes(q.get("codes") || ""), // 内部按代码独立缓存(TTL 1.5s)
   "/api/minute": async (q) =>
     cached(`minute:${q.get("code")}`, 5000, () => handleMinute(q.get("code") || "sh000001")),
   "/api/boards": async (q) =>

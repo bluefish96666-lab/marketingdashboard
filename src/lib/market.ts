@@ -103,13 +103,16 @@ function maybeStopLoop() {
   }
 }
 
-/** 新代码注册后 200ms 防抖立即补拉(面板挂载/切换时批量合并) */
+/** 新代码注册后防抖立即补拉(节流 ≥2s, 防滚动订阅风暴直冲上游) */
+let lastFlush = 0;
 function scheduleFlush() {
   if (flushTimer != null || document.hidden) return;
+  const wait = Math.max(250, 2000 - (Date.now() - lastFlush));
   flushTimer = window.setTimeout(() => {
     flushTimer = null;
+    lastFlush = Date.now();
     tick();
-  }, 200);
+  }, wait);
 }
 
 /** 注册一批代码(引用计数), 卸载时释放 */
