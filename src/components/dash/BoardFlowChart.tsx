@@ -7,13 +7,14 @@ const TNUM = { fontVariantNumeric: "tabular-nums" } as const;
 const REDS = ["#fb7185", "#f43f5e", "#fca5a5", "#fb923c", "#fdba74", "#e11d48", "#fecdd3", "#fda4af", "#fcd34d", "#fbbf24"];
 const GREENS = ["#34d399", "#10b981", "#6ee7b7", "#059669", "#a7f3d0", "#4ade80", "#22c55e", "#86efac", "#16a34a", "#15803d"];
 
-const X_TICKS: [number, string][] = [
-  [0, "09:30"],
-  [59, "10:30"],
-  [119, "11:30"],
-  [120, "13:00"],
-  [179, "14:00"],
-  [239, "15:00"],
+// 午休压缩点上下午刻度相邻, 用两端锚定防重叠; 首尾刻度防出界
+const X_TICKS: [number, string, "start" | "middle" | "end"][] = [
+  [0, "09:30", "middle"],
+  [59, "10:30", "middle"],
+  [119, "11:30", "end"],
+  [120, "13:00", "start"],
+  [179, "14:00", "middle"],
+  [239, "15:00", "end"],
 ];
 
 /** 图例区最大高度(legend 模式, 超出滚动) */
@@ -101,8 +102,8 @@ export function BoardFlowChart({ flows, progress = 1, labelMode = "end" }: { flo
             ))}
             <line x1={34} y1={chart.Y(0)} x2={chart.W - chart.labelW - 6} y2={chart.Y(0)} stroke="#334155" strokeWidth={1} />
             {/* 时间刻度 */}
-            {X_TICKS.map(([i, t]) => (
-              <text key={t} x={chart.X(i)} y={chart.chartH - 8} fontSize={8} fill="#475569" textAnchor="middle">{t}</text>
+            {X_TICKS.map(([i, t, anchor]) => (
+              <text key={t} x={chart.X(i)} y={chart.chartH - 8} fontSize={8} fill="#475569" textAnchor={anchor}>{t}</text>
             ))}
             {/* 板块曲线 */}
             {chart.lines.map((l) => (
