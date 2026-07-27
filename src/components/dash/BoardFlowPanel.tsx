@@ -14,6 +14,7 @@ export function BoardFlowPanel({ className = "", ...zoomProps }: { className?: s
   const [progress, setProgress] = useState(1);
   const [playing, setPlaying] = useState(false);
   const [countdown, setCountdown] = useState(POLL_MS / 1000);
+  const [labelMode, setLabelMode] = useState<"end" | "legend">("end");
 
   // 数据刷新时重置倒计时(render-time 派生态调整)
   const [prevUpdated, setPrevUpdated] = useState(updated);
@@ -60,6 +61,14 @@ export function BoardFlowPanel({ className = "", ...zoomProps }: { className?: s
           </span>
           <button
             type="button"
+            onClick={() => setLabelMode((m) => (m === "end" ? "legend" : "end"))}
+            title={labelMode === "end" ? "切换为图例" : "切换为端点标签"}
+            className="rounded px-1.5 py-0.5 text-[10px] text-slate-400 transition hover:bg-slate-800 hover:text-slate-200"
+          >
+            {labelMode === "end" ? "图例" : "标签"}
+          </button>
+          <button
+            type="button"
             onClick={() => {
               if (progress >= 1) {
                 setProgress(0);
@@ -77,7 +86,7 @@ export function BoardFlowPanel({ className = "", ...zoomProps }: { className?: s
     >
       <div className="h-full min-h-0 p-1.5">
         {flows ? (
-          <BoardFlowChart flows={flows} progress={progress} />
+          <BoardFlowChart flows={flows} progress={progress} labelMode={labelMode} />
         ) : (
           <div className="flex h-full items-center justify-center text-[11px] text-slate-600">
             {error ? <span className="text-rose-400/80">板块资金流连接失败,自动重试中…</span> : "板块资金流加载中…"}
