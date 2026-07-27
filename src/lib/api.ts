@@ -256,86 +256,6 @@ async function post<T>(path: string, body: unknown): Promise<T> {
   return j.data as T;
 }
 
-/** 大宗商品浏览器直连兜底:腾讯 hf_ 外盘期货(CORS 开放) */
-function parseFuturesText(text: string): Record<string, FutureQuote> {
-  const out: Record<string, FutureQuote> = Object.create(null); // 上游 symbol 作 key, 防 __proto__ 污染
-  const re = /(?:hq_str_|v_)(\w+)="([^"]*)"/g;
-  let m;
-  while ((m = re.exec(text))) {
-    const f = m[2].split(",");
-    if (f.length < 14 || !f[0]) continue;
-    const price = num(f[0]);
-    const prevSettle = num(f[7]);
-    out[m[1]] = {
-      symbol: m[1],
-      name: f[13],
-      price,
-      high: num(f[4]),
-      low: num(f[5]),
-      open: num(f[8]),
-      prev: prevSettle,
-      change: +(price - prevSettle).toFixed(4),
-      pct: prevSettle ? +(((price - prevSettle) / prevSettle) * 100).toFixed(3) : 0,
-      time: `${f[12]} ${f[6]}`,
-    };
-  }
-  return out;
-}
-
-/** 内盘期货(沪金等 nf_)直连解析: 字段布局与外盘 hf_ 不同, 与服务端 parseSinaDomestic 对齐 */
-function parseDomesticFuturesText(text: string): Record<string, FutureQuote> {
-  const out: Record<string, FutureQuote> = Object.create(null); // 上游 symbol 作 key, 防 __proto__ 污染
-  const re = /(?:hq_str_|v_)(nf_\w+)="([^"]*)"/g;
-  let m;
-  while ((m = re.exec(text))) {
-    const f = m[2].split(",");
-    if (f.length < 17 || !f[0]) continue;
-    const prevSettle = num(f[8]); // f[8]=昨结算
-    let price = num(f[5]); // 最新价(夜盘可能为0)
-    if (!price) {
-      const bid = num(f[6]), ask = num(f[7]);
-      price = bid && ask ? +((bid + ask) / 2).toFixed(2) : (bid || ask || prevSettle);
-    }
-    out[m[1]] = {
-      symbol: m[1],
-      name: f[0],
-      price,
-      high: num(f[3]),
-      low: num(f[4]),
-      open: num(f[2]),
-      prev: prevSettle,
-      change: +(price - prevSettle).toFixed(4),
-      pct: prevSettle ? +(((price - prevSettle) / prevSettle) * 100).toFixed(3) : 0,
-      time: f[16],
-    };
-  }
-  return out;
-}
-
-async function directFutures(): Promise<Record<string, FutureQuote>> {
-  const out: Record<string, FutureQuote> = {};
-  // 外盘 hf_: 纽约金/银/铜/油 + 伦敦金(腾讯直连, CORS 开放)
-  const r = await fetch(`https://qt.gtimg.cn/q=hf_GC,hf_SI,hf_CAD,hf_CL,hf_XAU`);
-  const text = new TextDecoder("gbk").decode(await r.arrayBuffer());
-  Object.assign(out, parseFuturesText(text));
-  // 内盘 nf_: 沪金(同一接口, 字段布局不同)
-  try {
-    const rn = await fetch(`https://qt.gtimg.cn/q=nf_AU0`);
-    const textN = new TextDecoder("gbk").decode(await rn.arrayBuffer());
-    Object.assign(out, parseDomesticFuturesText(textN));
-  } catch { /* 忽略内盘直连失败 */ }
-  // BTC(Binance 开放 CORS)
-  try {
-    const j = await (await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=BTCUSDT`)).json();
-    out.BTCUSDT = {
-      symbol: "BTCUSDT", name: "BTC/USDT", price: num(j.lastPrice), prev: num(j.prevClosePrice),
-      open: num(j.openPrice), high: num(j.highPrice), low: num(j.lowPrice),
-      change: num(j.priceChange), pct: num(j.priceChangePercent), time: "",
-    };
-  } catch { /* 忽略 BTC 直连失败 */ }
-  return out;
-}
-
 /* ---------- 浏览器直连腾讯(兜底) ---------- */
 
 function parseTencent(text: string): Record<string, Quote> {
@@ -471,24 +391,6 @@ export const api = {
   boards: (type: "01" | "02", dir: 0 | 1 = 0, n = 30) =>
     withFallback(() => get<Board[]>(`/api/boards?type=${type}&dir=${dir}&n=${n}`), () => directBoards(type, dir, n)),
   boardStocks: (code: string, n = 12) => get<BoardStock[]>(`/api/board-stocks?code=${encodeURIComponent(code)}&n=${n}`),
-  futures: async () => {
-    // 服务端获取期货, 浏览器直连 Binance 补 BTC
-    const data = await withFallback(
-      () => get<Record<string, FutureQuote>>(`/api/futures`),
-      () => directFutures()
-    );
-    if (!data.BTCUSDT) {
-      try {
-        const j = await (await fetch("https://api.binance.com/api/v3/ticker/24hr?symbol=BTCUSDT")).json();
-        data.BTCUSDT = {
-          symbol: "BTCUSDT", name: "BTC/USDT", price: num(j.lastPrice), prev: num(j.prevClosePrice),
-          open: num(j.openPrice), high: num(j.highPrice), low: num(j.lowPrice),
-          change: num(j.priceChange), pct: num(j.priceChangePercent), time: "",
-        };
-      } catch { /* 浏览器直连也失败则放弃 */ }
-    }
-    return data;
-  },
   rank: (sort: "changepercent" | "amount" | "turnoverratio", asc: 0 | 1, n = 30) =>
     get<RankStock[]>(`/api/rank?sort=${sort}&asc=${asc}&n=${n}`),
   moneyflow: (n = 15) => get<FlowStock[]>(`/api/moneyflow?n=${n}`),
@@ -496,7 +398,6 @@ export const api = {
   stockFlow: (code: string) => flowLoader(code),
   futureMinute: (code: string) => get<MinuteData>(`/api/future-minute?code=${encodeURIComponent(code)}`),
   futureDaily: (code: string) => get<FutureDaily>(`/api/future-daily?code=${encodeURIComponent(code)}`),
-  /** 批量期货实时报价(商品价格页全品种; 无浏览器直连兜底, 依赖服务端) */
   futuresBatch: (codes: string[]) =>
     get<Record<string, FutureQuote>>(`/api/futures?list=${codes.map(encodeURIComponent).join(",")}`),
   boardFlow: (n = 20) => get<BoardFlow[]>(`/api/board-flow?n=${n}`),

@@ -3,7 +3,8 @@ import { Panel, type PanelZoomProps } from "./Panel";
 import { QuoteRow } from "./QuoteRow";
 import { usePolling } from "@/hooks/usePolling";
 import { useSharedPolling } from "@/hooks/useSharedPolling";
-import { api, type MysteryStock, type NewsItem, type Quote } from "@/lib/api";
+import { useQuote } from "@/lib/market";
+import { api, type MysteryStock, type NewsItem } from "@/lib/api";
 import { canonBoardName, unionBoards } from "@/lib/boards";
 import { CHAINS } from "@/config/dashboard";
 import type { Chain, ChainStock } from "@/config/dashboard";
@@ -38,12 +39,13 @@ function toChainStock(row: MysteryStock, tag: string): ChainStock | null {
   return { code, name: row.name, tag };
 }
 
-function StockCell({ code, name, tag, q }: { code: string; name: string; tag?: string; q?: Quote }) {
+function StockCell({ code, name, tag }: { code: string; name: string; tag?: string }) {
+  // 报价取自统一报价中心(与其他面板同帧)
+  const q = useQuote(code);
   return (
     <QuoteRow code={code} name={name} tag={tag}
-      price={q?.price} pct={q?.pct}
-      amount={q && q.amount > 0 ? fmtWan(q.amount) : undefined}
-      turnover={q && q.turnover > 0 ? `${q.turnover.toFixed(1)}%` : undefined}
+      amount={q?.amount && q.amount > 0 ? fmtWan(q.amount) : undefined}
+      turnover={q?.turnover && q.turnover > 0 ? `${q.turnover.toFixed(1)}%` : undefined}
       spark boards flow variant="card" />
   );
 }
@@ -93,8 +95,6 @@ export function ChainPanel({ className = "", ...zoomProps }: { className?: strin
     [dynMatched, dynamicData, chain]
   );
 
-  const codes = useMemo(() => segmentData.flatMap((s) => s.stocks.map((x) => x.code)), [segmentData]);
-  const { data: quotes } = usePolling(() => api.quotes(codes), 8000, [chainId]);
   const { data: news } = useSharedPolling<NewsItem[]>("news:60", () => api.news(60), 20000);
   const { data: boards } = usePolling(() => unionBoards(40), 25000);
 
@@ -273,7 +273,7 @@ export function ChainPanel({ className = "", ...zoomProps }: { className?: strin
                   </div>
                   <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto">
                     {!dynMatched && seg.query && refreshTick > 0 && <div className="flex h-9 items-center justify-center rounded border border-slate-700/30 bg-slate-800/15 text-[10px] text-slate-500">问财筛选中...</div>}
-                    {stocks.map((st) => (<StockCell key={st.code} code={st.code} name={st.name} tag={st.tag} q={quotes?.[st.code]} />))}
+                    {stocks.map((st) => (<StockCell key={st.code} code={st.code} name={st.name} tag={st.tag} />))}
                     {dynMatched && stocks.length === 0 && <div className="flex h-9 items-center justify-center rounded border border-slate-700/30 bg-slate-800/15 text-[10px] text-slate-500">暂无匹配股票</div>}
                   </div>
                 </div>

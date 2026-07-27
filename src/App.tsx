@@ -16,15 +16,17 @@ import { WatchlistPanel } from "@/components/dash/WatchlistPanel";
 import AiDashboard from "./AiDashboard";
 import GoodsDashboard from "./GoodsDashboard";
 import { useSharedPolling } from "@/hooks/useSharedPolling";
+import { useQuotes } from "@/lib/market";
 import { useFullscreen } from "@/hooks/useFullscreen";
 import { api } from "@/lib/api";
 import { INDICES, FOREX, COMMODITIES } from "@/config/dashboard";
 
 function Tape() {
   const codes = useMemo(() => [...INDICES.map((i) => i.code), ...FOREX.map((i) => i.code)], []);
-  // 与 IndexPanel / CommodityPanel / TreasuryPanel 共享同 key 轮询, 避免重复请求
-  const { data: quotes } = useSharedPolling(`quotes:${codes.join(",")}`, () => api.quotes(codes), 5000);
-  const { data: futures } = useSharedPolling("futures", () => api.futures(), 10000);
+  const futureCodes = useMemo(() => COMMODITIES.map((c) => c.code), []);
+  // 指数与期货报价: 统一报价中心(与全站所有面板同帧)
+  const quotes = useQuotes(codes);
+  const futures = useQuotes(futureCodes);
   const { data: treasuries } = useSharedPolling("treasuries", () => api.treasuries(), 60000);
 
   const items: TapeItem[] = useMemo(() => {

@@ -1,5 +1,6 @@
 import { memo, useEffect, useRef, useState, type ReactNode } from "react";
 import { usePolling } from "@/hooks/usePolling";
+import { useQuote } from "@/lib/market";
 import { api } from "@/lib/api";
 import { Spark } from "./Spark";
 import { clsChg, fmtPct, fmtPrice, fmtYuan } from "@/lib/format";
@@ -79,6 +80,11 @@ export const QuoteRow = memo(function QuoteRow({
     return () => io.disconnect();
   }, []);
 
+  // 统一报价中心: 价格/涨跌幅唯一来源(视口内才注册; props 仅作注册前的兜底)
+  const hub = useQuote(code, visible);
+  const p = hub?.price ?? price;
+  const pc = hub?.pct ?? pct;
+
   const { data: minute } = usePolling(
     () => (spark && visible ? api.minute(code) : Promise.resolve(null)),
     60000,
@@ -150,7 +156,7 @@ export const QuoteRow = memo(function QuoteRow({
         </div>
         {/* 第一行: 成交额 / 现价 */}
         {amount ? <Stat label="额" value={amount} /> : <div />}
-        <Stat label="价" value={price != null ? fmtPrice(price) : "—"} />
+        <Stat label="价" value={p != null ? fmtPrice(p) : "—"} />
         {/* 末列: 删除按钮, 跨2行 */}
         {onRemove && (
           <div className="row-span-2 self-center">
@@ -196,8 +202,8 @@ export const QuoteRow = memo(function QuoteRow({
         {turnover ? <Stat label="换" value={turnover} /> : <div />}
         <Stat
           label="幅"
-          value={pct != null ? fmtPct(pct, variant === "card" ? 1 : 2) : ""}
-          valueCls={`font-semibold ${pct != null ? clsChg(pct) : "text-slate-600"}`}
+          value={pc != null ? fmtPct(pc, variant === "card" ? 1 : 2) : ""}
+          valueCls={`font-semibold ${pc != null ? clsChg(pc) : "text-slate-600"}`}
         />
       </div>
 

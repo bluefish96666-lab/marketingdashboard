@@ -1,15 +1,15 @@
 import { Panel, type PanelZoomProps } from "./Panel";
 import { Spark } from "./Spark";
 import { usePolling } from "@/hooks/usePolling";
-import { useSharedPolling } from "@/hooks/useSharedPolling";
-import { api, type Quote, type MinuteData } from "@/lib/api";
+import { useQuotes, type HubQuote } from "@/lib/market";
+import { api, type MinuteData } from "@/lib/api";
 import { INDICES, FOREX, type IndexDef } from "@/config/dashboard";
 import { bgChg, clsChg, fmtPct, fmtPrice, fmtWan } from "@/lib/format";
 
 const ALL_CODES = [...INDICES.map((i) => i.code), ...FOREX.map((i) => i.code)];
 const TNUM = { fontVariantNumeric: "tabular-nums" } as const;
 
-function IndexRow({ def, q, minute }: { def: IndexDef; q?: Quote; minute?: MinuteData }) {
+function IndexRow({ def, q, minute }: { def: IndexDef; q?: HubQuote; minute?: MinuteData }) {
   return (
     <div className="flex items-center gap-1.5 rounded px-1 py-[1.5px] transition-colors hover:bg-slate-800/40">
       <span className="w-6 shrink-0 rounded-sm bg-slate-700/50 text-center text-[8px] leading-3 text-slate-400">{def.region}</span>
@@ -34,8 +34,8 @@ function IndexRow({ def, q, minute }: { def: IndexDef; q?: Quote; minute?: Minut
 }
 
 export function IndexPanel({ className = "", ...zoomProps }: { className?: string } & PanelZoomProps) {
-  // 与 App 的 Tape 共享同 key 轮询, 避免重复请求
-  const { data: quotes } = useSharedPolling(`quotes:${ALL_CODES.join(",")}`, () => api.quotes(ALL_CODES), 5000);
+  // 指数报价: 统一报价中心(与 Tape 等所有面板同帧)
+  const quotes = useQuotes(ALL_CODES);
   const { data: minutes } = usePolling(
     async () => {
       const codes = ALL_CODES.filter((c) => !c.startsWith("wh"));

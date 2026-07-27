@@ -131,12 +131,17 @@ function parseTencentLine(line) {
 }
 
 async function handleQuotes(codes) {
-  const url = `https://qt.gtimg.cn/q=${encodeURIComponent(codes)}`;
-  const text = await fetchText(url, { gbk: true });
+  // 按 60 个/块分块并发(报价中心全集可达数百, 单 URL 过长会被上游拒绝)
+  const list = codes.split(",").map((s) => s.trim()).filter(Boolean);
+  const chunks = [];
+  for (let i = 0; i < list.length; i += 60) chunks.push(list.slice(i, i + 60));
+  const texts = await Promise.all(chunks.map((c) => fetchText(`https://qt.gtimg.cn/q=${encodeURIComponent(c.join(","))}`, { gbk: true })));
   const out = Object.create(null); // 无原型对象: 上游 symbol 作为 key, 杜绝 __proto__ 污染
-  for (const line of text.split(";")) {
-    const q = parseTencentLine(line.trim());
-    if (q) out[q.symbol] = q;
+  for (const text of texts) {
+    for (const line of text.split(";")) {
+      const q = parseTencentLine(line.trim());
+      if (q) out[q.symbol] = q;
+    }
   }
   // usVIX 腾讯数据已停更，从新浪期货获取实时值覆盖
   if (codes.includes("usVIX") || out.usVIX) {

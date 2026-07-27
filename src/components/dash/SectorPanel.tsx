@@ -186,8 +186,6 @@ export function SectorPanel({ className = "", ...zoomProps }: { className?: stri
                   key={s.code}
                   code={s.code}
                   name={s.name}
-                  price={s.price}
-                  pct={s.pct}
                   amount={s.amount > 0 ? fmtYuan(s.amount) : undefined}
                   turnover={s.turnover > 0 ? `${s.turnover.toFixed(1)}%` : undefined}
                   spark boards flow

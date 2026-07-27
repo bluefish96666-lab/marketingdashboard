@@ -1,7 +1,7 @@
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { Panel, type PanelZoomProps } from "./Panel";
 import { QuoteRow } from "./QuoteRow";
-import { usePolling } from "@/hooks/usePolling";
+import { useQuote } from "@/lib/market";
 import { api, type StockSearchResult } from "@/lib/api";
 import { fmtWan } from "@/lib/format";
 
@@ -30,26 +30,20 @@ function normalizeCode(input: string): string | null {
   return null;
 }
 
-/** 自选股行: 原始值 props + 稳定回调, 配合 memo 让未变化的行跳过重渲染 */
+/** 自选股行: 报价取自统一报价中心(名称/价格/额/换), memo 让未变化的行跳过重渲染 */
 const WatchRow = memo(function WatchRow({
-  code, name, price, pct, amount, turnover, onRemoveCode,
+  code, onRemoveCode,
 }: {
   code: string;
-  name: string;
-  price?: number;
-  pct?: number;
-  amount?: string;
-  turnover?: string;
   onRemoveCode: (code: string) => void;
 }) {
+  const q = useQuote(code);
   return (
     <QuoteRow
       code={code}
-      name={name}
-      price={price}
-      pct={pct}
-      amount={amount}
-      turnover={turnover}
+      name={q?.name || code}
+      amount={q?.amount && q.amount > 0 ? fmtWan(q.amount) : undefined}
+      turnover={q?.turnover && q.turnover > 0 ? `${q.turnover.toFixed(1)}%` : undefined}
       spark
       boards
       flow
@@ -58,7 +52,7 @@ const WatchRow = memo(function WatchRow({
   );
 });
 
-/** 自选股 / 持仓面板 — localStorage 持久化,5s 轮询 */
+/** 自选股 / 持仓面板 — localStorage 持久化, 报价经统一报价中心 */
 export function WatchlistPanel({ className = "", ...zoomProps }: { className?: string } & PanelZoomProps) {
   const [codes, setCodes] = useState<string[]>(load);
   const [input, setInput] = useState("");
@@ -69,10 +63,6 @@ export function WatchlistPanel({ className = "", ...zoomProps }: { className?: s
   const suggestRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
-  const { data: quotes } = usePolling(
-    () => (codes.length ? api.quotes(codes) : Promise.resolve(null)),
-    5000
-  );
 
   useEffect(() => {
     try { localStorage.setItem(LS_KEY, JSON.stringify(codes)); } catch { /* 隐私模式/配额满时忽略 */ }
@@ -224,21 +214,9 @@ export function WatchlistPanel({ className = "", ...zoomProps }: { className?: s
         </div>
         {/* 列表 */}
         <div className="min-h-0 flex-1 overflow-y-auto p-1">
-          {codes.map((code) => {
-            const q = quotes?.[code];
-            return (
-              <WatchRow
-                key={code}
-                code={code}
-                name={q?.name || code}
-                price={q?.price}
-                pct={q?.pct}
-                amount={q && q.amount > 0 ? fmtWan(q.amount) : undefined}
-                turnover={q && q.turnover > 0 ? `${q.turnover.toFixed(1)}%` : undefined}
-                onRemoveCode={removeCode}
-              />
-            );
-          })}
+          {codes.map((code) => (
+            <WatchRow key={code} code={code} onRemoveCode={removeCode} />
+          ))}
           {codes.length === 0 && (
             <div className="p-4 text-center text-[10px] text-slate-600">列表为空,输入代码/名称/拼音添加自选股</div>
           )}

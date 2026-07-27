@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { Panel, type PanelZoomProps } from "./Panel";
 import { GoodsRow } from "./GoodsRow";
 import { usePolling } from "@/hooks/usePolling";
-import { useSharedPolling } from "@/hooks/useSharedPolling";
+import { useQuotes } from "@/lib/market";
 import { api } from "@/lib/api";
 import { ALL_GOODS_SINA, GOODS, type GoodsGroupId } from "@/config/goods";
 
@@ -20,8 +20,8 @@ export function GoodsTrendPanel({ group, title, accent, className = "", ...zoomP
   const [range, setRange] = useState<number>(90);
   const defs = useMemo(() => GOODS.filter((g) => g.group === group), [group]);
 
-  // 全部品种实时报价共享轮询(所有趋势面板同 key, 仅一个请求)
-  const { data: quotes } = useSharedPolling(`futures:${ALL_GOODS_SINA.join(",")}`, () => api.futuresBatch(ALL_GOODS_SINA), 30000);
+  // 全部品种实时报价: 统一报价中心(与主页大宗商品/Tape 同帧)
+  const quotes = useQuotes(ALL_GOODS_SINA);
 
   // 本组品种日线K线(全历史, 前端按区间切片)
   const { data: dailies } = usePolling(
