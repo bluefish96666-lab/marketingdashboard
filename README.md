@@ -53,6 +53,7 @@ flowchart LR
 ```
 
 - 前端优先请求本站 Node 代理；代理不可用时，部分接口（腾讯系 / 见闻）自动降级为浏览器直连
+- **前端统一报价中心**：所有面板的价格 / 涨跌幅由单一客户端报价中心（`src/lib/market.ts`）按 5s 批量拉取并分发同一快照，同一只股票全站同帧；服务端报价按代码独立缓存（1.5s），集合变化只补新码
 - 服务端按接口粒度设置缓存 TTL（行情 1.5s ~ 板块归属 24h），缓存容量有界（LRU + 定时清扫），无数据库、无外部存储
 - 现货价格由服务端每 4 小时定时采集并写入本地历史文件，无需前端在线，历史随天数自然生长
 - 生产环境单进程运行：同一端口同时提供 API 与前端静态文件
@@ -108,7 +109,7 @@ docker run -p 3000:3000 market-cockpit
 | `/api/board-stocks?code=...&n=...` | 板块成分股 |
 | `/api/futures?list=...` | 大宗商品 / 加密货币报价 |
 | `/api/future-minute?code=...` | 期货日内走势 |
-| `/api/future-daily?code=...` | 期货日线 K 线（新浪全历史，内盘 nf_ / 外盘 hf_） |
+| `/api/future-daily?code=...&n=...` | 期货日线 K 线（默认近 400 根，内盘 nf_ / 外盘 hf_） |
 | `/api/spot-table` | 生意社现期对照表（现货价 / 期货价 / 基差，现货历史逐日积累） |
 | `/api/chem-spot?id=...&name=...` | 生意社化工现货报价（市场价中位数，历史逐日积累） |
 | `/api/rank?sort=...&n=...` | 个股榜单（涨幅 / 成交额 / 换手率） |
@@ -143,7 +144,7 @@ docker run -p 3000:3000 market-cockpit
 │   │       └── WatchlistPanel.tsx  # 自选股面板（支持名称/拼音搜索，localStorage 持久化）
 │   ├── config/        # 指数、商品、产业链等静态配置
 │   ├── hooks/         # usePolling / useSharedPolling / useClock 等通用钩子
-│   └── lib/           # API 客户端与工具函数
+│   └── lib/           # API 客户端、统一报价中心(market.ts)与工具函数
 └── docs/              # 截图等文档资源
 ```
 
