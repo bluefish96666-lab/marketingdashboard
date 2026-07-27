@@ -16,6 +16,9 @@ const X_TICKS: [number, string][] = [
   [239, "15:00"],
 ];
 
+/** 图例区最大高度(超出滚动) */
+const LEGEND_H = 64;
+
 /** 板块实时资金流向图(分钟级累计主力净流入, 东财口径)
  *  progress: 0..1 播放进度(重放用), 1 = 全天 */
 export function BoardFlowChart({ flows, progress = 1 }: { flows: BoardFlow[]; progress?: number }) {
@@ -36,7 +39,7 @@ export function BoardFlowChart({ flows, progress = 1 }: { flows: BoardFlow[]; pr
     const series = flows.filter((f) => f.points.length > 2);
     if (!series.length) return null;
     const { w: W, h: H } = size;
-    const labelW = 86;
+    const chartH = Math.max(H - LEGEND_H, 80);
     const n = Math.max(...series.map((s) => s.points.length));
     // 重放进度: 只绘制前 idx 个点
     const idx = Math.max(1, Math.min(n - 1, Math.floor(progress * (n - 1))));
@@ -48,8 +51,8 @@ export function BoardFlowChart({ flows, progress = 1 }: { flows: BoardFlow[]; pr
     const pad = (max - min) * 0.04 || 1;
     min -= pad;
     max += pad;
-    const X = (i: number) => 34 + (i / Math.max(n - 1, 1)) * (W - 34 - labelW - 6);
-    const Y = (v: number) => 8 + (1 - (v - min) / (max - min)) * (H - 26);
+    const X = (i: number) => 34 + (i / Math.max(n - 1, 1)) * (W - 40);
+    const Y = (v: number) => 8 + (1 - (v - min) / (max - min)) * (chartH - 26);
     // 颜色: 流入侧按名次取红, 流出侧取绿
     let ri = 0;
     let gi = 0;
@@ -58,74 +61,71 @@ export function BoardFlowChart({ flows, progress = 1 }: { flows: BoardFlow[]; pr
       const seg = s.points.slice(0, idx + 1);
       const pts = seg.map((p, i) => `${X(i).toFixed(1)},${Y(p.v).toFixed(1)}`).join(" ");
       const last = seg[seg.length - 1];
-      return { s, color, pts, lastY: Y(last.v), lastV: last.v, lastT: last.t };
+      return { s, color, pts, lastV: last.v };
     });
-    // 端点标签去重叠: 按 y 排序后在可视区内推开(标签多于可用高度时压缩间距, 保证不被裁剪出画布)
-    const labels = [...lines]
-      .sort((a, b) => a.lastY - b.lastY)
-      .map((l) => ({ line: l, labelY: l.lastY }));
-    const TOP = 10, BOTTOM = H - 18;
-    const gap = labels.length > 1 ? Math.min(11, (BOTTOM - TOP) / (labels.length - 1)) : 11;
-    // 起始 y 尽量贴合首条线末端, 但整组必须落在 [TOP, BOTTOM] 内
-    let sy = Math.max(labels.length ? labels[0].labelY : TOP, TOP);
-    sy = Math.min(sy, BOTTOM - gap * (labels.length - 1));
-    sy = Math.max(sy, TOP);
-    for (const l of labels) { l.labelY = sy; sy += gap; }
     // Y 刻度: 4 档
     const ticks = [0.2, 0.4, 0.6, 0.8].map((f) => {
       const v = max - f * (max - min);
       return { v, y: Y(v) };
     });
-    return { W, H, X, Y, min, max, lines, labels, ticks, labelW, idx, cursorT: (series.find((s) => s.points.length > idx)?.points[idx])?.t ?? "" };
+    return { W, chartH, X, Y, lines, ticks, idx, cursorT: (series.find((s) => s.points.length > idx)?.points[idx])?.t ?? "" };
   }, [flows, size, progress]);
 
   return (
-    <div ref={boxRef} className="h-full min-h-0 w-full">
+    <div ref={boxRef} className="flex h-full min-h-0 w-full flex-col">
       {chart ? (
-        <svg width={chart.W} height={chart.H} className="block">
-          {/* 网格与零轴 */}
-          {chart.ticks.map((t, i) => (
-            <g key={i}>
-              <line x1={34} y1={t.y} x2={chart.W - chart.labelW - 6} y2={t.y} stroke="#1e293b" strokeWidth={1} />
-              <text x={4} y={t.y + 3} fontSize={9} fill="#64748b" style={TNUM}>{(t.v / 1e8).toFixed(0)}亿</text>
-            </g>
-          ))}
-          <line x1={34} y1={chart.Y(0)} x2={chart.W - chart.labelW - 6} y2={chart.Y(0)} stroke="#334155" strokeWidth={1} />
-          {/* 时间刻度 */}
-          {X_TICKS.map(([i, t]) => (
-            <text key={t} x={chart.X(i)} y={chart.H - 8} fontSize={8} fill="#475569" textAnchor="middle">{t}</text>
-          ))}
-          {/* 板块曲线 */}
-          {chart.lines.map((l) => (
-            <polyline key={l.s.code} points={l.pts} fill="none" stroke={l.color} strokeWidth={1.4} strokeLinejoin="round" />
-          ))}
-          {/* 端点标签 */}
-          {chart.labels.map((l) => (
-            <g key={l.line.s.code}>
-              <line x1={chart.W - chart.labelW - 6} y1={l.line.lastY} x2={chart.W - chart.labelW} y2={l.labelY} stroke={l.line.color} strokeWidth={0.6} strokeOpacity={0.5} />
-              <text x={chart.W - chart.labelW + 2} y={l.labelY + 3} fontSize={8.5} fill={l.line.color} style={TNUM}>
-                {l.line.s.name} {l.line.lastV >= 0 ? "+" : ""}{(l.line.lastV / 1e8).toFixed(0)}
-              </text>
-            </g>
-          ))}
-          {/* 时间游标 */}
-          {progress < 1 && (
-            <g>
-              <line
-                x1={chart.X(chart.idx)}
-                y1={8}
-                x2={chart.X(chart.idx)}
-                y2={chart.H - 18}
-                stroke="#94a3b8"
-                strokeWidth={1}
-                strokeDasharray="3 3"
-              />
-              <text x={chart.X(chart.idx)} y={8} fontSize={8} fill="#e2e8f0" textAnchor="middle" style={TNUM}>
-                {chart.cursorT}
-              </text>
-            </g>
-          )}
-        </svg>
+        <>
+          <svg width={chart.W} height={chart.chartH} className="block shrink-0">
+            {/* 网格与零轴 */}
+            {chart.ticks.map((t, i) => (
+              <g key={i}>
+                <line x1={34} y1={t.y} x2={chart.W - 6} y2={t.y} stroke="#1e293b" strokeWidth={1} />
+                <text x={4} y={t.y + 3} fontSize={9} fill="#64748b" style={TNUM}>{(t.v / 1e8).toFixed(0)}亿</text>
+              </g>
+            ))}
+            <line x1={34} y1={chart.Y(0)} x2={chart.W - 6} y2={chart.Y(0)} stroke="#334155" strokeWidth={1} />
+            {/* 时间刻度 */}
+            {X_TICKS.map(([i, t]) => (
+              <text key={t} x={chart.X(i)} y={chart.chartH - 8} fontSize={8} fill="#475569" textAnchor="middle">{t}</text>
+            ))}
+            {/* 板块曲线 */}
+            {chart.lines.map((l) => (
+              <polyline key={l.s.code} points={l.pts} fill="none" stroke={l.color} strokeWidth={1.4} strokeLinejoin="round" />
+            ))}
+            {/* 时间游标 */}
+            {progress < 1 && (
+              <g>
+                <line
+                  x1={chart.X(chart.idx)}
+                  y1={8}
+                  x2={chart.X(chart.idx)}
+                  y2={chart.chartH - 18}
+                  stroke="#94a3b8"
+                  strokeWidth={1}
+                  strokeDasharray="3 3"
+                />
+                <text x={chart.X(chart.idx)} y={8} fontSize={8} fill="#e2e8f0" textAnchor="middle" style={TNUM}>
+                  {chart.cursorT}
+                </text>
+              </g>
+            )}
+          </svg>
+          {/* 图例(替代端点标签+标线): 色块 + 板块名 + 净额, 超出滚动 */}
+          <div
+            className="mt-1 flex shrink-0 flex-wrap content-start gap-x-3 gap-y-1 overflow-y-auto px-1"
+            style={{ maxHeight: LEGEND_H }}
+          >
+            {chart.lines.map((l) => (
+              <span key={l.s.code} className="flex items-center gap-1 text-[9px] leading-none">
+                <span className="h-[5px] w-[10px] shrink-0 rounded-sm" style={{ background: l.color }} />
+                <span className="max-w-[86px] truncate text-slate-400">{l.s.name}</span>
+                <span className="font-semibold" style={{ color: l.color, fontVariantNumeric: "tabular-nums" }}>
+                  {l.lastV >= 0 ? "+" : ""}{(l.lastV / 1e8).toFixed(0)}
+                </span>
+              </span>
+            ))}
+          </div>
+        </>
       ) : (
         <div className="flex h-full items-center justify-center text-[11px] text-slate-600">板块资金流加载中…</div>
       )}
