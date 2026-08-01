@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
 
-/** 每秒更新的当前时间 */
-export function useClock() {
+/** 定时更新的当前时间(TV 传 60s: 每秒重渲染会造成持续重绘) */
+export function useClock(intervalMs = 1000) {
   const [now, setNow] = useState(new Date());
   useEffect(() => {
-    const t = window.setInterval(() => setNow(new Date()), 1000);
+    const t = window.setInterval(() => setNow(new Date()), intervalMs);
     return () => window.clearInterval(t);
-  }, []);
+  }, [intervalMs]);
   return now;
 }

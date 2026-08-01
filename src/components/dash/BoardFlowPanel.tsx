@@ -3,6 +3,7 @@ import { Panel, type PanelZoomProps } from "./Panel";
 import { BoardFlowChart } from "./BoardFlowChart";
 import { usePolling } from "@/hooks/usePolling";
 import { api } from "@/lib/api";
+import { isTv } from "@/lib/tv";
 
 const POLL_MS = 10000;
 const DURATION_MS = 12000;
@@ -13,14 +14,15 @@ export function BoardFlowPanel({ className = "", ...zoomProps }: { className?: s
   const { data: flows, error, updated } = usePolling(() => api.boardFlow(20), POLL_MS);
   const [progress, setProgress] = useState(1);
   const [playing, setPlaying] = useState(false);
-  const [countdown, setCountdown] = useState(POLL_MS / 1000);
+  // TV 弱 GPU: 倒计时每秒重渲染整个面板(含大SVG), 禁用
+  const [countdown, setCountdown] = useState(isTv ? 0 : POLL_MS / 1000);
   const [labelMode, setLabelMode] = useState<"end" | "legend">("end");
 
   // 数据刷新时重置倒计时(render-time 派生态调整)
   const [prevUpdated, setPrevUpdated] = useState(updated);
   if (prevUpdated !== updated) {
     setPrevUpdated(updated);
-    setCountdown(POLL_MS / 1000);
+    if (!isTv) setCountdown(POLL_MS / 1000);
   }
 
   // 倒计时每秒递减
@@ -56,9 +58,11 @@ export function BoardFlowPanel({ className = "", ...zoomProps }: { className?: s
       accent="#f43f5e"
       right={
         <div className="flex items-center gap-2">
-          <span className="font-mono text-[10px] text-slate-500" style={{ fontVariantNumeric: "tabular-nums" }}>
-            {countdown}s
-          </span>
+          {!isTv && (
+            <span className="font-mono text-[10px] text-slate-500" style={{ fontVariantNumeric: "tabular-nums" }}>
+              {countdown}s
+            </span>
+          )}
           <button
             type="button"
             onClick={() => setLabelMode((m) => (m === "end" ? "legend" : "end"))}

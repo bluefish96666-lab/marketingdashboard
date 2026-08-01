@@ -48,7 +48,7 @@ export function DashboardHeader({
   isFullscreen: boolean;
   onToggleFullscreen: () => void;
 }) {
-  const now = useClock();
+  const now = useClock(isTv ? 60000 : 1000); // TV 弱 GPU: 每秒重绘整个 Header 代价高, 降到每分钟
   const hh = String(now.getHours()).padStart(2, "0");
   const mm = String(now.getMinutes()).padStart(2, "0");
   const ss = String(now.getSeconds()).padStart(2, "0");
@@ -93,7 +93,7 @@ export function DashboardHeader({
           {dateStr} 星期{week}
         </span>
         <span className="rounded border border-slate-700/60 bg-slate-800/40 px-2 py-px font-mono text-[12px] font-bold text-cyan-300">
-          {hh}:{mm}<span className="text-cyan-600">:{ss}</span>
+          {hh}:{mm}{isTv ? "" : <span className="text-cyan-600">:{ss}</span>}
         </span>
         {githubUrl && (
           <a

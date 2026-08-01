@@ -4,6 +4,7 @@ import { QuoteRow } from "./QuoteRow";
 import { usePolling } from "@/hooks/usePolling";
 import { api } from "@/lib/api";
 import { fmtYuan } from "@/lib/format";
+import { isTv } from "@/lib/tv";
 
 type Tab = "hot" | "up" | "down";
 const TABS: { key: Tab; label: string; sort: "amount" | "changepercent"; asc: 0 | 1 }[] = [
@@ -16,7 +17,7 @@ const TABS: { key: Tab; label: string; sort: "amount" | "changepercent"; asc: 0 
 export function RankPanel({ className = "", ...zoomProps }: { className?: string } & PanelZoomProps) {
   const [tab, setTab] = useState<Tab>("hot");
   const conf = TABS.find((t) => t.key === tab)!;
-  const { data, error } = usePolling(() => api.rank(conf.sort, conf.asc, 30), 15000, [tab]);
+  const { data, error } = usePolling(() => api.rank(conf.sort, conf.asc, isTv ? 15 : 30), 15000, [tab]);
 
   return (
     <Panel

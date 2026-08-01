@@ -4,12 +4,14 @@ import { QuoteRow } from "./QuoteRow";
 import { usePolling } from "@/hooks/usePolling";
 import { api, type Board } from "@/lib/api";
 import { clsChg, fmtPct, fmtYuan, hexChg } from "@/lib/format";
+import { isTv } from "@/lib/tv";
 
 type Kind = "01" | "02";
 
 const ROTATE_MS = 10000;
 // 概念榜近千行, 全量渲染会让千级 DOM 每 15s 重渲染; 截断显示, 搜索可定位完整集合
-const MAX_BOARD_ROWS = 200;
+// TV 弱 GPU: 滚动层是全量光栅化的图层, 进一步压到 40 行
+const MAX_BOARD_ROWS = isTv ? 40 : 200;
 // 成分股侧栏行数上限: 每个 QuoteRow 带 2 个 Observer + 3 个轮询 hook, 行数直接决定定时器规模
 const MAX_STOCK_ROWS = 100;
 
