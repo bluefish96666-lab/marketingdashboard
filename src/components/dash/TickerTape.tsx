@@ -25,7 +25,7 @@ function TapeItemView({ it }: { it: TapeItem }) {
 }
 
 const FLAP_SLOTS = 7;
-const FLIP_MS = 2000;
+const FLIP_MS = 5000;
 
 /** TV 翻牌跑马灯: 航班时刻牌式 — 固定7个槽位, 每隔2s由下一个槽位单独翻牌
  *  换成下一条(依次轮转), 只有翻牌槽位的小区域重绘, 弱GPU无压力 */
@@ -53,7 +53,7 @@ function FlapTape({ items }: { items: TapeItem[] }) {
         // key = 槽位序号 + item.key: 槽位换内容时重挂载, 触发 flap-in 翻牌动画
         <span
           key={`${pos}-${it.key}`}
-          className="flap-item inline-flex h-6 items-center gap-2 whitespace-nowrap rounded border border-slate-700/60 bg-[#0c1320] px-2.5 leading-6 shadow-[0_1px_0_rgba(0,0,0,0.4)]"
+          className="flap-item inline-flex h-6 min-w-0 flex-1 items-center justify-center gap-2 overflow-hidden whitespace-nowrap rounded border border-slate-700/60 bg-[#0c1320] px-2.5 leading-6 shadow-[0_1px_0_rgba(0,0,0,0.4)]"
         >
           <TapeItemView it={it} />
         </span>

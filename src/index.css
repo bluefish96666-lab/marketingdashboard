@@ -196,25 +196,26 @@ header.titlebar button {
   animation: none !important;
   transition: none !important;
 }
-/* TV 翻牌跑马灯: 槽位换内容时的翻转(区域小, 弱GPU无压力); 两段回弹, 翻牌感更明显 */
+/* TV 翻牌跑马灯: 槽位换内容时的翻转(区域小, 弱GPU无压力);
+   用2D scaleY模拟翻牌 — 3D rotateX/perspective 在老电视GPU上走软件渲染, 掉帧严重 */
 @keyframes flap-in {
   0% {
-    transform: perspective(600px) rotateX(-100deg) scaleY(1.2);
-    opacity: 0;
+    transform: scaleY(0);
+    opacity: 0.3;
   }
   55% {
-    transform: perspective(600px) rotateX(25deg);
+    transform: scaleY(1.18);
     opacity: 1;
   }
   80% {
-    transform: perspective(600px) rotateX(-8deg);
+    transform: scaleY(0.95);
   }
   100% {
-    transform: perspective(600px) rotateX(0deg);
+    transform: scaleY(1);
   }
 }
 .tv .flap-item {
-  animation: flap-in 0.6s ease-out !important;
+  animation: flap-in 0.5s ease-out !important;
 }
 /* 焦点环发光是遥控器导航的关键视觉反馈, 恢复(单元素开销可忽略) */
 .tv [data-tv-focusable]:focus {
