@@ -33,13 +33,19 @@ export function Panel({
 }: PanelProps) {
   // TV: 放大 = 全屏浮层(兄弟面板尺寸不变, 零重排; 老电视GPU上整屏reflow是缩放卡顿主因)
   const tvOverlay = isTv && isZoomed;
+  // 老WebView缩放渲染下 fixed 的 bottom/right 锚的是布局视口(可能大于可视区域, 底边溢出屏幕),
+  // 用实测可视区域给定宽高
+  const overlayStyle = tvOverlay
+    ? { position: "fixed" as const, left: 24, top: 24, width: window.innerWidth - 48, height: window.innerHeight - 48, zIndex: 60 }
+    : undefined;
   return (
     <>
       {tvOverlay && <div className="fixed left-0 right-0 top-0 bottom-0 z-[55] bg-black/70" />}
       <section
+        style={overlayStyle}
         className={`flex min-h-0 flex-col rounded-md border bg-[#0c1320]/90 shadow-[0_0_24px_rgba(0,0,0,0.35)] backdrop-blur transition-all duration-300 ${
           isZoomed ? "border-cyan-500/50 shadow-[0_0_32px_rgba(34,211,238,0.18)]" : "border-slate-700/40"
-        } ${tvOverlay ? "fixed left-6 right-6 top-6 bottom-6 z-[60] bg-[#0c1320]" : ""} ${className}`}
+        } ${tvOverlay ? "bg-[#0c1320]" : ""} ${className}`}
       {...(isTv && panelId && onToggleZoom
         ? {
             // TV 模式: 面板整体可聚焦, OK 键 = 放大/还原(点击内部按钮/输入框时不触发)

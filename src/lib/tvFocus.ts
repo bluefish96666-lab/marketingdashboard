@@ -96,6 +96,21 @@ function onKeyDown(e: KeyboardEvent) {
   if (!dir) return;
   e.preventDefault();
 
+  // 幻灯片模式: 有面板处于放大浮层时, ←/→ 直接切换到相邻面板
+  if (dir === "left" || dir === "right") {
+    const zoomed = document.querySelector<HTMLElement>("section[data-tv-zoomed]");
+    if (zoomed) {
+      const panels = Array.from(document.querySelectorAll<HTMLElement>("section[data-tv-focusable]"));
+      const i = panels.indexOf(zoomed);
+      if (i >= 0) {
+        const next = panels[(i + (dir === "right" ? 1 : panels.length - 1)) % panels.length];
+        next?.click();
+        next?.focus({ preventScroll: true });
+      }
+      return;
+    }
+  }
+
   // ↑/↓ 优先滚动焦点所在面板内部的可滚动容器
   if (dir === "up" || dir === "down") {
     const scroller = scrollableAncestor(active.matches?.(SEL) ? active : null);
