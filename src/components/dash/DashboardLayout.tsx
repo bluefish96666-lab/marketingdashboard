@@ -1,6 +1,7 @@
-import { memo, type ComponentType } from "react";
+import { memo, useMemo, type ComponentType } from "react";
 import { type PanelZoomProps } from "@/components/dash/Panel";
 import { usePanelZoom } from "@/hooks/usePanelZoom";
+import { isTv } from "@/lib/tv";
 
 export type PanelRowDef = {
   defaultH: number;
@@ -23,20 +24,27 @@ const MemoPanel = memo(function MemoPanel({
 export function DashboardLayout({ rows }: { rows: PanelRowDef[] }) {
   const { isZoomed, toggle: toggleZoom, layout } = usePanelZoom(rows);
 
+  // TV: 缩放走全屏浮层(Panel.tsx), 兄弟面板尺寸保持默认不变 — 整屏重排在老电视上是卡顿主因
+  const defaultLayout = useMemo(
+    () => ({ rowHeights: rows.map((r) => r.defaultH), rowWidths: rows.map((r) => r.panels.map((p) => p.defaultW)) }),
+    [rows]
+  );
+  const effLayout = isTv ? defaultLayout : layout;
+
   return (
     <main className="flex min-h-0 flex-1 flex-col gap-1 p-1">
       {rows.map((row, rowIdx) => (
         <div
           key={rowIdx}
           className="flex min-h-0 flex-col gap-1 transition-all duration-300 lg:h-[var(--row-h)] lg:flex-row"
-          style={{ "--row-h": `${layout.rowHeights[rowIdx] * 100}%` } as React.CSSProperties}
+          style={{ "--row-h": `${effLayout.rowHeights[rowIdx] * 100}%` } as React.CSSProperties}
         >
           {row.panels.map((panel, panelIdx) => {
             return (
               <div
                 key={panel.id}
                 className={`min-h-0 w-full transition-all duration-300 ${panel.mobileH} lg:h-full lg:w-[var(--panel-w)]`}
-                style={{ "--panel-w": `${layout.rowWidths[rowIdx][panelIdx] * 100}%` } as React.CSSProperties}
+                style={{ "--panel-w": `${effLayout.rowWidths[rowIdx][panelIdx] * 100}%` } as React.CSSProperties}
               >
                 <MemoPanel
                   component={panel.component}
