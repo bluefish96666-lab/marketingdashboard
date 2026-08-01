@@ -99,6 +99,24 @@ Open the deployed page in Chrome / Edge and click the **install icon** on the ri
 
 > Note: market data is fetched live; offline only the app shell works.
 
+### Android TV app
+
+The `android-tv/` directory contains a native WebView shell that brings the cockpit to Android TVs and set-top boxes, with full remote-control support:
+
+- **D-pad spatial navigation**: panels and nav links are focusable (cyan highlight ring); OK zooms/restores a panel or switches pages
+- **In-panel scrolling**: with a panel focused, ↑/↓ scrolls its inner lists (news, rankings, industry chains…)
+- **Back key**: restores a zoomed panel first → history back → exit; **Menu key**: change the server URL
+- TVs render at 1080p CSS pixels, so a 65" 4K screen scales everything up proportionally while the hand-written SVG charts stay crisp
+
+**Setup**:
+
+1. Run `npm start` on a computer on the same LAN as the TV, and note its IP
+2. Build the APK: `cd android-tv && gradle assembleDebug` — output at `app/build/outputs/apk/debug/app-debug.apk`
+3. Sideload it onto the TV (`adb install app-debug.apk`, or copy via USB drive)
+4. The app connects to the public deployment `https://mrd.hermes.cc.cd` by default — works out of the box; press the remote's menu key anytime to switch to a LAN address (e.g. `http://<computer-ip>:3000`)
+
+A publicly deployed URL (e.g. via Cloudflare Tunnel) works too, so the TV app can be used outside the LAN.
+
 ## 📡 API overview
 
 During development the frontend talks to the local proxy via `/api`:

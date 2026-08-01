@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { ZoomIn, ZoomOut } from "lucide-react";
+import { isTv } from "@/lib/tv";
 
 export interface PanelZoomProps {
   panelId?: string;
@@ -35,6 +36,19 @@ export function Panel({
       className={`flex min-h-0 flex-col rounded-md border bg-[#0c1320]/90 shadow-[0_0_24px_rgba(0,0,0,0.35)] backdrop-blur transition-all duration-300 ${
         isZoomed ? "border-cyan-500/50 shadow-[0_0_32px_rgba(34,211,238,0.18)]" : "border-slate-700/40"
       } ${className}`}
+      {...(isTv && panelId && onToggleZoom
+        ? {
+            // TV 模式: 面板整体可聚焦, OK 键 = 放大/还原(点击内部按钮/输入框时不触发)
+            // data-tv-zoomed 供 TV 壳 App 返回键识别并还原已放大面板
+            "data-tv-focusable": true,
+            "data-tv-zoomed": isZoomed || undefined,
+            tabIndex: -1,
+            onClick: (e: React.MouseEvent) => {
+              if ((e.target as HTMLElement).closest("button, a, input, select, textarea")) return;
+              onToggleZoom(panelId);
+            },
+          }
+        : {})}
     >
       <header className="flex h-8 shrink-0 items-center gap-2 border-b border-slate-700/40 px-2.5">
         <span className="inline-block h-3.5 w-1 rounded-sm" style={{ background: accent }} />

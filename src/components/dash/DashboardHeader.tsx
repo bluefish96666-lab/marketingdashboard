@@ -2,6 +2,7 @@ import { Link } from "react-router";
 import { ArrowLeft, Github, Maximize2, Minimize2 } from "lucide-react";
 import { Logo } from "@/components/Logo";
 import { useClock } from "@/hooks/useClock";
+import { isTv } from "@/lib/tv";
 
 type Accent = "cyan" | "violet";
 
@@ -72,6 +73,7 @@ export function DashboardHeader({
           <Link
             key={l.to}
             to={l.to}
+            {...(isTv ? { "data-tv-focusable": true, tabIndex: -1 } : {})}
             className={`flex items-center gap-1 rounded border border-slate-700/60 bg-slate-800/40 px-2 py-1 text-[10px] text-slate-400 transition-colors ${LINK_HOVER_CLASS[accent]}`}
           >
             {linkBack && i === 0 && <ArrowLeft size={10} />}

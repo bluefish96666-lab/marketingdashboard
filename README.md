@@ -99,6 +99,24 @@ docker run -p 3000:3000 market-cockpit
 
 > 注意：行情接口实时拉取，离线状态下仅应用外壳可用。
 
+### Android TV 客户端
+
+`android-tv/` 目录是一个原生 WebView 壳 App，把驾驶舱搬上安卓电视/盒子，支持遥控器操作：
+
+- **方向键空间导航**：面板、导航链接均可聚焦（青色高亮框），OK 键放大/还原面板、切换页面
+- **面板内滚动**：焦点落在面板时 ↑/↓ 滚动其内部列表（快讯、榜单、产业链等）
+- **返回键**：先还原已放大的面板 → 再返回上一页 → 最后退出；**菜单键**：修改服务器地址
+- 电视渲染按 1080p CSS 像素，65 吋 4K 屏自动等比放大，SVG 图表保持清晰
+
+**使用步骤**：
+
+1. 电脑端运行 `npm start`（电视需与其在同一局域网），记下电脑 IP
+2. 构建 APK：`cd android-tv && gradle assembleDebug`，产物在 `app/build/outputs/apk/debug/app-debug.apk`
+3. 侧载安装到电视（adb：`adb install app-debug.apk`，或 U 盘拷贝安装）
+4. App 默认连接公网部署地址 `https://mrd.hermes.cc.cd`，开箱即用；按遥控器菜单键可随时改为局域网地址（如 `http://<电脑IP>:3000`）
+
+也可填写公网部署地址（如 Cloudflare Tunnel），脱离局域网使用。
+
 ## 📡 API 一览
 
 开发时前端通过 `/api` 访问本地代理服务：

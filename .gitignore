@@ -26,3 +26,9 @@ server/data/
 *.njsproj
 *.sln
 *.sw?
+
+# Android TV
+android-tv/local.properties
+android-tv/.gradle/
+android-tv/build/
+android-tv/app/build/

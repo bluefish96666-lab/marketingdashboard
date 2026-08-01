@@ -149,3 +149,71 @@ header.titlebar button {
   -webkit-app-region: no-drag;
   app-region: no-drag;
 }
+
+/* ===== TV 模式(安卓电视壳 App, ?tv=1 启用) ===== */
+/* 过扫描安全边距: #root 限高并隐藏溢出, 不影响桌面端一屏布局 */
+.tv #root {
+  padding: 6px;
+  height: 100vh;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+/* 遥控器焦点环: 青色描边 + 发光, 覆盖 Tailwind 的 outline-none 等 */
+.tv [data-tv-focusable]:focus {
+  outline: 2px solid #22d3ee;
+  outline-offset: 1px;
+  box-shadow: 0 0 20px rgba(34, 211, 238, 0.4);
+  position: relative;
+  z-index: 10;
+}
+
+/* 遥控器无 hover/指针, 禁用文本选择与触摸高亮 */
+.tv * {
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.tv input,
+.tv textarea {
+  user-select: text;
+}
+
+/* 弱 GPU 优化: 去掉毛玻璃与大面积阴影(电视芯片 4K 下每帧重绘开销大, 是卡顿主因) */
+.tv .backdrop-blur {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+.tv [class*="shadow"] {
+  box-shadow: none !important;
+}
+/* 焦点环发光是遥控器导航的关键视觉反馈, 恢复(单元素开销可忽略) */
+.tv [data-tv-focusable]:focus {
+  box-shadow: 0 0 20px rgba(34, 211, 238, 0.4) !important;
+}
+
+/* ===== 旧 WebView 兼容(Android TV < Chromium 88) ===== */
+/* Tailwind preflight 的选择器列表里带 :where(), 旧内核会把整条规则丢弃,
+   导致按钮露出 UA 默认白底; 这里用传统选择器补同样的声明(与现代浏览器行为一致) */
+button,
+[type="button"],
+[type="reset"],
+[type="submit"] {
+  -webkit-appearance: button;
+  appearance: button;
+  background-color: transparent;
+  background-image: none;
+}
+[hidden]:not([hidden="until-found"]) {
+  display: none;
+}
+abbr[title] {
+  -webkit-text-decoration: underline dotted;
+  text-decoration: underline dotted;
+}
+/* inset 属性需 Chromium 87+, 旧内核用四向定位等价表达 */
+.inset-0 {
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+}
