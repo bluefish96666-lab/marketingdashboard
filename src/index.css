@@ -196,23 +196,25 @@ header.titlebar button {
   animation: none !important;
   transition: none !important;
 }
-/* TV 翻牌跑马灯: 槽位换内容时的翻转(区域小, 弱GPU无压力); 带回弹, 翻牌感更明显 */
+/* TV 翻牌跑马灯: 槽位换内容时的翻转(区域小, 弱GPU无压力); 两段回弹, 翻牌感更明显 */
 @keyframes flap-in {
   0% {
-    transform: perspective(500px) rotateX(-90deg);
+    transform: perspective(600px) rotateX(-100deg) scaleY(1.2);
     opacity: 0;
   }
-  60% {
-    transform: perspective(500px) rotateX(20deg);
+  55% {
+    transform: perspective(600px) rotateX(25deg);
     opacity: 1;
   }
+  80% {
+    transform: perspective(600px) rotateX(-8deg);
+  }
   100% {
-    transform: perspective(500px) rotateX(0deg);
-    opacity: 1;
+    transform: perspective(600px) rotateX(0deg);
   }
 }
 .tv .flap-item {
-  animation: flap-in 0.45s ease-out !important;
+  animation: flap-in 0.6s ease-out !important;
 }
 /* 焦点环发光是遥控器导航的关键视觉反馈, 恢复(单元素开销可忽略) */
 .tv [data-tv-focusable]:focus {

@@ -43,13 +43,18 @@ function FlapTape({ items }: { items: TapeItem[] }) {
     return () => window.clearInterval(t);
   }, [items.length]);
 
-  const slots = slotIdx.map((idx) => items[idx % items.length]).filter(Boolean);
+  // 槽位数不超过条目数, key 带槽位序号: 早期条目数<槽位数时取模会产生重复 key, 污染 reconciliation 出现残留元素
+  const n = Math.min(FLAP_SLOTS, items.length);
+  const slots = slotIdx.slice(0, n).map((idx, pos) => ({ pos, it: items[idx % items.length] }));
 
   return (
-    <div className="flex h-7 items-center justify-between border-b border-slate-700/40 bg-[#0a101c] px-4 text-[11px] leading-7">
-      {slots.map((it) => (
-        // key 含 item.key: 槽位换内容时重挂载, 触发 flap-in 翻牌动画
-        <span key={it.key} className="flap-item inline-flex items-baseline gap-2 whitespace-nowrap">
+    <div className="flex h-8 items-center justify-between gap-2 border-b border-slate-700/40 bg-[#0a101c] px-4 text-[11px]">
+      {slots.map(({ pos, it }) => (
+        // key = 槽位序号 + item.key: 槽位换内容时重挂载, 触发 flap-in 翻牌动画
+        <span
+          key={`${pos}-${it.key}`}
+          className="flap-item inline-flex h-6 items-center gap-2 whitespace-nowrap rounded border border-slate-700/60 bg-[#0c1320] px-2.5 leading-6 shadow-[0_1px_0_rgba(0,0,0,0.4)]"
+        >
           <TapeItemView it={it} />
         </span>
       ))}
