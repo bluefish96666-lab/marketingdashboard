@@ -83,6 +83,8 @@ async function tick() {
     }
   }
   if (changed) emit();
+  // TV 调试角标读取: 上次报价心跳时间与是否有变化(定位"面板不更新"是轮询死了还是行情静止)
+  (window as unknown as { __hubStatus?: { t: number; changed: boolean } }).__hubStatus = { t: Date.now(), changed };
 }
 
 function onVisibility() {

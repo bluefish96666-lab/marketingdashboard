@@ -50,6 +50,8 @@ function showDebugBadge() {
     frames = 0;
     const mem = (performance as unknown as { memory?: { usedJSHeapSize: number } }).memory;
     const memStr = mem ? ` · 内存 ${Math.round(mem.usedJSHeapSize / 1048576)}MB` : "";
-    el.textContent = `${engine} · 构建 ${__BUILD_TIME__} · ${fps}fps${memStr}`;
+    const hub = (window as unknown as { __hubStatus?: { t: number; changed: boolean } }).__hubStatus;
+    const hubStr = hub ? ` · 报价 ${Math.round((Date.now() - hub.t) / 1000)}s前${hub.changed ? "(有变化)" : "(无变化)"}` : "";
+    el.textContent = `${engine} · 构建 ${__BUILD_TIME__} · ${fps}fps${memStr}${hubStr}`;
   }, 1000);
 }
