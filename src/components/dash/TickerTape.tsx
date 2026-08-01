@@ -53,7 +53,7 @@ function FlapTape({ items }: { items: TapeItem[] }) {
         // key = 槽位序号 + item.key: 槽位换内容时重挂载, 触发 flap-in 翻牌动画
         <span
           key={`${pos}-${it.key}`}
-          className="flap-item inline-flex h-6 min-w-0 flex-1 items-center justify-center gap-2 overflow-hidden whitespace-nowrap rounded border border-slate-700/60 bg-[#0c1320] px-2.5 leading-6 shadow-[0_1px_0_rgba(0,0,0,0.4)]"
+          className="flap-item inline-flex h-6 min-w-0 flex-1 items-center justify-center gap-4 overflow-hidden whitespace-nowrap rounded border border-slate-700/60 bg-[#0c1320] px-2.5 leading-6 shadow-[0_1px_0_rgba(0,0,0,0.4)]"
         >
           <TapeItemView it={it} />
         </span>
