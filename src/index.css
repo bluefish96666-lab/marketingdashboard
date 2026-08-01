@@ -217,6 +217,13 @@ header.titlebar button {
 .tv .flap-item {
   animation: flap-in 0.5s ease-out !important;
 }
+/* Chrome 83 不支持 flex gap(TV内核83), 卡片间距与内部间距用相邻兄弟 margin 实现 */
+.tv .flap-item + .flap-item {
+  margin-left: 12px;
+}
+.tv .flap-item > span + span {
+  margin-left: 16px;
+}
 /* 焦点环发光是遥控器导航的关键视觉反馈, 恢复(单元素开销可忽略) */
 .tv [data-tv-focusable]:focus {
   box-shadow: 0 0 20px rgba(34, 211, 238, 0.4) !important;
