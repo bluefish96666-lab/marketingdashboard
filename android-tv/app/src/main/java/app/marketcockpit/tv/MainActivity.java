@@ -66,6 +66,11 @@ public class MainActivity extends Activity {
         setContentView(web);
         // WebView 默认白底, 加载中与页面空隙会露白, 强制深色
         web.setBackgroundColor(Ui.BG);
+        // 页面在 TV 模式固定 1920 CSS px 视口, 按屏幕实际 dp 宽度算出恰好铺满的缩放
+        // (高密度 4K 电视上报 960dp 时缩到 50%, 1080p 电视 100%)
+        float widthDp = getResources().getDisplayMetrics().widthPixels
+                / getResources().getDisplayMetrics().density;
+        web.setInitialScale(Math.round(100f * widthDp / 1920f));
         web.loadUrl(withTvParam(serverUrl));
     }
 

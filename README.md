@@ -111,7 +111,7 @@ docker run -p 3000:3000 market-cockpit
 **使用步骤**：
 
 1. 电脑端运行 `npm start`（电视需与其在同一局域网），记下电脑 IP
-2. 构建 APK：`cd android-tv && gradle assembleDebug`，产物在 `app/build/outputs/apk/debug/app-debug.apk`
+2. 构建 APK：`cd android-tv && ./gradlew assembleDebug`，产物在 `app/build/outputs/apk/debug/app-debug.apk`
 3. 侧载安装到电视（adb：`adb install app-debug.apk`，或 U 盘拷贝安装）
 4. App 默认连接公网部署地址 `https://mrd.hermes.cc.cd`，开箱即用；按遥控器菜单键可随时改为局域网地址（如 `http://<电脑IP>:3000`）
 

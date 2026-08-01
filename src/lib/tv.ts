@@ -23,7 +23,8 @@ export function initTvMode() {
     meta.name = "viewport";
     document.head.appendChild(meta);
   }
-  meta.content = "width=1920, initial-scale=1, maximum-scale=1, user-scalable=no";
+  // 不写 initial-scale/maximum-scale: 会禁用 WebView 概览缩放, 1920 布局无法缩小适配, 页面溢出屏幕
+  meta.content = "width=1920";
   showDebugBadge();
 }
 

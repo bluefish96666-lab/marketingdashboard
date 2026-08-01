@@ -111,7 +111,7 @@ The `android-tv/` directory contains a native WebView shell that brings the cock
 **Setup**:
 
 1. Run `npm start` on a computer on the same LAN as the TV, and note its IP
-2. Build the APK: `cd android-tv && gradle assembleDebug` — output at `app/build/outputs/apk/debug/app-debug.apk`
+2. Build the APK: `cd android-tv && ./gradlew assembleDebug` — output at `app/build/outputs/apk/debug/app-debug.apk`
 3. Sideload it onto the TV (`adb install app-debug.apk`, or copy via USB drive)
 4. The app connects to the public deployment `https://mrd.hermes.cc.cd` by default — works out of the box; press the remote's menu key anytime to switch to a LAN address (e.g. `http://<computer-ip>:3000`)
 
