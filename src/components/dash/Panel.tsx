@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useRef, type ReactNode } from "react";
 import { ZoomIn, ZoomOut } from "lucide-react";
 import { isTv } from "@/lib/tv";
 
@@ -33,15 +33,28 @@ export function Panel({
 }: PanelProps) {
   // TV: 放大 = 全屏浮层(兄弟面板尺寸不变, 零重排; 老电视GPU上整屏reflow是缩放卡顿主因)
   const tvOverlay = isTv && isZoomed;
+  // 记录放大前的原始尺寸, 浮层用 CSS zoom 按同比例放大内容(字体/SVG/间距整体缩放, 布局比例不变)
+  const natural = useRef<{ w: number; h: number } | null>(null);
+  const measureRef = (el: HTMLElement | null) => {
+    if (el && !isZoomed && el.offsetWidth > 0) natural.current = { w: el.offsetWidth, h: el.offsetHeight };
+  };
   // 老WebView缩放渲染下 fixed 的 bottom/right 锚的是布局视口(可能大于可视区域, 底边溢出屏幕),
   // 用实测可视区域给定宽高
   const overlayStyle = tvOverlay
-    ? { position: "fixed" as const, left: 24, top: 24, width: window.innerWidth - 48, height: window.innerHeight - 48, zIndex: 60 }
+    ? (() => {
+        const w = window.innerWidth - 48;
+        const h = window.innerHeight - 48;
+        const k = natural.current ? Math.min(w / natural.current.w, h / natural.current.h) : 2;
+        const z = Math.max(1, Math.min(k, 3));
+        // zoom 会连元素自身盒模型一起放大, 宽高与偏移都按 1/z 预缩, 渲染后恰为 (24,24) w×h
+        return { position: "fixed" as const, left: 24 / z, top: 24 / z, width: w / z, height: h / z, zIndex: 60, zoom: z };
+      })()
     : undefined;
   return (
     <>
       {tvOverlay && <div className="fixed left-0 right-0 top-0 bottom-0 z-[55] bg-black/70" />}
       <section
+        ref={measureRef}
         style={overlayStyle}
         className={`flex min-h-0 flex-col rounded-md border bg-[#0c1320]/90 shadow-[0_0_24px_rgba(0,0,0,0.35)] backdrop-blur transition-all duration-300 ${
           isZoomed ? "border-cyan-500/50 shadow-[0_0_32px_rgba(34,211,238,0.18)]" : "border-slate-700/40"
