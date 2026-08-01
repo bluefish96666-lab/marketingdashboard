@@ -30,6 +30,8 @@ public class MainActivity extends Activity {
 
     private WebView web;
     private String serverUrl;
+    private android.widget.FrameLayout root;
+    private View splash;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -60,11 +62,23 @@ public class MainActivity extends Activity {
         }
         web.setWebViewClient(new WebViewClient() {
             @Override
+            public void onPageFinished(WebView view, String url) {
+                dismissSplash();
+            }
+
+            @Override
             public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
                 if (request.isForMainFrame()) showError();
             }
         });
-        setContentView(web);
+        // 开屏页盖在 WebView 上, 页面加载完成后淡出
+        root = new android.widget.FrameLayout(this);
+        root.addView(web, new android.widget.FrameLayout.LayoutParams(
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT));
+        splash = buildSplash();
+        root.addView(splash);
+        setContentView(root);
         // WebView 默认白底, 加载中与页面空隙会露白, 强制深色
         web.setBackgroundColor(Ui.BG);
         // 强制硬件加速: 部分电视盒子对 WebView 回落到软件渲染, 4K 下FPS只有个位数
@@ -84,8 +98,78 @@ public class MainActivity extends Activity {
         return Uri.parse(url).buildUpon().appendQueryParameter("tv", "1").build().toString();
     }
 
+    private int dp(int v) {
+        return Math.round(v * getResources().getDisplayMetrics().density);
+    }
+
+    /** 开屏页: Logo 呼吸动画 + 应用名 + 加载进度, 避免加载期黑屏干等 */
+    private View buildSplash() {
+        LinearLayout layout = new LinearLayout(this);
+        layout.setOrientation(LinearLayout.VERTICAL);
+        layout.setGravity(Gravity.CENTER);
+        layout.setBackgroundColor(Ui.BG);
+
+        android.widget.ImageView logo = new android.widget.ImageView(this);
+        logo.setImageResource(R.drawable.ic_launcher);
+        LinearLayout.LayoutParams logoLp = new LinearLayout.LayoutParams(dp(96), dp(96));
+        layout.addView(logo, logoLp);
+        // 呼吸缩放动画
+        android.animation.ObjectAnimator pulse = android.animation.ObjectAnimator.ofPropertyValuesHolder(
+                logo,
+                android.animation.PropertyValuesHolder.ofFloat(View.SCALE_X, 1f, 1.12f),
+                android.animation.PropertyValuesHolder.ofFloat(View.SCALE_Y, 1f, 1.12f));
+        pulse.setDuration(800);
+        pulse.setRepeatCount(android.animation.ObjectAnimator.INFINITE);
+        pulse.setRepeatMode(android.animation.ObjectAnimator.REVERSE);
+        pulse.start();
+
+        TextView name = new TextView(this);
+        name.setText("市场研究驾驶舱");
+        name.setTextColor(Ui.TEXT);
+        name.setTextSize(30);
+        name.setGravity(Gravity.CENTER);
+        name.setPadding(0, dp(24), 0, 0);
+        layout.addView(name);
+
+        TextView sub = new TextView(this);
+        sub.setText("MARKET RESEARCH COCKPIT");
+        sub.setTextColor(Ui.ACCENT);
+        sub.setTextSize(13);
+        sub.setLetterSpacing(0.3f);
+        sub.setGravity(Gravity.CENTER);
+        sub.setPadding(0, dp(8), 0, 0);
+        layout.addView(sub);
+
+        android.widget.ProgressBar bar = new android.widget.ProgressBar(this);
+        bar.setIndeterminateTintList(android.content.res.ColorStateList.valueOf(Ui.ACCENT));
+        LinearLayout.LayoutParams barLp = new LinearLayout.LayoutParams(
+                android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
+                android.view.ViewGroup.LayoutParams.WRAP_CONTENT);
+        barLp.topMargin = dp(32);
+        layout.addView(bar, barLp);
+
+        TextView hint = new TextView(this);
+        hint.setText("正在连接 " + Uri.parse(serverUrl).getHost() + " …");
+        hint.setTextColor(Ui.TEXT_DIM);
+        hint.setTextSize(13);
+        hint.setGravity(Gravity.CENTER);
+        hint.setPadding(0, dp(16), 0, 0);
+        layout.addView(hint);
+
+        return layout;
+    }
+
+    /** 页面加载完成: 开屏页淡出后移除 */
+    private void dismissSplash() {
+        if (splash == null || root == null) return;
+        final View s = splash;
+        splash = null;
+        s.animate().alpha(0f).setDuration(450).withEndAction(() -> root.removeView(s)).start();
+    }
+
     /** 连接失败: 原生兜底页, 避免白屏 */
     private void showError() {
+        dismissSplash();
         LinearLayout layout = new LinearLayout(this);
         layout.setOrientation(LinearLayout.VERTICAL);
         layout.setGravity(Gravity.CENTER);
