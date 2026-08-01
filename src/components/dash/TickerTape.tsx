@@ -48,7 +48,7 @@ function FlapTape({ items }: { items: TapeItem[] }) {
   const slots = slotIdx.slice(0, n).map((idx, pos) => ({ pos, it: items[idx % items.length] }));
 
   return (
-    <div className="flex h-8 items-center justify-between gap-2 border-b border-slate-700/40 bg-[#0a101c] px-4 text-[11px]">
+    <div className="flex h-8 items-center justify-between gap-3 border-b border-slate-700/40 bg-[#0a101c] px-4 text-[11px]">
       {slots.map(({ pos, it }) => (
         // key = 槽位序号 + item.key: 槽位换内容时重挂载, 触发 flap-in 翻牌动画
         <span
