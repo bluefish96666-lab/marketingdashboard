@@ -196,9 +196,19 @@ header.titlebar button {
   animation: none !important;
   transition: none !important;
 }
-.tv .ticker-wrap .ticker-track {
-  /* 弱GPU扛不住4K整宽图层的连续滑动, 改为步进式; 3秒一格, 频率太高会闪眼 */
-  animation: ticker-scroll 180s steps(60) infinite !important;
+/* TV 翻牌跑马灯: 槽位换内容时的小幅翻转(区域小, 弱GPU无压力) */
+@keyframes flap-in {
+  0% {
+    transform: perspective(400px) rotateX(80deg);
+    opacity: 0.2;
+  }
+  100% {
+    transform: perspective(400px) rotateX(0deg);
+    opacity: 1;
+  }
+}
+.tv .flap-item {
+  animation: flap-in 0.25s ease-out !important;
 }
 /* 焦点环发光是遥控器导航的关键视觉反馈, 恢复(单元素开销可忽略) */
 .tv [data-tv-focusable]:focus {
