@@ -33,6 +33,7 @@ A-shares / HK / US stocks · Commodities · US Treasury yields · Sector heat ·
 - **🏷️ Commodity prices page (/goods)** — Main-contract futures daily trends across 6 groups (precious / base / ferrous / energy-chem / agri / international energy) with 30d–365d ranges, plus Sunsirs spot quotes (accumulated daily) and spot–futures basis tables
 - **📰 7×24 news flash** — Scrolling global financial news with auto-highlighted macro keywords and industry-chain mentions
 - **🖥️ Installable desktop app** — Built-in PWA support (Web Manifest + Service Worker); install from the browser address bar and run in a standalone window
+- **📺 Android TV app** — Native WebView shell (`android-tv/`) with D-pad spatial navigation, fullscreen panel zoom (proportional scaling + slideshow), split-flap ticker, tuned for legacy engines and weak GPUs
 - **⚡ Zero-dependency data service** — Built-in Node proxy aggregates public market-data endpoints with in-memory caching; most endpoints need no API key and work out of the box
 
 ## 🏗️ Architecture
@@ -101,21 +102,30 @@ Open the deployed page in Chrome / Edge and click the **install icon** on the ri
 
 ### Android TV app
 
-The `android-tv/` directory contains a native WebView shell that brings the cockpit to Android TVs and set-top boxes, with full remote-control support:
+The `android-tv/` directory contains a native WebView shell (zero third-party dependencies) that brings the cockpit to Android TVs and set-top boxes. The web app enters TV mode via `?tv=1` and shares the same codebase as the desktop version.
 
-- **D-pad spatial navigation**: panels and nav links are focusable (cyan highlight ring); OK zooms/restores a panel or switches pages
-- **In-panel scrolling**: with a panel focused, ↑/↓ scrolls its inner lists (news, rankings, industry chains…)
-- **Back key**: restores a zoomed panel first → history back → exit; **Menu key**: change the server URL
-- TVs render at 1080p CSS pixels, so a 65" 4K screen scales everything up proportionally while the hand-written SVG charts stay crisp
+**Remote-control model**
 
-**Setup**:
+- **D-pad spatial navigation**: panels, nav links, tabs and scroll regions are all focusable (cyan highlight ring), scored by edge distance + axis overlap so the candidate straight ahead always wins
+- **OK**: zoom a panel / activate a button / switch pages
+- **Zoom = fullscreen overlay**: the panel covers the screen with a dim backdrop, its content scaled up proportionally (CSS zoom, capped at 3x), while every other panel stays put — zero reflow
+- **Inside the overlay**: ←/→ switches to the adjacent panel slideshow-style; ↑/↓ scrolls the content (at the top, one more ↑ jumps to the tab bar); tabs, board rows and the constituents sidebar are all reachable and operable
+- **Back**: restore the zoomed panel → history back → exit; **Menu**: change the server URL
+- **Split-flap ticker**: the top quote strip works like a departure board — 7 equal-width cards, one card flipping at a time every few seconds (a full-width scrolling layer is too much for weak TV GPUs; flipping only repaints a tiny region)
+- **Splash screen**: breathing logo + progress indicator that fades out once the page is ready
 
-1. Run `npm start` on a computer on the same LAN as the TV, and note its IP
-2. Build the APK: `cd android-tv && ./gradlew assembleDebug` — output at `app/build/outputs/apk/debug/app-debug.apk`
-3. Sideload it onto the TV (`adb install app-debug.apk`, or copy via USB drive)
-4. The app connects to the public deployment `https://mrd.hermes.cc.cd` by default — works out of the box; press the remote's menu key anytime to switch to a LAN address (e.g. `http://<computer-ip>:3000`)
+**TV-mode adaptations** (no effect on desktop)
 
-A publicly deployed URL (e.g. via Cloudflare Tunnel) works too, so the TV app can be used outside the LAN.
+- Fixed 1920 CSS-px viewport so layout and font sizes are identical on any TV density; the shell computes the initial scale from the screen's dp width to fit exactly
+- Legacy engine compatibility (< Chromium 88): fallbacks for `:where()`, `inset` and flex `gap`
+- Weak-GPU optimizations: blur/shadows/animations disabled, clock and countdowns tick per minute, long lists trimmed (boards 200→40, news 60→25, rankings 30→15), quote polling slowed 5s→10s
+- Debug badge in the corner: WebView engine version · build time · live FPS · JS heap · quote heartbeat (distinguishes "polling broken" from "market closed")
+
+**Setup**
+
+1. Build the APK: `cd android-tv && ./gradlew assembleDebug` — output at `app/build/outputs/apk/debug/app-debug.apk`
+2. Sideload it onto the TV (`adb install app-debug.apk`, or copy via USB drive)
+3. The app connects to the public deployment `https://mrd.hermes.cc.cd` by default — works out of the box; press the remote's menu key anytime to switch to a LAN address (run `npm start` on a computer and enter `http://<computer-ip>:3000`)
 
 ## 📡 API overview
 
