@@ -21,6 +21,15 @@ const KEY_DIR: Record<string, Dir> = {
 };
 
 function focusables(): HTMLElement[] {
+  // 放大浮层态: 面板自身 + 内部按钮/链接/输入框 纳入导航(子页签遥控器可达)
+  const zoomed = document.querySelector<HTMLElement>("section[data-tv-zoomed]");
+  if (zoomed) {
+    const inner = Array.from(zoomed.querySelectorAll<HTMLElement>("button, a, input, [data-tv-focusable]"));
+    return [zoomed, ...inner].filter((el) => {
+      const r = el.getBoundingClientRect();
+      return r.width > 0 && r.height > 0;
+    });
+  }
   return Array.from(document.querySelectorAll<HTMLElement>(SEL)).filter((el) => {
     const r = el.getBoundingClientRect();
     return r.width > 0 && r.height > 0;
@@ -65,7 +74,7 @@ function nearest(from: DOMRect, dir: Dir, candidates: HTMLElement[]): HTMLElemen
   return best;
 }
 
-/** 焦点元素最近的纵向可滚动祖先(面板内部列表) */
+/** 焦点元素最近的纵向可滚动祖先(焦点在列表内元素时), 或其内部第一个可滚动区域(焦点在面板容器上时) */
 function scrollableAncestor(el: HTMLElement | null): HTMLElement | null {
   let node = el?.parentElement ?? null;
   while (node) {
@@ -73,6 +82,8 @@ function scrollableAncestor(el: HTMLElement | null): HTMLElement | null {
     if (/(auto|scroll)/.test(s.overflowY) && node.scrollHeight > node.clientHeight + 4) return node;
     node = node.parentElement;
   }
+  const inner = el?.querySelector<HTMLElement>(".overflow-y-auto, .overflow-auto");
+  if (inner && inner.scrollHeight > inner.clientHeight + 4) return inner;
   return null;
 }
 
@@ -87,7 +98,9 @@ function onKeyDown(e: KeyboardEvent) {
   const active = (document.activeElement as HTMLElement | null) ?? document.body;
 
   if (e.key === "Enter") {
-    if (active.matches?.(SEL)) {
+    // 面板(带SEL)或可聚焦的内部控件(放大浮层内的按钮/链接)
+    const zoomed = document.querySelector("section[data-tv-zoomed]");
+    if (active.matches?.(SEL) || (zoomed && active !== zoomed && zoomed.contains(active))) {
       e.preventDefault();
       active.click();
     }
@@ -96,10 +109,10 @@ function onKeyDown(e: KeyboardEvent) {
   if (!dir) return;
   e.preventDefault();
 
-  // 幻灯片模式: 有面板处于放大浮层时, ←/→ 直接切换到相邻面板
+  // 幻灯片模式: 有面板处于放大浮层且焦点在面板本身(而非内部页签)时, ←/→ 切换到相邻面板
   if (dir === "left" || dir === "right") {
     const zoomed = document.querySelector<HTMLElement>("section[data-tv-zoomed]");
-    if (zoomed) {
+    if (zoomed && document.activeElement === zoomed) {
       const panels = Array.from(document.querySelectorAll<HTMLElement>("section[data-tv-focusable]"));
       const i = panels.indexOf(zoomed);
       if (i >= 0) {
