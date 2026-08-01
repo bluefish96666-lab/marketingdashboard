@@ -197,7 +197,8 @@ header.titlebar button {
   transition: none !important;
 }
 .tv .ticker-wrap .ticker-track {
-  animation: ticker-scroll 60s linear infinite !important;
+  /* 弱GPU扛不住4K整宽图层的连续滑动, 改为每秒步进一格(合成器只每秒重定位一次) */
+  animation: ticker-scroll 60s steps(60) infinite !important;
 }
 /* 焦点环发光是遥控器导航的关键视觉反馈, 恢复(单元素开销可忽略) */
 .tv [data-tv-focusable]:focus {
