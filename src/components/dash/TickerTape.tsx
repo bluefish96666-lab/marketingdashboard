@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { clsChg, fmtPct, fmtPrice } from "@/lib/format";
 import { isTv } from "@/lib/tv";
 
@@ -24,23 +24,26 @@ function TapeItemView({ it }: { it: TapeItem }) {
   );
 }
 
-const FLAP_SLOTS = 5;
-const FLIP_MS = 4000;
+const FLAP_SLOTS = 7;
+const FLIP_MS = 2000;
 
-/** TV 翻牌跑马灯: 航班时刻牌式 — 固定5个槽位, 每4s整体左移一格,
- *  只有小区域重绘(弱GPU扛不住全宽滚动图层), 配合 flap-in 翻牌动画 */
+/** TV 翻牌跑马灯: 航班时刻牌式 — 固定7个槽位, 每隔2s由下一个槽位单独翻牌
+ *  换成下一条(依次轮转), 只有翻牌槽位的小区域重绘, 弱GPU无压力 */
 function FlapTape({ items }: { items: TapeItem[] }) {
-  const [offset, setOffset] = useState(0);
+  // 每个槽位各自指向 items 下标; 每隔 FLIP_MS 只有一个槽位前进 FLAP_SLOTS 位(内容轮换)
+  const [slotIdx, setSlotIdx] = useState<number[]>(() => Array.from({ length: FLAP_SLOTS }, (_, i) => i));
+  const turnRef = useRef(0);
   useEffect(() => {
     if (items.length <= FLAP_SLOTS) return;
-    const t = window.setInterval(() => setOffset((o) => (o + 1) % items.length), FLIP_MS);
+    const t = window.setInterval(() => {
+      const slot = turnRef.current % FLAP_SLOTS;
+      turnRef.current += 1;
+      setSlotIdx((prev) => prev.map((v, i) => (i === slot ? (v + FLAP_SLOTS) % items.length : v)));
+    }, FLIP_MS);
     return () => window.clearInterval(t);
   }, [items.length]);
 
-  const slots = useMemo(() => {
-    const n = Math.min(FLAP_SLOTS, items.length);
-    return Array.from({ length: n }, (_, i) => items[(offset + i) % items.length]);
-  }, [items, offset]);
+  const slots = slotIdx.map((idx) => items[idx % items.length]).filter(Boolean);
 
   return (
     <div className="flex h-7 items-center justify-between border-b border-slate-700/40 bg-[#0a101c] px-4 text-[11px] leading-7">
