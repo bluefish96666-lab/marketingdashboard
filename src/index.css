@@ -86,6 +86,8 @@ body {
 /* 跑马灯 */
 .ticker-wrap .ticker-track {
   animation: ticker-scroll 60s linear infinite;
+  /* 独立合成层: 不提升时弱GPU每帧主线程重绘整宽图层, 表现为一卡一卡 */
+  will-change: transform;
 }
 .ticker-wrap:hover .ticker-track {
   animation-play-state: paused;

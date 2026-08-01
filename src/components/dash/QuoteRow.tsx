@@ -4,6 +4,7 @@ import { useQuote } from "@/lib/market";
 import { api } from "@/lib/api";
 import { Spark } from "./Spark";
 import { clsChg, fmtPct, fmtPrice, fmtYuan } from "@/lib/format";
+import { isTv } from "@/lib/tv";
 
 const TNUM = { fontVariantNumeric: "tabular-nums" } as const;
 
@@ -69,8 +70,11 @@ export const QuoteRow = memo(function QuoteRow({
   const compact = rowWidth > 0 && rowWidth < COMPACT_WIDTH;
 
   // 可见性联动轮询: 行在视口内才启动分时/板块/资金流轮询, 离开视口即停, 回到视口恢复
-  const [visible, setVisible] = useState(false);
+  // TV(老WebView+缩放渲染)IntersectionObserver 可能不触发, 导致行永不订阅、内容不更新;
+  // TV 列表行数已收紧(15~40), 直接全部视为可见
+  const [visible, setVisible] = useState(isTv);
   useEffect(() => {
+    if (isTv) return;
     const el = rootRef.current;
     if (!el) return;
     const io = new IntersectionObserver((entries) => {
