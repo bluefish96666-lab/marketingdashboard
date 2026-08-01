@@ -8,6 +8,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.view.Gravity;
 import android.view.KeyEvent;
+import android.view.View;
 import android.view.WindowManager;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
@@ -66,6 +67,11 @@ public class MainActivity extends Activity {
         setContentView(web);
         // WebView 默认白底, 加载中与页面空隙会露白, 强制深色
         web.setBackgroundColor(Ui.BG);
+        // 强制硬件加速: 部分电视盒子对 WebView 回落到软件渲染, 4K 下FPS只有个位数
+        getWindow().setFlags(
+                WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED,
+                WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED);
+        web.setLayerType(View.LAYER_TYPE_HARDWARE, null);
         // 页面在 TV 模式固定 1920 CSS px 视口, 按屏幕实际 dp 宽度算出恰好铺满的缩放
         // (高密度 4K 电视上报 960dp 时缩到 50%, 1080p 电视 100%)
         float widthDp = getResources().getDisplayMetrics().widthPixels

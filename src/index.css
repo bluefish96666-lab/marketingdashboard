@@ -186,6 +186,13 @@ header.titlebar button {
 .tv [class*="shadow"] {
   box-shadow: none !important;
 }
+/* 动画是持续性每帧开销: 全宽跑马灯/ping/过渡在弱GPU上把FPS压到个位数, TV 全部禁用 */
+.tv *,
+.tv *::before,
+.tv *::after {
+  animation: none !important;
+  transition: none !important;
+}
 /* 焦点环发光是遥控器导航的关键视觉反馈, 恢复(单元素开销可忽略) */
 .tv [data-tv-focusable]:focus {
   box-shadow: 0 0 20px rgba(34, 211, 238, 0.4) !important;
