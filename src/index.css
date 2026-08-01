@@ -169,6 +169,11 @@ header.titlebar button {
   position: relative;
   z-index: 10;
 }
+/* 放大的面板是全屏浮层(fixed), 焦点态的 relative 会覆盖 fixed 导致浮层失效 */
+.tv [data-tv-zoomed]:focus {
+  position: fixed;
+  z-index: 60;
+}
 
 /* 遥控器无 hover/指针, 禁用文本选择与触摸高亮 */
 .tv * {
