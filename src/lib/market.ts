@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useSyncExternalStore } from "react";
 import { api } from "@/lib/api";
+import { isTv } from "@/lib/tv";
 
 /**
  * 统一报价中心(MarketHub)
@@ -21,7 +22,8 @@ export interface HubQuote {
   updated: number;
 }
 
-const POLL_MS = 5000;
+// TV 模式降频: 电视弱 CPU 上全站同帧重渲染开销大, 轮询减半
+const POLL_MS = isTv ? 10000 : 5000;
 
 const entries = new Map<string, HubQuote>();
 const refCounts = new Map<string, number>();

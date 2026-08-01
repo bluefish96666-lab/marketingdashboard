@@ -28,15 +28,28 @@ export function initTvMode() {
   showDebugBadge();
 }
 
-/** 左下角调试角标: WebView 内核版本 + 前端构建时间(确认服务器是否已部署新版) */
+/** 左下角调试角标: WebView 内核版本 + 前端构建时间 + 实时FPS/JS堆内存(定位电视卡顿瓶颈) */
 function showDebugBadge() {
   const ua = navigator.userAgent;
   const engine = ua.match(/Chrome\/[\d.]+/)?.[0] ?? "非Chromium内核";
   const el = document.createElement("div");
-  el.textContent = `${engine} · 构建 ${__BUILD_TIME__}`;
   el.title = ua;
   el.style.cssText =
     "position:fixed;left:8px;bottom:8px;z-index:9999;font-size:11px;line-height:1.6;" +
     "color:#64748b;background:rgba(2,6,23,.85);padding:2px 8px;border-radius:6px;pointer-events:none";
   document.body.appendChild(el);
+
+  let frames = 0;
+  const countFrame = () => {
+    frames++;
+    requestAnimationFrame(countFrame);
+  };
+  requestAnimationFrame(countFrame);
+  window.setInterval(() => {
+    const fps = frames;
+    frames = 0;
+    const mem = (performance as unknown as { memory?: { usedJSHeapSize: number } }).memory;
+    const memStr = mem ? ` · 内存 ${Math.round(mem.usedJSHeapSize / 1048576)}MB` : "";
+    el.textContent = `${engine} · 构建 ${__BUILD_TIME__} · ${fps}fps${memStr}`;
+  }, 1000);
 }
