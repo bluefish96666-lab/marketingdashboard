@@ -162,7 +162,8 @@ header.titlebar button {
 }
 
 /* 遥控器焦点环: 青色描边 + 发光, 覆盖 Tailwind 的 outline-none 等 */
-.tv [data-tv-focusable]:focus {
+.tv [data-tv-focusable]:focus,
+.tv [data-tv-scroll]:focus {
   outline: 2px solid #22d3ee;
   outline-offset: 1px;
   box-shadow: 0 0 20px rgba(34, 211, 238, 0.4);

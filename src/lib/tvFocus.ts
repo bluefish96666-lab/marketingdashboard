@@ -35,8 +35,17 @@ function zoomedPanel(): HTMLElement | null {
 function focusables(): HTMLElement[] {
   const zoomed = zoomedPanel();
   if (zoomed) {
-    // 放大浮层: 仅内部控件为候选 — 全屏面板自身若参与打分, 任何方向都可能跳回它(导航"乱"的主因)
-    return Array.from(zoomed.querySelectorAll<HTMLElement>("button, a, input")).filter(isVisible);
+    // 放大浮层: 仅内部控件 + 可滚动区域(成分股侧栏等)为候选 —
+    // 全屏面板自身若参与打分, 任何方向都可能跳回它(导航"乱"的主因)
+    const controls = Array.from(zoomed.querySelectorAll<HTMLElement>("button, a, input"));
+    const scrollers = Array.from(zoomed.querySelectorAll<HTMLElement>(".overflow-y-auto, .overflow-auto")).filter(
+      (el) => el.scrollHeight > el.clientHeight + 4
+    );
+    for (const s of scrollers) {
+      if (s.tabIndex < 0) s.tabIndex = -1; // div 需 tabIndex 才可聚焦
+      s.setAttribute("data-tv-scroll", "");
+    }
+    return [...controls, ...scrollers].filter(isVisible);
   }
   return Array.from(document.querySelectorAll<HTMLElement>(SEL)).filter(isVisible);
 }
@@ -84,7 +93,7 @@ function nearest(from: DOMRect, dir: Dir, candidates: HTMLElement[]): HTMLElemen
 
 /** 焦点元素最近的纵向可滚动祖先(焦点在列表内元素时), 或其内部第一个可滚动区域(焦点在面板容器上时) */
 function scrollableIn(el: HTMLElement | null): HTMLElement | null {
-  let node = el?.parentElement ?? null;
+  let node: HTMLElement | null = el;
   while (node) {
     const s = getComputedStyle(node);
     if (/(auto|scroll)/.test(s.overflowY) && node.scrollHeight > node.clientHeight + 4) return node;
@@ -119,6 +128,11 @@ function onKeyDown(e: KeyboardEvent) {
   const zoomed = zoomedPanel();
 
   if (e.key === "Enter") {
+    // 滚动区域仅用于聚焦滚动, OK 不触发 click(冒泡到面板会被当作放大/还原)
+    if (active.hasAttribute?.("data-tv-scroll")) {
+      e.preventDefault();
+      return;
+    }
     // 面板(带SEL)或放大浮层内的控件
     if (active.matches?.(SEL) || (zoomed && active !== zoomed && zoomed.contains(active))) {
       e.preventDefault();
@@ -149,7 +163,9 @@ function onKeyDown(e: KeyboardEvent) {
       if (dir === "up") focusables()[0]?.focus({ preventScroll: true });
       return;
     }
-    // 焦点在内部控件: 控件间导航; 该方向没有候选则回退到面板本身(恢复幻灯片/滚动)
+    // 焦点在内部控件: ↑/↓ 先滚所在滚动区(成分股侧栏/列表), 滚到头再控件间导航;
+    // 该方向没有候选则回退到面板本身(恢复幻灯片/滚动)
+    if ((dir === "up" || dir === "down") && scrollStep(active, dir)) return;
     const next = nearest(active.getBoundingClientRect(), dir, focusables().filter((el) => el !== active));
     (next ?? zoomed).focus({ preventScroll: true });
     return;
