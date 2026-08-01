@@ -1,4 +1,4 @@
-import { useRef, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { ZoomIn, ZoomOut } from "lucide-react";
 import { isTv } from "@/lib/tv";
 
@@ -33,10 +33,14 @@ export function Panel({
 }: PanelProps) {
   // TV: 放大 = 全屏浮层(兄弟面板尺寸不变, 零重排; 老电视GPU上整屏reflow是缩放卡顿主因)
   const tvOverlay = isTv && isZoomed;
-  // 记录放大前的原始尺寸, 浮层用 CSS zoom 按同比例放大内容(字体/SVG/间距整体缩放, 布局比例不变)
-  const natural = useRef<{ w: number; h: number } | null>(null);
+  // 记录放大前的原始尺寸(state, 带相等守卫防循环), 浮层用 CSS zoom 按同比例放大内容
+  const [natural, setNatural] = useState<{ w: number; h: number } | null>(null);
   const measureRef = (el: HTMLElement | null) => {
-    if (el && !isZoomed && el.offsetWidth > 0) natural.current = { w: el.offsetWidth, h: el.offsetHeight };
+    if (el && !isZoomed && el.offsetWidth > 0) {
+      const w = el.offsetWidth;
+      const h = el.offsetHeight;
+      setNatural((prev) => (prev && Math.abs(prev.w - w) < 2 && Math.abs(prev.h - h) < 2 ? prev : { w, h }));
+    }
   };
   // 老WebView缩放渲染下 fixed 的 bottom/right 锚的是布局视口(可能大于可视区域, 底边溢出屏幕),
   // 用实测可视区域给定宽高
@@ -44,7 +48,7 @@ export function Panel({
     ? (() => {
         const w = window.innerWidth - 48;
         const h = window.innerHeight - 48;
-        const k = natural.current ? Math.min(w / natural.current.w, h / natural.current.h) : 2;
+        const k = natural ? Math.min(w / natural.w, h / natural.h) : 2;
         const z = Math.max(1, Math.min(k, 3));
         // zoom 会连元素自身盒模型一起放大, 宽高与偏移都按 1/z 预缩, 渲染后恰为 (24,24) w×h
         return { position: "fixed" as const, left: 24 / z, top: 24 / z, width: w / z, height: h / z, zIndex: 60, zoom: z };
