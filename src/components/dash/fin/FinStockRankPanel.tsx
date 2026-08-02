@@ -5,6 +5,7 @@ import { api, type FinBoardStock } from "@/lib/api";
 import { fmtPct } from "@/lib/format";
 import { useFin } from "./FinContext";
 import { PeriodTabs } from "./PeriodTabs";
+import { SkeletonRows } from "./SkeletonRows";
 import { TNUM, fmtYi, prefixCode } from "./utils";
 
 type Tab = "profit" | "growth";
@@ -48,7 +49,7 @@ export function FinStockRankPanel({ className = "", ...zoomProps }: { className?
             <button
               key={t.key}
               onClick={() => setTab(t.key)}
-              className={`border-b-2 px-1 pb-px leading-[16px] ${
+              className={`flex h-[22px] items-center border-b-2 px-2 ${
                 tab === t.key ? "border-cyan-400 text-cyan-300" : "border-transparent text-slate-500 hover:text-slate-300"
               }`}
             >
@@ -59,15 +60,15 @@ export function FinStockRankPanel({ className = "", ...zoomProps }: { className?
       }
     >
       {!data ? (
-        <div className="flex h-full items-center justify-center text-[11px]">
-          {loading ? (
-            <span className="text-slate-600">数据加载中…</span>
-          ) : (
+        loading ? (
+          <SkeletonRows rows={14} />
+        ) : (
+          <div className="flex h-full items-center justify-center text-[11px]">
             <button className="h-full w-full text-slate-500" onClick={() => setRetry((r) => r + 1)}>
               数据获取失败，点击重试{error ? `(${error})` : ""}
             </button>
-          )}
-        </div>
+          </div>
+        )
       ) : rows.length === 0 ? (
         <div className="flex h-full items-center justify-center text-[11px] text-slate-600">当前非财报密集披露期</div>
       ) : (
@@ -100,7 +101,7 @@ function RankRow({
   return (
     <button
       onClick={onPick}
-      className="relative flex h-[20px] w-full items-center gap-1.5 border-b border-slate-800/60 px-2.5 text-left hover:bg-slate-800/30"
+      className="relative flex h-[20px] w-full items-center gap-1.5 border-b border-slate-800/60 px-2.5 text-left hover:bg-slate-800/40"
     >
       {/* 行内相对值底条(4% 透明度) */}
       <span
@@ -116,7 +117,7 @@ function RankRow({
       <span className="min-w-0 flex-1 truncate text-[11px] text-slate-200">{s.name}</span>
       {tab === "profit" ? (
         <>
-          <span className="shrink-0 text-[12px] font-semibold text-slate-200" style={TNUM}>
+          <span className="w-[56px] shrink-0 text-right text-[12px] font-semibold text-slate-200" style={TNUM}>
             {fmtYi(s.netProfit)}
           </span>
           <span className={`w-[52px] shrink-0 text-right text-[10px] ${s.profitYoY >= 0 ? "text-rose-400" : "text-emerald-400"}`} style={TNUM}>
@@ -129,7 +130,7 @@ function RankRow({
       ) : (
         <>
           <span
-            className={`shrink-0 text-[12px] font-semibold ${s.profitYoY >= 0 ? "text-rose-400" : "text-emerald-400"}`}
+            className={`w-[56px] shrink-0 text-right text-[12px] font-semibold ${s.profitYoY >= 0 ? "text-rose-400" : "text-emerald-400"}`}
             style={TNUM}
           >
             {fmtPct(s.profitYoY, 1)}

@@ -11,24 +11,24 @@ import { useFullscreen } from "@/hooks/useFullscreen";
 
 const PANEL_ROWS: PanelRowDef[] = [
   {
-    defaultH: 0.28,
+    defaultH: 0.26,
     panels: [
-      { id: "finCalendar", component: FinCalendarPanel, defaultW: 0.42, mobileH: "h-[300px]" },
-      { id: "finForecast", component: FinForecastPanel, defaultW: 0.58, mobileH: "h-[340px]" },
+      { id: "finCalendar", component: FinCalendarPanel, defaultW: 0.38, mobileH: "h-[300px]" },
+      { id: "finForecast", component: FinForecastPanel, defaultW: 0.62, mobileH: "h-[340px]" },
     ],
   },
   {
-    defaultH: 0.36,
+    defaultH: 0.4,
     panels: [
       { id: "finIndustry", component: FinIndustryPanel, defaultW: 0.5, mobileH: "h-[360px]" },
       { id: "finStockRank", component: FinStockRankPanel, defaultW: 0.5, mobileH: "h-[400px]" },
     ],
   },
   {
-    defaultH: 0.36,
+    defaultH: 0.34,
     panels: [
-      { id: "finCompany", component: FinCompanyPanel, defaultW: 0.36, mobileH: "h-[380px]" },
-      { id: "finTrend", component: FinTrendPanel, defaultW: 0.64, mobileH: "h-[360px]" },
+      { id: "finCompany", component: FinCompanyPanel, defaultW: 0.3, mobileH: "h-[380px]" },
+      { id: "finTrend", component: FinTrendPanel, defaultW: 0.7, mobileH: "h-[360px]" },
     ],
   },
 ];

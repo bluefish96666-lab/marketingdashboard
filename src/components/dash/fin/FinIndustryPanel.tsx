@@ -4,6 +4,7 @@ import { usePolling } from "@/hooks/usePolling";
 import { api } from "@/lib/api";
 import { useFin } from "./FinContext";
 import { PeriodTabs } from "./PeriodTabs";
+import { SkeletonRows } from "./SkeletonRows";
 import { TNUM, fmtYi } from "./utils";
 
 const NAME_W = 64; // 行业名列宽
@@ -82,24 +83,13 @@ function layoutTreemap(items: TMItem[], X: number, Y: number, W: number, H: numb
   return out;
 }
 
-/** 金融热力色阶(finviz 式低饱和): t∈[-1,1] 负→墨绿, 0→深灰, 正→暗红 */
-function heatColor(t: number): string {
-  const neg = [20, 74, 56]; // #144a38
-  const mid = [30, 41, 59]; // #1e293b
-  const pos = [127, 45, 58]; // #7f2d3a
-  const [a, b] = t >= 0 ? [mid, pos] : [mid, neg];
-  const k = Math.min(Math.abs(t), 1);
-  const c = a.map((v, i) => Math.round(v + (b[i] - v) * k));
-  return `rgb(${c[0]},${c[1]},${c[2]})`;
-}
-
-/** 行业盈利榜 TOP15: 树状图(面积∝净利, 热力色阶=同比景气) / 条形图(对数压缩) 可切换 */
+/** 行业盈利榜 TOP15: 条形矩阵(默认, 对数压缩, 条色=同比) / 树状图(线框化, 面积∝净利) 可切换 */
 export function FinIndustryPanel({ className = "", ...zoomProps }: { className?: string } & PanelZoomProps) {
   const [retry, setRetry] = useState(0);
   const { period } = useFin();
   const { data, error, loading } = usePolling(() => api.financeBoard(period), 1800000, [retry, period]);
   const [hover, setHover] = useState(-1);
-  const [mode, setMode] = useState<"tree" | "bar">("tree");
+  const [mode, setMode] = useState<"bar" | "tree">("bar");
 
   const boxRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ w: 400, h: 260 });
@@ -152,15 +142,15 @@ export function FinIndustryPanel({ className = "", ...zoomProps }: { className?:
           <div className="flex items-center gap-2 text-[10px]">
             <PeriodTabs />
             <span className="h-3 w-px bg-slate-700" />
-            {(["tree", "bar"] as const).map((m) => (
+            {(["bar", "tree"] as const).map((m) => (
               <button
                 key={m}
                 onClick={() => setMode(m)}
-                className={`rounded px-2 py-0.5 ${
+                className={`flex h-[22px] items-center rounded px-2 ${
                   mode === m ? "bg-cyan-500/20 text-cyan-300" : "text-slate-400 hover:text-slate-200"
                 }`}
               >
-                {m === "tree" ? "树状" : "条形"}
+                {m === "bar" ? "条形" : "树状"}
               </button>
             ))}
             {data?.disclosed != null && (
@@ -173,15 +163,15 @@ export function FinIndustryPanel({ className = "", ...zoomProps }: { className?:
       }
     >
       {!data ? (
-        <div className="flex h-full items-center justify-center text-[11px]">
-          {loading ? (
-            <span className="text-slate-600">数据加载中…</span>
-          ) : (
+        loading ? (
+          <SkeletonRows rows={12} />
+        ) : (
+          <div className="flex h-full items-center justify-center text-[11px]">
             <button className="h-full w-full text-slate-500" onClick={() => setRetry((r) => r + 1)}>
               数据获取失败，点击重试{error ? `(${error})` : ""}
             </button>
-          )}
-        </div>
+          </div>
+        )
       ) : empty ? (
         <div className="flex h-full items-center justify-center text-[11px] text-slate-600">当前非财报密集披露期</div>
       ) : (
@@ -189,8 +179,8 @@ export function FinIndustryPanel({ className = "", ...zoomProps }: { className?:
           {tree && (
             <svg width={tree.W} height={tree.H} className="block">
               {tree.rects.map((r, i) => {
-                // 热力色阶: 同比绝对值映射(±20%饱和), 小差异不被放大
-                const fill = heatColor(r.yoy / 20);
+                // 线框化: 色块 fill 12% + 1px 同色 40% 描边, 消除实色平涂
+                const color = r.yoy >= 0 ? "#fb7185" : "#34d399";
                 const showName = r.w > 56 && r.h > 24;
                 const showVal = r.w > 56 && r.h > 40;
                 return (
@@ -201,12 +191,14 @@ export function FinIndustryPanel({ className = "", ...zoomProps }: { className?:
                       width={Math.max(r.w - 1, 0)}
                       height={Math.max(r.h - 1, 0)}
                       rx={2}
-                      fill={fill}
-                      stroke="#0c1320"
+                      fill={color}
+                      fillOpacity={0.12}
+                      stroke={color}
+                      strokeOpacity={0.4}
                       strokeWidth={1}
                     />
                     {hover === i && (
-                      <rect x={r.x} y={r.y} width={Math.max(r.w - 1, 0)} height={Math.max(r.h - 1, 0)} rx={2} fill="#ffffff" opacity={0.12} />
+                      <rect x={r.x} y={r.y} width={Math.max(r.w - 1, 0)} height={Math.max(r.h - 1, 0)} rx={2} fill="#ffffff" opacity={0.08} />
                     )}
                     {showName && (
                       <text x={r.x + 4} y={r.y + 12} fontSize={9.5} fill="#e2e8f0" fontWeight={600}>
@@ -214,9 +206,9 @@ export function FinIndustryPanel({ className = "", ...zoomProps }: { className?:
                       </text>
                     )}
                     {showVal && (
-                      <text x={r.x + 4} y={r.y + 23} fontSize={8.5} fill="#cbd5e1" style={TNUM}>
+                      <text x={r.x + 4} y={r.y + 23} fontSize={8.5} fill="#94a3b8" style={TNUM}>
                         {fmtYi(r.v)}
-                        <tspan fill={r.yoy >= 0 ? "#fb7185" : "#34d399"} dx={3}>
+                        <tspan fill={color} dx={3}>
                           {r.yoy > 0 ? "+" : ""}
                           {r.yoy.toFixed(1)}%
                         </tspan>
@@ -250,6 +242,7 @@ export function FinIndustryPanel({ className = "", ...zoomProps }: { className?:
                     <text x={4} y={y + chart.rowH / 2 + 3} fontSize={9} fill="#94a3b8">
                       {d.name.length > 6 ? d.name.slice(0, 6) : d.name}
                     </text>
+                    {/* 条: fill 25% + 1px 同色 60% 描边; 负同比行 40% 透明 + 虚线描边 */}
                     <rect
                       x={NAME_W}
                       y={y + (chart.rowH - bh) / 2}
@@ -257,10 +250,12 @@ export function FinIndustryPanel({ className = "", ...zoomProps }: { className?:
                       height={bh}
                       rx={1.5}
                       fill={color}
-                      opacity={up ? 0.7 : 0.4}
-                      stroke={up ? "none" : color}
+                      fillOpacity={0.25}
+                      stroke={color}
+                      strokeWidth={1}
+                      strokeOpacity={0.6}
                       strokeDasharray={up ? undefined : "2 2"}
-                      strokeOpacity={up ? undefined : 0.8}
+                      opacity={up ? 1 : 0.4}
                     />
                     <text x={NAME_W + bw + 4} y={y + chart.rowH / 2 + 3} fontSize={8.5} style={TNUM}>
                       <tspan fill="#cbd5e1">{fmtYi(d.netProfit)} </tspan>

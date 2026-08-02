@@ -9,7 +9,7 @@ export function PeriodTabs() {
         <button
           key={p.value}
           onClick={() => setPeriod(p.value)}
-          className={`rounded px-2 py-0.5 ${
+          className={`flex h-[22px] items-center rounded px-2 ${
             period === p.value ? "bg-cyan-500/20 text-cyan-300" : "text-slate-400 hover:text-slate-200"
           }`}
         >

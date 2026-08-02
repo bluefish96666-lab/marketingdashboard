@@ -3,6 +3,7 @@ import { Panel, type PanelZoomProps } from "../Panel";
 import { usePolling } from "@/hooks/usePolling";
 import { api, type FinanceReport } from "@/lib/api";
 import { useFin } from "./FinContext";
+import { SkeletonRows } from "./SkeletonRows";
 import { TNUM, quarterLabel } from "./utils";
 
 type Tab = "perf" | "quality";
@@ -158,10 +159,10 @@ function TrendChart({ reports, tab }: { reports: FinanceReport[]; tab: Tab }) {
         )}
         {chart.mode === "perf" ? (
           <>
-            {/* 分组柱: 营收 cyan 宽条 / 净利 amber 窄条 */}
+            {/* 分组柱: 营收 cyan 宽条 / 净利 amber 窄条, 柱组宽 ≤60% slot, 组内 gap 2px */}
             {chart.rows.map((r, i) => {
-              const revW = chart.slot * 0.4;
-              const npW = chart.slot * 0.22;
+              const revW = chart.slot * 0.36;
+              const npW = chart.slot * 0.2;
               const revX = chart.cx(i) - revW - 1;
               const npX = chart.cx(i) + 1;
               const bars = [
@@ -238,7 +239,7 @@ export function FinTrendPanel({ className = "", ...zoomProps }: { className?: st
             <button
               key={t.key}
               onClick={() => setTab(t.key)}
-              className={`border-b-2 px-1 pb-px leading-[16px] ${
+              className={`flex h-[22px] items-center border-b-2 px-2 ${
                 tab === t.key ? "border-cyan-400 text-cyan-300" : "border-transparent text-slate-500 hover:text-slate-300"
               }`}
             >
@@ -261,15 +262,15 @@ export function FinTrendPanel({ className = "", ...zoomProps }: { className?: st
           </div>
         </div>
       ) : !data ? (
-        <div className="flex h-full items-center justify-center text-[11px]">
-          {loading ? (
-            <span className="text-slate-600">数据加载中…</span>
-          ) : (
+        loading ? (
+          <SkeletonRows rows={8} />
+        ) : (
+          <div className="flex h-full items-center justify-center text-[11px]">
             <button className="h-full w-full text-slate-500" onClick={() => setRetry((r) => r + 1)}>
               数据获取失败，点击重试{error ? `(${error})` : ""}
             </button>
-          )}
-        </div>
+          </div>
+        )
       ) : data.reports.length === 0 ? (
         <div className="flex h-full items-center justify-center text-[11px] text-slate-600">暂无财报数据</div>
       ) : (

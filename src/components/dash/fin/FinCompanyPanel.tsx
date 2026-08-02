@@ -3,6 +3,7 @@ import { Panel, type PanelZoomProps } from "../Panel";
 import { usePolling } from "@/hooks/usePolling";
 import { api, type StockSearchResult } from "@/lib/api";
 import { useFin } from "./FinContext";
+import { SkeletonRows } from "./SkeletonRows";
 import { TNUM, fmtYi, prefixCode, quarterLabel } from "./utils";
 
 const pctCls = (v: number) => (v > 0 ? "text-rose-400" : v < 0 ? "text-emerald-400" : "text-slate-400");
@@ -78,7 +79,7 @@ export function FinCompanyPanel({ className = "", ...zoomProps }: { className?: 
       accent="#22d3ee"
       right={<span className="max-w-[110px] truncate text-[10px] text-cyan-300">{displayName}</span>}
     >
-      <div className="flex h-full min-h-0 flex-col gap-1.5 p-2">
+      <div className="flex h-full min-h-0 flex-col gap-1 p-1.5">
         {/* 搜索框 */}
         <div ref={boxRef} className="relative shrink-0">
           <input
@@ -106,14 +107,14 @@ export function FinCompanyPanel({ className = "", ...zoomProps }: { className?: 
             </div>
           )}
         </div>
-        {/* 最近查看 chips */}
+        {/* 最近查看 chips: 单行 18px */}
         {recent.length > 0 && (
-          <div className="flex shrink-0 flex-wrap gap-1">
+          <div className="flex h-[18px] shrink-0 flex-nowrap items-center gap-1 overflow-hidden">
             {recent.map((c) => (
               <button
                 key={c.code}
                 onClick={() => select(c.code, c.name)}
-                className={`rounded border px-1.5 py-px text-[9px] leading-[14px] ${
+                className={`shrink-0 rounded border px-1.5 text-[9px] leading-[14px] ${
                   c.code === company.code
                     ? "border-cyan-500/60 bg-cyan-500/10 text-cyan-300"
                     : "border-slate-700/60 text-slate-400 hover:border-slate-500 hover:text-slate-200"
@@ -124,25 +125,25 @@ export function FinCompanyPanel({ className = "", ...zoomProps }: { className?: 
             ))}
           </div>
         )}
-        {/* 指标卡区 */}
+        {/* 指标卡区: 3列×2行, 卡高 40px */}
         {!company.code ? (
           <div className="flex min-h-0 flex-1 items-center justify-center text-[11px] text-slate-600">
-            搜索或从右侧榜单选入公司
+            ← 从榜单或搜索选入公司
           </div>
         ) : !data ? (
-          <div className="flex min-h-0 flex-1 items-center justify-center text-[11px]">
-            {loading ? (
-              <span className="text-slate-600">数据加载中…</span>
-            ) : (
+          loading ? (
+            <SkeletonRows rows={4} />
+          ) : (
+            <div className="flex min-h-0 flex-1 items-center justify-center text-[11px]">
               <button className="h-full w-full text-slate-500" onClick={() => setRetry((r) => r + 1)}>
                 数据获取失败，点击重试{error ? `(${error})` : ""}
               </button>
-            )}
-          </div>
+            </div>
+          )
         ) : !r0 ? (
           <div className="flex min-h-0 flex-1 items-center justify-center text-[11px] text-slate-600">暂无财报数据</div>
         ) : (
-          <div className="grid min-h-0 flex-1 grid-cols-2 content-start gap-1.5">
+          <div className="grid min-h-0 flex-1 grid-cols-3 content-start gap-1">
             <Card label="营收" value={fmtYi(r0.revenue)} sub={`${r0.revenueYoY > 0 ? "+" : ""}${r0.revenueYoY.toFixed(1)}%`} subCls={pctCls(r0.revenueYoY)} />
             <Card label="净利" value={fmtYi(r0.netProfit)} sub={`${r0.profitYoY > 0 ? "+" : ""}${r0.profitYoY.toFixed(1)}%`} subCls={pctCls(r0.profitYoY)} />
             <Card label="ROE" value={`${r0.roe.toFixed(1)}%`} />
@@ -158,16 +159,18 @@ export function FinCompanyPanel({ className = "", ...zoomProps }: { className?: 
 
 function Card({ label, value, sub, subCls }: { label: string; value: string; sub?: string; subCls?: string }) {
   return (
-    <div className="rounded bg-slate-800/40 p-1.5">
-      <div className="text-[9px] text-slate-500">{label}</div>
-      <div className="text-[12px] font-semibold text-slate-200" style={TNUM}>
-        {value}
+    <div className="flex h-[40px] min-w-0 flex-col justify-between rounded bg-slate-800/40 p-1.5">
+      <div className="text-[9px] leading-[11px] text-slate-500">{label}</div>
+      <div className="flex items-baseline justify-between gap-1">
+        <span className="truncate text-[13px] font-semibold text-slate-200" style={TNUM}>
+          {value}
+        </span>
+        {sub && (
+          <span className={`shrink-0 text-[9px] ${subCls ?? "text-slate-500"}`} style={TNUM}>
+            {sub}
+          </span>
+        )}
       </div>
-      {sub && (
-        <div className={`text-[9px] ${subCls ?? "text-slate-500"}`} style={TNUM}>
-          {sub}
-        </div>
-      )}
     </div>
   );
 }

@@ -3,9 +3,11 @@ import { Panel, type PanelZoomProps } from "../Panel";
 import { usePolling } from "@/hooks/usePolling";
 import { api, type FinCalendarItem } from "@/lib/api";
 import { useFin } from "./FinContext";
+import { SkeletonRows } from "./SkeletonRows";
 import { TNUM, prefixCode, quarterLabel } from "./utils";
 
 const DAY = 86400000;
+const STRIP_H = 40; // 顶部柱带总高(柱区 + 8px 刻度行)
 
 const dateKey = (t: number) => {
   const d = new Date(t);
@@ -13,7 +15,7 @@ const dateKey = (t: number) => {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 };
 
-/** 财报日历: 左 = 近 14 天(今日起)披露家数直方图; 右 = 今日/明日披露清单(可点选公司) */
+/** 财报日历: 顶部全宽 14 天柱带(今日 amber 实色) + 下方双列流式披露清单(可点选公司) */
 export function FinCalendarPanel({ className = "", ...zoomProps }: { className?: string } & PanelZoomProps) {
   const [retry, setRetry] = useState(0);
   const { period } = useFin();
@@ -21,13 +23,13 @@ export function FinCalendarPanel({ className = "", ...zoomProps }: { className?:
   const { select } = useFin();
 
   const boxRef = useRef<HTMLDivElement>(null);
-  const [size, setSize] = useState({ w: 160, h: 120 });
+  const [w, setW] = useState(160);
   useEffect(() => {
     const el = boxRef.current;
     if (!el) return;
     const ro = new ResizeObserver((es) => {
       const r = es[0].contentRect;
-      if (r.width > 40 && r.height > 40) setSize({ w: r.width, h: r.height });
+      if (r.width > 40) setW(r.width);
     });
     ro.observe(el);
     return () => ro.disconnect();
@@ -45,7 +47,8 @@ export function FinCalendarPanel({ className = "", ...zoomProps }: { className?:
     });
     const todayKey = days[0].key;
     const peak = Math.max(...days.map((d) => d.count), 0);
-    // 右栏: 今日 → 明日 → 最近有披露的一日(降级并标注日期)
+    const peakKey = days.find((d) => d.count === peak)?.key ?? todayKey;
+    // 清单: 今日 → 明日 → 最近有披露的一日(降级并标注日期)
     const byDate = new Map<string, FinCalendarItem[]>();
     for (const it of cal) {
       const arr = byDate.get(it.date) ?? [];
@@ -59,36 +62,49 @@ export function FinCalendarPanel({ className = "", ...zoomProps }: { className?:
       listDate = byDate.has(tmr) ? tmr : cal[0]?.date ?? todayKey;
     }
     const heavy = new Set((data?.stocks ?? []).map((s) => s.code)); // 净利 TOP50 视作重磅
-    return { days, todayKey, todayCount: counts.get(todayKey) ?? 0, peak, list: byDate.get(listDate) ?? [], listDate, heavy };
+    return { days, todayKey, todayCount: counts.get(todayKey) ?? 0, peak, peakKey, list: byDate.get(listDate) ?? [], listDate, heavy };
   }, [data]);
 
-  const { w: W, h: H } = size;
-  const chartH = Math.max(H - 16, 40); // 底部 16px 留给统计行
+  const W = w;
   const padX = 6;
   const slot = (W - padX * 2) / 14;
   const bw = Math.max(3, slot * 0.55);
-  const baseY = chartH - 12; // 底部留刻度
+  const baseY = STRIP_H - 10; // 底部 10px 留给 8px 刻度行
   const peak = Math.max(view.peak, 1);
 
   return (
-    <Panel className={className} {...zoomProps} title="财报日历" icon="▦" accent="#38bdf8">
+    <Panel
+      className={className}
+      {...zoomProps}
+      title="财报日历"
+      icon="▦"
+      accent="#38bdf8"
+      right={
+        data && (
+          <span className="text-[10px] text-slate-500" style={TNUM}>
+            今日 <span className="font-semibold text-amber-400">{view.todayCount}</span> 家 · 峰值 {view.peak} 家(
+            {view.peakKey.slice(5).replace("-", "/")})
+          </span>
+        )
+      }
+    >
       {!data ? (
-        <div className="flex h-full items-center justify-center text-[11px]">
-          {loading ? (
-            <span className="text-slate-600">数据加载中…</span>
-          ) : (
+        loading ? (
+          <SkeletonRows rows={6} />
+        ) : (
+          <div className="flex h-full items-center justify-center text-[11px]">
             <button className="h-full w-full text-slate-500" onClick={() => setRetry((r) => r + 1)}>
               数据获取失败，点击重试{error ? `(${error})` : ""}
             </button>
-          )}
-        </div>
+          </div>
+        )
       ) : (
-        <div className="flex h-full min-h-0">
-          {/* 左: 14 日披露直方图 */}
-          <div ref={boxRef} className="flex h-full min-h-0 flex-col" style={{ width: "38%" }}>
-            <svg width={W} height={chartH} className="block min-h-0 flex-1">
+        <div className="flex h-full min-h-0 flex-col">
+          {/* 全宽 40px 柱带: 今日 amber 实色 + 柱顶 8px 数字, 未来 cyan/40 */}
+          <div ref={boxRef} className="shrink-0">
+            <svg width={W} height={STRIP_H} className="block">
               {view.days.map((d, i) => {
-                const bh = d.count > 0 ? Math.max(2, (d.count / peak) * (baseY - 14)) : 0;
+                const bh = d.count > 0 ? Math.max(2, (d.count / peak) * (baseY - 12)) : 0;
                 const x = padX + i * slot + (slot - bw) / 2;
                 const isToday = i === 0;
                 return (
@@ -99,13 +115,20 @@ export function FinCalendarPanel({ className = "", ...zoomProps }: { className?:
                         y={baseY - bh}
                         width={bw}
                         height={bh}
-                        rx={2}
+                        rx={1.5}
                         fill={isToday ? "#fbbf24" : "#22d3ee"}
                         opacity={isToday ? 1 : 0.4}
                       />
                     )}
-                    {isToday && d.count > 0 && (
-                      <text x={x + bw / 2} y={baseY - bh - 3} fontSize={8} fill="#fbbf24" textAnchor="middle" style={TNUM}>
+                    {d.count > 0 && (
+                      <text
+                        x={x + bw / 2}
+                        y={baseY - bh - 2}
+                        fontSize={8}
+                        fill={isToday ? "#fbbf24" : "#475569"}
+                        textAnchor="middle"
+                        style={TNUM}
+                      >
                         {d.count}
                       </text>
                     )}
@@ -122,7 +145,7 @@ export function FinCalendarPanel({ className = "", ...zoomProps }: { className?:
                 <text
                   key={t}
                   x={a === "start" ? padX : a === "end" ? W - padX : padX + i * slot + slot / 2}
-                  y={baseY + 9}
+                  y={STRIP_H - 2}
                   fontSize={8}
                   fill="#475569"
                   textAnchor={a}
@@ -131,35 +154,29 @@ export function FinCalendarPanel({ className = "", ...zoomProps }: { className?:
                 </text>
               ))}
             </svg>
-            <div className="shrink-0 px-1.5 pb-1 text-[10px] text-slate-500" style={TNUM}>
-              今日披露 <span className="font-semibold text-amber-400">{view.todayCount}</span> 家 · 近 14 日峰值 {view.peak} 家
-            </div>
           </div>
-          {/* 右: 今日/明日披露清单 */}
-          <div className="flex h-full min-h-0 flex-1 flex-col border-l border-slate-800/60">
-            <div className="shrink-0 px-2.5 pt-1.5 text-[10px] text-amber-400">
-              {view.listDate === view.todayKey ? "今晚披露" : `${view.listDate.slice(5).replace("-", "/")} 披露`}
-            </div>
-            <div className="min-h-0 flex-1 overflow-y-auto py-0.5">
-              {view.list.length === 0 ? (
-                <div className="flex h-full items-center justify-center text-[11px] text-slate-600">未来 14 天暂无披露安排</div>
-              ) : (
-                view.list.map((it) => (
+          {/* 双列流式披露清单: 名称 11px / 期 9px / 重磅 ★ amber */}
+          <div className="shrink-0 border-t border-slate-800/60 px-2 pt-1 text-[9px] text-amber-400">
+            {view.listDate === view.todayKey ? "今晚披露" : `${view.listDate.slice(5).replace("-", "/")} 披露`}
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto py-0.5">
+            {view.list.length === 0 ? (
+              <div className="flex h-full items-center justify-center text-[11px] text-slate-600">未来 14 天暂无披露安排</div>
+            ) : (
+              <div className="grid grid-cols-2">
+                {view.list.map((it) => (
                   <button
                     key={`${it.date}-${it.code}`}
                     onClick={() => select(prefixCode(it.code), it.name)}
-                    className="flex h-[18px] w-full items-center gap-1.5 border-b border-slate-800/60 px-2.5 text-left hover:bg-slate-800/30"
+                    className="flex h-[18px] min-w-0 items-center gap-1.5 border-b border-slate-800/60 px-2 text-left hover:bg-slate-800/40"
                   >
-                    <span className="w-[26px] shrink-0 text-[9px] text-slate-500" style={TNUM}>
-                      {it.date.slice(5)}
-                    </span>
-                    <span className="truncate text-[11px] text-slate-300">{it.name}</span>
+                    <span className="min-w-0 flex-1 truncate text-[11px] text-slate-200">{it.name}</span>
                     <span className="shrink-0 text-[9px] text-slate-500">{quarterLabel(it.period)}</span>
-                    {view.heavy.has(it.code) && <span className="ml-auto shrink-0 text-[9px] text-amber-400">★</span>}
+                    {view.heavy.has(it.code) && <span className="shrink-0 text-[9px] text-amber-400">★</span>}
                   </button>
-                ))
-              )}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}
