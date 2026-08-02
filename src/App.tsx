@@ -15,6 +15,7 @@ import { ChainPanel } from "@/components/dash/ChainPanel";
 import { WatchlistPanel } from "@/components/dash/WatchlistPanel";
 import AiDashboard from "./AiDashboard";
 import GoodsDashboard from "./GoodsDashboard";
+import FinDashboard from "./FinDashboard";
 import { useSharedPolling } from "@/hooks/useSharedPolling";
 import { useQuotes } from "@/lib/market";
 import { useFullscreen } from "@/hooks/useFullscreen";
@@ -97,7 +98,7 @@ function Dashboard() {
         tagline="沪深港美 · 大宗 · 美债 · 板块 · 资金流 · 快讯 · 产业链"
         linkTo="/ai"
         linkLabel="AI 观察"
-        links={[{ to: "/goods", label: "商品价格" }, { to: "/ai", label: "AI 观察" }]}
+        links={[{ to: "/goods", label: "商品价格" }, { to: "/ai", label: "AI 观察" }, { to: "/fin", label: "财报窗口" }]}
         live
         githubUrl="https://github.com/theBigGavin/marketingdashboard"
         isFullscreen={isFullscreen}
@@ -115,6 +116,7 @@ export default function App() {
       <Route path="/" element={<Dashboard />} />
       <Route path="/ai" element={<AiDashboard />} />
       <Route path="/goods" element={<GoodsDashboard />} />
+      <Route path="/fin" element={<FinDashboard />} />
     </Routes>
   );
 }

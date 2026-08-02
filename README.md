@@ -30,6 +30,7 @@ A-shares / HK / US stocks · Commodities · US Treasury yields · Sector heat ·
 - **💰 Money-flow tracking** — Top stocks by main-force net inflow, minute-level cumulative sector flow curves, hot / top-gainer / top-loser lists
 - **⛓️ Industry-chain panorama** — Semiconductors, AI compute, EV, robotics, innovative drugs and more; upstream/midstream/downstream tickers linked to live quotes. Stock lists can be edited manually or fetched automatically from iwencai
 - **🤖 AI cockpit** — OpenRouter daily rankings API tracking token-consumption trends of 50+ global LLM providers (7d–1y ranges), stacked-area share charts by provider/country/region, 60+ day long-range history
+- **🪟 Earnings window (/fin)** — Earnings-season macro view: disclosure calendar (14-day rhythm bars + today's list), earnings forecasts (beat/miss stats bar + profit-range details), industry profit ranking (scale × momentum dual encoding), stock profit ranking (by amount / growth), plus per-company 12-quarter trends (revenue/profit bars + ROE/gross/net margin lines)
 - **🏷️ Commodity prices page (/goods)** — Main-contract futures daily trends across 6 groups (precious / base / ferrous / energy-chem / agri / international energy) with 30d–365d ranges, plus Sunsirs spot quotes (accumulated daily) and spot–futures basis tables
 - **📰 7×24 news flash** — Scrolling global financial news with auto-highlighted macro keywords and industry-chain mentions
 - **🖥️ Installable desktop app** — Built-in PWA support (Web Manifest + Service Worker); install from the browser address bar and run in a standalone window
@@ -151,6 +152,9 @@ During development the frontend talks to the local proxy via `/api`:
 | `/api/treasuries` | Real-time US Treasury yields |
 | `/api/treasury-history` | Monthly US Treasury yield history (2001–now; local archive in `server/treasury-rates/` + live fill for the current year) |
 | `/api/mystery-select?query=...&limit=...` | iwencai stock screening (by concept / industry) |
+| `/api/finance-main?code=...` | Per-company financial highlights, last 12 periods (Eastmoney F10: revenue / profit / ROE / margins…) |
+| `/api/finance-board?period=...` | Earnings macro bundle (top-50 stocks by profit + top-15 industry aggregates + recent disclosure calendar) |
+| `/api/finance-forecast?period=...` | Earnings forecasts (profit range / YoY / type + beat–miss stats) |
 | `/api/chain-parse` | Industry-chain text parsing (auto-assigns upstream / midstream / downstream by paragraph headings) |
 | `/api/openrouter-usage` | OpenRouter daily rankings (provider token consumption, persisted local cache) |
 | `/api/stock-search?q=...` | Stock search (name / pinyin initials → code, Sina suggestion proxy) |
@@ -165,8 +169,9 @@ During development the frontend talks to the local proxy via `/api`:
 │   ├── dev.cjs        # Dev entry: starts Vite and the data proxy together
 │   └── index.cjs      # Data proxy + production static file serving
 ├── src/
-│   ├── App.tsx        # Cockpit layout & routing (/ market cockpit, /ai AI cockpit, /goods commodity prices)
+│   ├── App.tsx        # Cockpit layout & routing (/ market cockpit, /ai AI cockpit, /goods commodity prices, /fin earnings window)
 │   ├── AiDashboard.tsx    # AI cockpit page
+│   ├── FinDashboard.tsx   # Earnings window page (panels in components/dash/fin/)
 │   ├── GoodsDashboard.tsx # Commodity prices page (6-group trend panels + spot/basis panel)
 │   ├── components/
 │   │   └── dash/      # Cockpit panels (indices / sectors / money flow / news / industry chains / AI cockpit / watchlist / commodity trends…)

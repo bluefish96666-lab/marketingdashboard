@@ -222,6 +222,77 @@ export interface StockSearchResult {
   pinyin: string;
 }
 
+/** 单公司一期主指标(东财 F10 归一化) */
+export interface FinanceReport {
+  label: string;
+  date: string;
+  revenue: number;
+  netProfit: number;
+  revenueYoY: number;
+  profitYoY: number;
+  roe: number;
+  grossMargin: number;
+  netMargin: number;
+  debtRatio: number;
+  roic: number;
+  eps: number;
+  ocfPerShare: number;
+}
+
+export interface FinanceMain {
+  name: string;
+  reports: FinanceReport[];
+}
+
+export interface FinBoardStock {
+  code: string;
+  name: string;
+  industry: string;
+  netProfit: number;
+  profitYoY: number;
+  revenueYoY: number;
+  roe: number;
+  eps: number;
+}
+
+export interface FinIndustry {
+  name: string;
+  netProfit: number;
+  count: number;
+  yoy: number;
+}
+
+export interface FinCalendarItem {
+  date: string;
+  code: string;
+  name: string;
+  period: string;
+}
+
+export interface FinanceBoard {
+  period: string;
+  stocks: FinBoardStock[];
+  industries: FinIndustry[];
+  calendar: FinCalendarItem[];
+}
+
+export interface FinForecastItem {
+  date: string;
+  code: string;
+  name: string;
+  type: string;
+  profitLow: number;
+  profitHigh: number;
+  yoyLow: number;
+  yoyHigh: number;
+}
+
+export interface FinanceForecast {
+  period: string;
+  stats: { good: number; bad: number; neutral: number };
+  items: FinForecastItem[];
+}
+
 const num = (v: unknown) => {
   const n = parseFloat(String(v));
   return Number.isFinite(n) ? n : 0;
@@ -413,6 +484,9 @@ export const api = {
   spotTable: () => get<SpotTable>(`/api/spot-table`),
   chemSpot: (id: string, name: string) =>
     get<ChemSpot>(`/api/chem-spot?id=${encodeURIComponent(id)}&name=${encodeURIComponent(name)}`),
+  financeMain: (code: string) => get<FinanceMain>(`/api/finance-main?code=${encodeURIComponent(code)}`),
+  financeBoard: (period = "") => get<FinanceBoard>(`/api/finance-board${period ? `?period=${encodeURIComponent(period)}` : ""}`),
+  financeForecast: (period = "") => get<FinanceForecast>(`/api/finance-forecast${period ? `?period=${encodeURIComponent(period)}` : ""}`),
 };
 
 /** OpenRouter 用量轮询(1 小时) */

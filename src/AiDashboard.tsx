@@ -23,6 +23,11 @@ export default function AiDashboard() {
         linkTo="/"
         linkLabel="市场驾驶舱"
         linkBack
+        links={[
+          { to: "/", label: "市场驾驶舱" },
+          { to: "/goods", label: "商品价格" },
+          { to: "/fin", label: "财报窗口" },
+        ]}
         isFullscreen={isFullscreen}
         onToggleFullscreen={toggle}
       />

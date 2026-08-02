@@ -1067,6 +1067,149 @@ async function cached(key, ttl, fn) {
   return inflight;
 }
 
+/* ---------------- 东财 财报数据(datacenter 公开 API, 无 Key) ---------------- */
+// 统一走 fetch/curl 双通道, Referer 为东财数据中心
+async function emDataGet(url) {
+  const text = await fetchTextAny(url, { referer: "https://data.eastmoney.com/" });
+  const j = JSON.parse(text);
+  return j?.result?.data || [];
+}
+
+// sh600519/sz000001/bj430047 或裸 6 位 → SECUCODE(600519.SH); 6/9→SH, 0/2/3→SZ, 4/8→BJ
+function secuCode(raw) {
+  const m = String(raw || "").toLowerCase().match(/^(?:sh|sz|bj)?(\d{6})$/);
+  if (!m) return null;
+  const c = m[1];
+  const ex = c[0] === "6" || c[0] === "9" ? "SH" : c[0] === "4" || c[0] === "8" ? "BJ" : "SZ";
+  return `${c}.${ex}`;
+}
+
+// 按当前月份回推最近报告期: 1-3月→上年Q3, 4-6月→Q1, 7-9月→中报, 10-12月→Q3
+function defaultReportPeriod() {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = now.getMonth() + 1;
+  if (m <= 3) return `${y - 1}-09-30`;
+  if (m <= 6) return `${y}-03-31`;
+  if (m <= 9) return `${y}-06-30`;
+  return `${y}-09-30`;
+}
+
+const validPeriod = (p) => (/^\d{4}-\d{2}-\d{2}$/.test(p || "") ? p : defaultReportPeriod());
+
+// 单公司近 12 期主指标(F10)
+async function handleFinanceMain(code) {
+  const secu = secuCode(code);
+  if (!secu) {
+    // 入参校验失败属客户端错误, 带 status 让分发层回 400 而非 502
+    const err = new Error(`bad code: ${code}`);
+    err.status = 400;
+    throw err;
+  }
+  const url =
+    `https://datacenter.eastmoney.com/securities/api/data/v1/get?reportName=RPT_F10_FINANCE_MAINFINADATA` +
+    `&columns=ALL&filter=${encodeURIComponent(`(SECUCODE="${secu}")`)}` +
+    `&pageNumber=1&pageSize=12&sortTypes=-1&sortColumns=REPORT_DATE&source=HSF10&client=PC`;
+  const rows = await emDataGet(url);
+  return {
+    name: rows[0]?.SECURITY_NAME_ABBR || "",
+    reports: rows.map((r) => ({
+      label: r.REPORT_DATE_NAME || "",
+      date: String(r.REPORT_DATE || "").slice(0, 10),
+      revenue: num(r.TOTALOPERATEREVE),
+      netProfit: num(r.PARENTNETPROFIT),
+      revenueYoY: num(r.TOTALOPERATEREVETZ),
+      profitYoY: num(r.PARENTNETPROFITTZ),
+      roe: num(r.ROEJQ),
+      grossMargin: num(r.XSMLL),
+      netMargin: num(r.XSJLL),
+      debtRatio: num(r.ZCFZL),
+      roic: num(r.ROIC),
+      eps: num(r.EPSJB),
+      ocfPerShare: num(r.MGJYXJJE),
+    })),
+  };
+}
+
+const finBoardUrl = (period, extra) =>
+  `https://datacenter-web.eastmoney.com/api/data/v1/get?reportName=RPT_LICO_FN_CPD&columns=ALL` +
+  `&filter=${encodeURIComponent(`(REPORTDATE='${period}')`)}&pageNumber=1&sortTypes=-1&source=WEB&client=WEB&${extra}`;
+
+// 宏观数据包: 个股盈利榜 TOP50 + 行业聚合 TOP15 + 披露日历 60 条(三次上游请求合并)
+async function handleFinanceBoard(period) {
+  const [stockRows, indRows, calRows] = await Promise.all([
+    emDataGet(finBoardUrl(period, "sortColumns=PARENT_NETPROFIT&pageSize=50")),
+    emDataGet(finBoardUrl(period, "sortColumns=PARENT_NETPROFIT&pageSize=500")),
+    emDataGet(finBoardUrl(period, "sortColumns=NOTICE_DATE&pageSize=60")),
+  ]);
+  const stocks = stockRows.map((r) => ({
+    code: r.SECURITY_CODE || "",
+    name: r.SECURITY_NAME_ABBR || "",
+    industry: r.BOARD_NAME || "",
+    netProfit: num(r.PARENT_NETPROFIT),
+    profitYoY: num(r.SJLTZ),
+    revenueYoY: num(r.YSTZ),
+    roe: num(r.WEIGHTAVG_ROE),
+    eps: num(r.BASIC_EPS),
+  }));
+  // 行业聚合: 净利润合计 + 家数 + 平均净利同比
+  const agg = new Map();
+  for (const r of indRows) {
+    const k = r.BOARD_NAME || "其他";
+    let a = agg.get(k);
+    if (!a) { a = { name: k, netProfit: 0, count: 0, yoySum: 0, yoyN: 0 }; agg.set(k, a); }
+    a.netProfit += num(r.PARENT_NETPROFIT);
+    a.count += 1;
+    if (Number.isFinite(parseFloat(r.SJLTZ))) { a.yoySum += num(r.SJLTZ); a.yoyN += 1; }
+  }
+  const industries = [...agg.values()]
+    .sort((a, b) => b.netProfit - a.netProfit)
+    .slice(0, 15)
+    .map((a) => ({ name: a.name, netProfit: a.netProfit, count: a.count, yoy: a.yoyN ? +(a.yoySum / a.yoyN).toFixed(2) : 0 }));
+  const calendar = calRows.map((r) => ({
+    date: String(r.NOTICE_DATE || "").slice(0, 10),
+    code: r.SECURITY_CODE || "",
+    name: r.SECURITY_NAME_ABBR || "",
+    period: r.QDATE || "",
+  }));
+  return { period, stocks, industries, calendar };
+}
+
+// 业绩预告: 类型从 FORECASTCONTENT 提取, 统计预喜/预悲/不确定
+const FORECAST_TYPES = ["预增", "预减", "扭亏", "首亏", "略增", "略减", "减亏", "增亏"];
+const FORECAST_GOOD = new Set(["预增", "略增", "扭亏", "减亏"]);
+const FORECAST_BAD = new Set(["预减", "略减", "首亏", "增亏"]);
+
+async function handleFinanceForecast(period) {
+  const url =
+    `https://datacenter-web.eastmoney.com/api/data/v1/get?reportName=RPT_PUBLIC_OP_PREDICT&columns=ALL` +
+    `&filter=${encodeURIComponent(`(REPORTDATE='${period}')`)}` +
+    `&sortColumns=NOTICE_DATE&sortTypes=-1&pageSize=60&source=WEB&client=WEB`;
+  const rows = await emDataGet(url);
+  const items = rows.map((r) => {
+    // 上游自带 FORECASTTYPE(预增/预减/扭亏/首亏/略增/略减/减亏/增亏/续盈/续亏), 缺失时从正文提取
+    const content = String(r.FORECASTCONTENT || "");
+    const type = String(r.FORECASTTYPE || "").trim() || FORECAST_TYPES.find((t) => content.includes(t)) || "不确定";
+    return {
+      date: String(r.NOTICE_DATE || "").slice(0, 10),
+      code: r.SECURITY_CODE || "",
+      name: r.SECURITY_NAME_ABBR || "",
+      type,
+      profitLow: num(r.FORECASTL),
+      profitHigh: num(r.FORECASTT),
+      yoyLow: num(r.INCREASEL),
+      yoyHigh: num(r.INCREASET),
+    };
+  });
+  const stats = { good: 0, bad: 0, neutral: 0 };
+  for (const it of items) {
+    if (FORECAST_GOOD.has(it.type)) stats.good += 1;
+    else if (FORECAST_BAD.has(it.type)) stats.bad += 1;
+    else stats.neutral += 1;
+  }
+  return { period, stats, items };
+}
+
 /* ---------------- OpenRouter 大模型 Token 消耗量(厂商聚合) ---------------- */
 const OR_KEY = process.env.OPENROUTER_API_KEY || ""; // .env 已在文件顶部统一加载
 const OR_DATA_FILE = path.join(__dirname, "data", "openrouter-usage.json");
@@ -1512,6 +1655,16 @@ const routes = {
       handleNews(q.get("page") || "1", q.get("size") || "40")
     ),
   "/api/treasuries": async () => cached("treasuries", 30000, () => handleTreasuries()),
+  "/api/finance-main": async (q) =>
+    cached(`fin-main:${q.get("code")}`, 3600000, () => handleFinanceMain(q.get("code") || "")), // 单公司近12期主指标, 1h缓存
+  "/api/finance-board": async (q) => {
+    const p = validPeriod(q.get("period"));
+    return cached(`fin-board:${p}`, 3600000, () => handleFinanceBoard(p)); // 盈利榜+行业聚合+披露日历, 1h缓存
+  },
+  "/api/finance-forecast": async (q) => {
+    const p = validPeriod(q.get("period"));
+    return cached(`fin-forecast:${p}`, 3600000, () => handleFinanceForecast(p)); // 业绩预告, 1h缓存
+  },
   "/api/treasury-history": async () => cached("treasury-history", 6 * 3600 * 1000, () => handleTreasuryHistory()),
   "/api/health": async () => ({ status: "up", ts: Date.now(), cache: cache.size }),
   "/api/openrouter-usage": async () => cached("or-usage", 3600000, () => handleOpenRouterUsage()), // 1h cache
