@@ -1,5 +1,8 @@
 import { DashboardHeader } from "@/components/dash/DashboardHeader";
-import { DashboardLayout, type PanelRowDef } from "@/components/dash/DashboardLayout";
+import {
+  DashboardLayout,
+  type PanelRowDef,
+} from "@/components/dash/DashboardLayout";
 import { FinProvider } from "@/components/dash/fin/FinContext";
 import { FinCalendarPanel } from "@/components/dash/fin/FinCalendarPanel";
 import { FinForecastPanel } from "@/components/dash/fin/FinForecastPanel";
@@ -11,24 +14,49 @@ import { useFullscreen } from "@/hooks/useFullscreen";
 
 const PANEL_ROWS: PanelRowDef[] = [
   {
-    defaultH: 0.26,
-    panels: [
-      { id: "finCalendar", component: FinCalendarPanel, defaultW: 0.38, mobileH: "h-[300px]" },
-      { id: "finForecast", component: FinForecastPanel, defaultW: 0.62, mobileH: "h-[340px]" },
-    ],
-  },
-  {
     defaultH: 0.4,
     panels: [
-      { id: "finIndustry", component: FinIndustryPanel, defaultW: 0.5, mobileH: "h-[360px]" },
-      { id: "finStockRank", component: FinStockRankPanel, defaultW: 0.5, mobileH: "h-[400px]" },
+      {
+        id: "finCalendar",
+        component: FinCalendarPanel,
+        defaultW: 0.38,
+        mobileH: "h-[300px]",
+      },
+      {
+        id: "finForecast",
+        component: FinForecastPanel,
+        defaultW: 0.38,
+        mobileH: "h-[340px]",
+      },
+      {
+        id: "finIndustry",
+        component: FinIndustryPanel,
+        defaultW: 0.5,
+        mobileH: "h-[360px]",
+      },
+      {
+        id: "finStockRank",
+        component: FinStockRankPanel,
+        defaultW: 0.5,
+        mobileH: "h-[400px]",
+      },
     ],
   },
   {
-    defaultH: 0.34,
+    defaultH: 0.6,
     panels: [
-      { id: "finCompany", component: FinCompanyPanel, defaultW: 0.3, mobileH: "h-[380px]" },
-      { id: "finTrend", component: FinTrendPanel, defaultW: 0.7, mobileH: "h-[360px]" },
+      {
+        id: "finCompany",
+        component: FinCompanyPanel,
+        defaultW: 0.5,
+        mobileH: "h-[380px]",
+      },
+      {
+        id: "finTrend",
+        component: FinTrendPanel,
+        defaultW: 0.5,
+        mobileH: "h-[360px]",
+      },
     ],
   },
 ];
