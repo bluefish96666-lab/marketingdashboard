@@ -14,7 +14,7 @@ import { useFullscreen } from "@/hooks/useFullscreen";
 
 const PANEL_ROWS: PanelRowDef[] = [
   {
-    defaultH: 0.4,
+    defaultH: 0.5,
     panels: [
       {
         id: "finCalendar",
@@ -43,7 +43,7 @@ const PANEL_ROWS: PanelRowDef[] = [
     ],
   },
   {
-    defaultH: 0.6,
+    defaultH: 0.5,
     panels: [
       {
         id: "finCompany",
