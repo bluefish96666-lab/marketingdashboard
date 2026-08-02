@@ -96,8 +96,8 @@ function Dashboard() {
         accent="cyan"
         tagline="沪深港美 · 大宗 · 美债 · 板块 · 资金流 · 快讯 · 产业链"
         linkTo="/ai"
-        linkLabel="AI 驾驶舱"
-        links={[{ to: "/goods", label: "商品价格" }, { to: "/ai", label: "AI 驾驶舱" }]}
+        linkLabel="AI 观察"
+        links={[{ to: "/goods", label: "商品价格" }, { to: "/ai", label: "AI 观察" }]}
         live
         githubUrl="https://github.com/theBigGavin/marketingdashboard"
         isFullscreen={isFullscreen}
