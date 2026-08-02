@@ -16,7 +16,8 @@ const dateKey = (t: number) => {
 /** 财报日历: 左 = 近 14 天(今日起)披露家数直方图; 右 = 今日/明日披露清单(可点选公司) */
 export function FinCalendarPanel({ className = "", ...zoomProps }: { className?: string } & PanelZoomProps) {
   const [retry, setRetry] = useState(0);
-  const { data, error, loading } = usePolling(() => api.financeBoard(), 1800000, [retry]);
+  const { period } = useFin();
+  const { data, error, loading } = usePolling(() => api.financeBoard(period), 1800000, [retry, period]);
   const { select } = useFin();
 
   const boxRef = useRef<HTMLDivElement>(null);

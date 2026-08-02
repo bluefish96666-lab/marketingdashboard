@@ -1075,6 +1075,13 @@ async function emDataGet(url) {
   return j?.result?.data || [];
 }
 
+// 带分页元信息(页数): pageSize=1 时 pages 即总行数, 用于"已披露 N 家"
+async function emDataPages(url) {
+  const text = await fetchTextAny(url, { referer: "https://data.eastmoney.com/" });
+  const j = JSON.parse(text);
+  return j?.result?.pages || 0;
+}
+
 // sh600519/sz000001/bj430047 或裸 6 位 → SECUCODE(600519.SH); 6/9→SH, 0/2/3→SZ, 4/8→BJ
 function secuCode(raw) {
   const m = String(raw || "").toLowerCase().match(/^(?:sh|sz|bj)?(\d{6})$/);
@@ -1135,12 +1142,13 @@ const finBoardUrl = (period, extra) =>
   `https://datacenter-web.eastmoney.com/api/data/v1/get?reportName=RPT_LICO_FN_CPD&columns=ALL` +
   `&filter=${encodeURIComponent(`(REPORTDATE='${period}')`)}&pageNumber=1&sortTypes=-1&source=WEB&client=WEB&${extra}`;
 
-// 宏观数据包: 个股盈利榜 TOP50 + 行业聚合 TOP15 + 披露日历 60 条(三次上游请求合并)
+// 宏观数据包: 个股盈利榜 TOP50 + 行业聚合 TOP15 + 披露日历 60 条(三次上游请求合并) + 已披露家数
 async function handleFinanceBoard(period) {
-  const [stockRows, indRows, calRows] = await Promise.all([
+  const [stockRows, indRows, calRows, disclosed] = await Promise.all([
     emDataGet(finBoardUrl(period, "sortColumns=PARENT_NETPROFIT&pageSize=50")),
     emDataGet(finBoardUrl(period, "sortColumns=PARENT_NETPROFIT&pageSize=500")),
     emDataGet(finBoardUrl(period, "sortColumns=NOTICE_DATE&pageSize=60")),
+    emDataPages(finBoardUrl(period, "sortColumns=NOTICE_DATE&pageSize=1")),
   ]);
   const stocks = stockRows.map((r) => ({
     code: r.SECURITY_CODE || "",
@@ -1172,7 +1180,7 @@ async function handleFinanceBoard(period) {
     name: r.SECURITY_NAME_ABBR || "",
     period: r.QDATE || "",
   }));
-  return { period, stocks, industries, calendar };
+  return { period, disclosed, stocks, industries, calendar };
 }
 
 // 业绩预告: 类型从 FORECASTCONTENT 提取, 统计预喜/预悲/不确定

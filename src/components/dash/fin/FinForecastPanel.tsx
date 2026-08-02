@@ -45,7 +45,8 @@ function Row({ it }: { it: FinForecastItem }) {
 /** 业绩预告: 顶部预喜/预悲堆叠统计条 + 明细表(公告日倒序) */
 export function FinForecastPanel({ className = "", ...zoomProps }: { className?: string } & PanelZoomProps) {
   const [retry, setRetry] = useState(0);
-  const { data, error, loading } = usePolling(() => api.financeForecast(), 1800000, [retry]);
+  const { period } = useFin();
+  const { data, error, loading } = usePolling(() => api.financeForecast(period), 1800000, [retry, period]);
 
   const stats = data?.stats;
   const total = stats ? stats.good + stats.bad + stats.neutral : 0;

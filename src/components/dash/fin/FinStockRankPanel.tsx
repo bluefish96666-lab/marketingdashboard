@@ -4,6 +4,7 @@ import { usePolling } from "@/hooks/usePolling";
 import { api, type FinBoardStock } from "@/lib/api";
 import { fmtPct } from "@/lib/format";
 import { useFin } from "./FinContext";
+import { PeriodTabs } from "./PeriodTabs";
 import { TNUM, fmtYi, prefixCode } from "./utils";
 
 type Tab = "profit" | "growth";
@@ -13,8 +14,8 @@ const RANK_COLORS = ["#fbbf24", "#fb7185", "#22d3ee"]; // 前三名 amber/rose/c
 export function FinStockRankPanel({ className = "", ...zoomProps }: { className?: string } & PanelZoomProps) {
   const [tab, setTab] = useState<Tab>("profit");
   const [retry, setRetry] = useState(0);
-  const { data, error, loading } = usePolling(() => api.financeBoard(), 1800000, [retry]);
-  const { select } = useFin();
+  const { select, period } = useFin();
+  const { data, error, loading } = usePolling(() => api.financeBoard(period), 1800000, [retry, period]);
 
   const rows = useMemo(() => {
     const stocks = data?.stocks ?? [];
@@ -36,6 +37,8 @@ export function FinStockRankPanel({ className = "", ...zoomProps }: { className?
       accent="#fb7185"
       right={
         <div className="flex items-center gap-2 text-[10px]">
+          <PeriodTabs />
+          <span className="h-3 w-px bg-slate-700" />
           {(
             [
               { key: "profit", label: "净利额" },

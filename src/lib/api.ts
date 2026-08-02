@@ -271,6 +271,8 @@ export interface FinCalendarItem {
 
 export interface FinanceBoard {
   period: string;
+  /** 该报告期已披露公司总数 */
+  disclosed?: number;
   stocks: FinBoardStock[];
   industries: FinIndustry[];
   calendar: FinCalendarItem[];

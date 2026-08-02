@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Panel, type PanelZoomProps } from "../Panel";
 import { usePolling } from "@/hooks/usePolling";
 import { api } from "@/lib/api";
+import { useFin } from "./FinContext";
+import { PeriodTabs } from "./PeriodTabs";
 import { TNUM, fmtYi } from "./utils";
 
 const NAME_W = 64; // 行业名列宽
@@ -83,7 +85,8 @@ function layoutTreemap(items: TMItem[], X: number, Y: number, W: number, H: numb
 /** 行业盈利榜 TOP15: 树状图(面积∝净利, 红绿=同比景气) / 条形图(对数压缩) 可切换 */
 export function FinIndustryPanel({ className = "", ...zoomProps }: { className?: string } & PanelZoomProps) {
   const [retry, setRetry] = useState(0);
-  const { data, error, loading } = usePolling(() => api.financeBoard(), 1800000, [retry]);
+  const { period } = useFin();
+  const { data, error, loading } = usePolling(() => api.financeBoard(period), 1800000, [retry, period]);
   const [hover, setHover] = useState(-1);
   const [mode, setMode] = useState<"tree" | "bar">("tree");
 
@@ -121,7 +124,12 @@ export function FinIndustryPanel({ className = "", ...zoomProps }: { className?:
     if (!list.length || mode !== "tree") return null;
     const { w: W, h: H } = size;
     const items = list.map((d) => ({ name: d.name, v: d.netProfit, yoy: d.yoy }));
-    return { W, H, rects: layoutTreemap(items, 1, 1, W - 2, H - 2) };
+    // 同比按数据分布归一化(全正/全负时也有色彩区分度): 0=最差 1=最好
+    const yoys = items.map((d) => d.yoy);
+    const mn = Math.min(...yoys);
+    const mx = Math.max(...yoys);
+    const norm = mx > mn ? (v: number) => (v - mn) / (mx - mn) : () => 0.5;
+    return { W, H, rects: layoutTreemap(items, 1, 1, W - 2, H - 2), norm };
   }, [list, mode, size]);
 
   const empty = !list.length;
@@ -135,7 +143,9 @@ export function FinIndustryPanel({ className = "", ...zoomProps }: { className?:
       accent="#34d399"
       right={
         !empty && (
-          <div className="flex items-center gap-1 text-[10px]">
+          <div className="flex items-center gap-2 text-[10px]">
+            <PeriodTabs />
+            <span className="h-3 w-px bg-slate-700" />
             {(["tree", "bar"] as const).map((m) => (
               <button
                 key={m}
@@ -147,6 +157,11 @@ export function FinIndustryPanel({ className = "", ...zoomProps }: { className?:
                 {m === "tree" ? "树状" : "条形"}
               </button>
             ))}
+            {data?.disclosed != null && (
+              <span className="text-[9px] text-slate-500" style={TNUM}>
+                已披露{data.disclosed}家
+              </span>
+            )}
           </div>
         )
       }
@@ -168,12 +183,12 @@ export function FinIndustryPanel({ className = "", ...zoomProps }: { className?:
           {tree && (
             <svg width={tree.W} height={tree.H} className="block">
               {tree.rects.map((r, i) => {
-                const up = r.yoy >= 0;
-                const color = up ? "#fb7185" : "#34d399";
-                // 透明度随同比幅度, 景气度一目了然
-                const op = 0.35 + Math.min(Math.abs(r.yoy) / 40, 1) * 0.45;
-                const showName = r.w > 52 && r.h > 22;
-                const showVal = r.w > 52 && r.h > 36;
+                // 归一化景气度: 好于中位用 rose, 差于中位用 emerald, 深浅随偏离度
+                const t = tree.norm(r.yoy);
+                const color = t >= 0.5 ? "#fb7185" : "#34d399";
+                const op = 0.4 + Math.abs(t - 0.5) * 1.0;
+                const showName = r.w > 56 && r.h > 24;
+                const showVal = r.w > 56 && r.h > 40;
                 return (
                   <g key={r.name} onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(-1)}>
                     <rect
