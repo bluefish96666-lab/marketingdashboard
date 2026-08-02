@@ -1,5 +1,8 @@
 import { DashboardHeader } from "@/components/dash/DashboardHeader";
-import { DashboardLayout, type PanelRowDef } from "@/components/dash/DashboardLayout";
+import {
+  DashboardLayout,
+  type PanelRowDef,
+} from "@/components/dash/DashboardLayout";
 import { GoodsTrendPanel } from "@/components/dash/GoodsTrendPanel";
 import { SpotPanel } from "@/components/dash/SpotPanel";
 import { BasisPanel } from "@/components/dash/BasisPanel";
@@ -11,7 +14,14 @@ import { GOODS_GROUPS, type GoodsGroupId } from "@/config/goods";
 function makeTrendPanel(group: GoodsGroupId) {
   const g = GOODS_GROUPS.find((x) => x.id === group)!;
   return function TrendPanel(props: { className?: string } & PanelZoomProps) {
-    return <GoodsTrendPanel group={group} title={g.name} accent={g.accent} {...props} />;
+    return (
+      <GoodsTrendPanel
+        group={group}
+        title={g.name}
+        accent={g.accent}
+        {...props}
+      />
+    );
   };
 }
 
@@ -24,26 +34,61 @@ const IntlPanel = makeTrendPanel("intl");
 
 const PANEL_ROWS: PanelRowDef[] = [
   {
-    defaultH: 0.37,
+    defaultH: 0.4,
     panels: [
-      { id: "goods-pm", component: PmPanel, defaultW: 1 / 3, mobileH: "h-[340px]" },
-      { id: "goods-bm", component: BmPanel, defaultW: 1 / 3, mobileH: "h-[340px]" },
-      { id: "goods-fer", component: FerPanel, defaultW: 1 / 3, mobileH: "h-[340px]" },
+      {
+        id: "goods-pm",
+        component: PmPanel,
+        defaultW: 1 / 3,
+        mobileH: "h-[340px]",
+      },
+      {
+        id: "goods-bm",
+        component: BmPanel,
+        defaultW: 1 / 3,
+        mobileH: "h-[340px]",
+      },
+      {
+        id: "goods-fer",
+        component: FerPanel,
+        defaultW: 1 / 3,
+        mobileH: "h-[340px]",
+      },
+      {
+        id: "goods-chem",
+        component: ChemPanel,
+        defaultW: 1 / 3,
+        mobileH: "h-[340px]",
+      },
+      {
+        id: "goods-agri",
+        component: AgriPanel,
+        defaultW: 1 / 3,
+        mobileH: "h-[340px]",
+      },
+      {
+        id: "goods-intl",
+        component: IntlPanel,
+        defaultW: 1 / 3,
+        mobileH: "h-[340px]",
+      },
     ],
   },
   {
-    defaultH: 0.37,
+    defaultH: 0.6,
     panels: [
-      { id: "goods-chem", component: ChemPanel, defaultW: 1 / 3, mobileH: "h-[340px]" },
-      { id: "goods-agri", component: AgriPanel, defaultW: 1 / 3, mobileH: "h-[340px]" },
-      { id: "goods-intl", component: IntlPanel, defaultW: 1 / 3, mobileH: "h-[340px]" },
-    ],
-  },
-  {
-    defaultH: 0.26,
-    panels: [
-      { id: "goods-spot", component: SpotPanel, defaultW: 0.5, mobileH: "h-[340px]" },
-      { id: "goods-basis", component: BasisPanel, defaultW: 0.5, mobileH: "h-[340px]" },
+      {
+        id: "goods-spot",
+        component: SpotPanel,
+        defaultW: 0.5,
+        mobileH: "h-[340px]",
+      },
+      {
+        id: "goods-basis",
+        component: BasisPanel,
+        defaultW: 0.5,
+        mobileH: "h-[340px]",
+      },
     ],
   },
 ];
