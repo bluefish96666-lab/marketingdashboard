@@ -82,7 +82,18 @@ function layoutTreemap(items: TMItem[], X: number, Y: number, W: number, H: numb
   return out;
 }
 
-/** 行业盈利榜 TOP15: 树状图(面积∝净利, 红绿=同比景气) / 条形图(对数压缩) 可切换 */
+/** 金融热力色阶(finviz 式低饱和): t∈[-1,1] 负→墨绿, 0→深灰, 正→暗红 */
+function heatColor(t: number): string {
+  const neg = [20, 74, 56]; // #144a38
+  const mid = [30, 41, 59]; // #1e293b
+  const pos = [127, 45, 58]; // #7f2d3a
+  const [a, b] = t >= 0 ? [mid, pos] : [mid, neg];
+  const k = Math.min(Math.abs(t), 1);
+  const c = a.map((v, i) => Math.round(v + (b[i] - v) * k));
+  return `rgb(${c[0]},${c[1]},${c[2]})`;
+}
+
+/** 行业盈利榜 TOP15: 树状图(面积∝净利, 热力色阶=同比景气) / 条形图(对数压缩) 可切换 */
 export function FinIndustryPanel({ className = "", ...zoomProps }: { className?: string } & PanelZoomProps) {
   const [retry, setRetry] = useState(0);
   const { period } = useFin();
@@ -124,12 +135,7 @@ export function FinIndustryPanel({ className = "", ...zoomProps }: { className?:
     if (!list.length || mode !== "tree") return null;
     const { w: W, h: H } = size;
     const items = list.map((d) => ({ name: d.name, v: d.netProfit, yoy: d.yoy }));
-    // 同比按数据分布归一化(全正/全负时也有色彩区分度): 0=最差 1=最好
-    const yoys = items.map((d) => d.yoy);
-    const mn = Math.min(...yoys);
-    const mx = Math.max(...yoys);
-    const norm = mx > mn ? (v: number) => (v - mn) / (mx - mn) : () => 0.5;
-    return { W, H, rects: layoutTreemap(items, 1, 1, W - 2, H - 2), norm };
+    return { W, H, rects: layoutTreemap(items, 1, 1, W - 2, H - 2) };
   }, [list, mode, size]);
 
   const empty = !list.length;
@@ -183,10 +189,8 @@ export function FinIndustryPanel({ className = "", ...zoomProps }: { className?:
           {tree && (
             <svg width={tree.W} height={tree.H} className="block">
               {tree.rects.map((r, i) => {
-                // 归一化景气度: 好于中位用 rose, 差于中位用 emerald, 深浅随偏离度
-                const t = tree.norm(r.yoy);
-                const color = t >= 0.5 ? "#fb7185" : "#34d399";
-                const op = 0.4 + Math.abs(t - 0.5) * 1.0;
+                // 热力色阶: 同比绝对值映射(±20%饱和), 小差异不被放大
+                const fill = heatColor(r.yoy / 20);
                 const showName = r.w > 56 && r.h > 24;
                 const showVal = r.w > 56 && r.h > 40;
                 return (
@@ -197,11 +201,13 @@ export function FinIndustryPanel({ className = "", ...zoomProps }: { className?:
                       width={Math.max(r.w - 1, 0)}
                       height={Math.max(r.h - 1, 0)}
                       rx={2}
-                      fill={color}
-                      opacity={hover === i ? Math.min(op + 0.25, 1) : op}
+                      fill={fill}
                       stroke="#0c1320"
                       strokeWidth={1}
                     />
+                    {hover === i && (
+                      <rect x={r.x} y={r.y} width={Math.max(r.w - 1, 0)} height={Math.max(r.h - 1, 0)} rx={2} fill="#ffffff" opacity={0.12} />
+                    )}
                     {showName && (
                       <text x={r.x + 4} y={r.y + 12} fontSize={9.5} fill="#e2e8f0" fontWeight={600}>
                         {r.name.length > 7 ? r.name.slice(0, 7) : r.name}
@@ -210,7 +216,7 @@ export function FinIndustryPanel({ className = "", ...zoomProps }: { className?:
                     {showVal && (
                       <text x={r.x + 4} y={r.y + 23} fontSize={8.5} fill="#cbd5e1" style={TNUM}>
                         {fmtYi(r.v)}
-                        <tspan fill={color} dx={3}>
+                        <tspan fill={r.yoy >= 0 ? "#fb7185" : "#34d399"} dx={3}>
                           {r.yoy > 0 ? "+" : ""}
                           {r.yoy.toFixed(1)}%
                         </tspan>
