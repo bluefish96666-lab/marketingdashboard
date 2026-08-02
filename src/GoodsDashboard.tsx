@@ -34,7 +34,7 @@ const IntlPanel = makeTrendPanel("intl");
 
 const PANEL_ROWS: PanelRowDef[] = [
   {
-    defaultH: 0.4,
+    defaultH: 0.25,
     panels: [
       {
         id: "goods-pm",
@@ -75,7 +75,7 @@ const PANEL_ROWS: PanelRowDef[] = [
     ],
   },
   {
-    defaultH: 0.6,
+    defaultH: 0.75,
     panels: [
       {
         id: "goods-spot",
