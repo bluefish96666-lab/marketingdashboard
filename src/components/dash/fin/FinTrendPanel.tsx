@@ -6,10 +6,11 @@ import { useFin } from "./FinContext";
 import { SkeletonRows } from "./SkeletonRows";
 import { TNUM, quarterLabel } from "./utils";
 
-type Tab = "perf" | "quality";
+type Tab = "perf" | "quality" | "leverage";
 const TABS: { key: Tab; label: string }[] = [
   { key: "perf", label: "业绩" },
   { key: "quality", label: "质量" },
+  { key: "leverage", label: "杠杆与回报" },
 ];
 
 const GRID = "#1e293b";
@@ -53,7 +54,7 @@ function TrendChart({ reports, tab }: { reports: FinanceReport[]; tab: Tab }) {
     const n = rows.length;
     const { w: W, h: H } = size;
     const L = 32;
-    const R = tab === "quality" ? 56 : 34;
+    const R = tab === "quality" ? 56 : tab === "leverage" ? 50 : 34;
     const T = 8;
     const B = 14;
     const plotW = W - L - R;
@@ -83,38 +84,71 @@ function TrendChart({ reports, tab }: { reports: FinanceReport[]; tab: Tab }) {
       return { mode: "perf" as const, W, H, L, R, T, B, n, slot, cx, Ym, zeroY: Ym(0), ticks, rows, line };
     }
 
-    // quality: ROE / 毛利率 / 净利率 共用百分比轴
-    const vals = rows.flatMap((r) => [r.roe, r.grossMargin, r.netMargin]);
-    let min = Math.min(...vals);
-    let max = Math.max(...vals);
-    const pad = (max - min) * 0.06 || 1;
-    min -= pad;
-    max += pad;
-    const Y = (v: number) => T + (1 - (v - min) / (max - min)) * plotH;
-    const ticks = [0.2, 0.4, 0.6, 0.8].map((f) => ({ y: T + f * plotH, v: max - f * (max - min) }));
-    const series = [
-      { key: "roe" as const, name: "ROE", color: "#22d3ee", dash: undefined as string | undefined },
-      { key: "grossMargin" as const, name: "毛利", color: "#fbbf24", dash: undefined as string | undefined },
-      { key: "netMargin" as const, name: "净利", color: "#fb7185", dash: "3 2" },
-    ].map((s) => ({
-      ...s,
-      pts: rows.map((r, i) => `${cx(i).toFixed(1)},${Y(r[s.key]).toFixed(1)}`).join(" "),
-      lastY: Y(rows[n - 1][s.key]),
-      lastV: rows[n - 1][s.key],
-    }));
-    // 端点标签均布压缩(沿用 BoardFlowChart 算法)
-    const labels = [...series].sort((a, b) => a.lastY - b.lastY).map((s) => ({ s, labelY: s.lastY }));
-    const TOP = T + 2;
-    const BOTTOM = T + plotH - 4;
-    const gap = labels.length > 1 ? Math.min(11, (BOTTOM - TOP) / (labels.length - 1)) : 11;
-    let sy = Math.max(labels[0]?.labelY ?? TOP, TOP);
-    sy = Math.min(sy, BOTTOM - gap * (labels.length - 1));
-    sy = Math.max(sy, TOP);
-    for (const l of labels) {
-      l.labelY = sy;
-      sy += gap;
+    if (tab === "quality") {
+      // quality: ROE / 毛利率 / 净利率 共用百分比轴
+      const vals = rows.flatMap((r) => [r.roe, r.grossMargin, r.netMargin]);
+      let min = Math.min(...vals);
+      let max = Math.max(...vals);
+      const pad = (max - min) * 0.06 || 1;
+      min -= pad;
+      max += pad;
+      const Y = (v: number) => T + (1 - (v - min) / (max - min)) * plotH;
+      const ticks = [0.2, 0.4, 0.6, 0.8].map((f) => ({ y: T + f * plotH, v: max - f * (max - min) }));
+      const series = [
+        { key: "roe" as const, name: "ROE", color: "#22d3ee", dash: undefined as string | undefined },
+        { key: "grossMargin" as const, name: "毛利", color: "#fbbf24", dash: undefined as string | undefined },
+        { key: "netMargin" as const, name: "净利", color: "#fb7185", dash: "3 2" },
+      ].map((s) => ({
+        ...s,
+        pts: rows.map((r, i) => `${cx(i).toFixed(1)},${Y(r[s.key]).toFixed(1)}`).join(" "),
+        lastY: Y(rows[n - 1][s.key]),
+        lastV: rows[n - 1][s.key],
+      }));
+      // 端点标签均布压缩(沿用 BoardFlowChart 算法)
+      const labels = [...series].sort((a, b) => a.lastY - b.lastY).map((s) => ({ s, labelY: s.lastY }));
+      const TOP = T + 2;
+      const BOTTOM = T + plotH - 4;
+      const gap = labels.length > 1 ? Math.min(11, (BOTTOM - TOP) / (labels.length - 1)) : 11;
+      let sy = Math.max(labels[0]?.labelY ?? TOP, TOP);
+      sy = Math.min(sy, BOTTOM - gap * (labels.length - 1));
+      sy = Math.max(sy, TOP);
+      for (const l of labels) {
+        l.labelY = sy;
+        sy += gap;
+      }
+      return { mode: "quality" as const, W, H, L, R, T, B, n, slot, cx, ticks, rows, series, labels };
     }
-    return { mode: "quality" as const, W, H, L, R, T, B, n, slot, cx, ticks, rows, series, labels };
+
+    // leverage: 资产负债率(柱,左轴%) + ROIC(线,左轴%) + 每股OCF(线,右轴元) 双轴图
+    const debtVals = rows.map((r) => r.debtRatio);
+    const roicVals = rows.map((r) => r.roic);
+    const ocfVals = rows.map((r) => r.ocfPerShare);
+    const [[lMin, lMax], [rMin, rMax]] = alignZero(
+      Math.min(...debtVals, ...roicVals, 0),
+      Math.max(...debtVals, ...roicVals, 1),
+      Math.min(...ocfVals, 0),
+      Math.max(...ocfVals, 0) || 1
+    );
+    const Yl = (v: number) => T + (1 - (v - lMin) / (lMax - lMin)) * plotH;
+    const Yr = (v: number) => T + (1 - (v - rMin) / (rMax - rMin)) * plotH;
+    const levTicks = [0.2, 0.4, 0.6, 0.8].map((f) => ({
+      y: T + f * plotH,
+      l: lMax - f * (lMax - lMin),
+      r: rMax - f * (rMax - rMin),
+    }));
+    const debtBars = rows.map((r, i) => ({
+      x: cx(i) - slot * 0.2,
+      w: slot * 0.4,
+      v: r.debtRatio,
+      y: Yl(r.debtRatio),
+    }));
+    const roicLine = rows.map((r, i) => `${cx(i).toFixed(1)},${Yl(r.roic).toFixed(1)}`).join(" ");
+    const ocfLine = rows.map((r, i) => `${cx(i).toFixed(1)},${Yr(r.ocfPerShare).toFixed(1)}`).join(" ");
+    const zeroL = Yl(0);
+    return {
+      mode: "leverage" as const, W, H, L, R, T, B, n, slot, cx, ticks: levTicks, rows,
+      debtBars, roicLine, ocfLine, zeroL, Yl,
+    };
   }, [reports, tab, size]);
 
   if (!chart) return <div ref={boxRef} className="h-full min-h-0" />;
@@ -137,6 +171,18 @@ function TrendChart({ reports, tab }: { reports: FinanceReport[]; tab: Tab }) {
                 </text>
               </g>
             ))
+          : chart.mode === "leverage"
+          ? chart.ticks.map((t, i) => (
+              <g key={i}>
+                <line x1={L} y1={t.y} x2={W - chart.R} y2={t.y} stroke={GRID} strokeWidth={1} />
+                <text x={L - 3} y={t.y + 3} fontSize={8} fill={AXIS} textAnchor="end" style={TNUM}>
+                  {t.l.toFixed(0)}%
+                </text>
+                <text x={W - chart.R + 3} y={t.y + 3} fontSize={8} fill={AXIS} style={TNUM}>
+                  {t.r.toFixed(1)}
+                </text>
+              </g>
+            ))
           : chart.ticks.map((t, i) => (
               <g key={i}>
                 <line x1={L} y1={t.y} x2={W - chart.R} y2={t.y} stroke={GRID} strokeWidth={1} />
@@ -146,8 +192,8 @@ function TrendChart({ reports, tab }: { reports: FinanceReport[]; tab: Tab }) {
               </g>
             ))}
         {/* 零轴(加粗) */}
-        {chart.mode === "perf" && (
-          <line x1={L} y1={chart.zeroY} x2={W - chart.R} y2={chart.zeroY} stroke={ZERO} strokeWidth={1.5} />
+        {(chart.mode === "perf" || chart.mode === "leverage") && (
+          <line x1={L} y1={chart.mode === "perf" ? chart.zeroY : chart.zeroL} x2={W - chart.R} y2={chart.mode === "perf" ? chart.zeroY : chart.zeroL} stroke={ZERO} strokeWidth={1.5} />
         )}
         {/* X 刻度: 隔期标注 */}
         {chart.rows.map((r, i) =>
@@ -180,7 +226,7 @@ function TrendChart({ reports, tab }: { reports: FinanceReport[]; tab: Tab }) {
             <polyline points={chart.line("revenueYoY")} fill="none" stroke="#38bdf8" strokeWidth={1.2} strokeDasharray="3 2" strokeLinejoin="round" />
             <polyline points={chart.line("profitYoY")} fill="none" stroke="#fb7185" strokeWidth={1.4} strokeLinejoin="round" />
           </>
-        ) : (
+        ) : chart.mode === "quality" ? (
           <>
             {chart.series.map((s) => (
               <polyline
@@ -210,6 +256,47 @@ function TrendChart({ reports, tab }: { reports: FinanceReport[]; tab: Tab }) {
                 </text>
               </g>
             ))}
+          </>
+        ) : null}
+        {chart.mode === "leverage" && (
+          <>
+            {/* 资产负债率柱: amber 填充, 越低越好 */}
+            {chart.debtBars.map((b, i) => {
+              const top = Math.min(b.y, chart.zeroL);
+              const h = Math.max(Math.abs(chart.zeroL - b.y), b.v > 0 ? 1 : 0);
+              return (
+                <rect
+                  key={`debt-${i}`}
+                  x={b.x}
+                  y={top}
+                  width={b.w}
+                  height={h}
+                  rx={1}
+                  fill="#fbbf24"
+                  opacity={0.55}
+                />
+              );
+            })}
+            {/* ROIC 线: cyan 实线, 左轴% */}
+            <polyline points={chart.roicLine} fill="none" stroke="#22d3ee" strokeWidth={1.4} strokeLinejoin="round" />
+            {/* 每股OCF 线: emerald 虚线, 右轴元 */}
+            <polyline points={chart.ocfLine} fill="none" stroke="#34d399" strokeWidth={1.2} strokeDasharray="3 2" strokeLinejoin="round" />
+            {/* 右端点标签 */}
+            {(() => {
+              const last = chart.rows[chart.n - 1];
+              const roicY = chart.Yl(last.roic);
+              const ocfY = chart.Yl(last.ocfPerShare);
+              return (
+                <>
+                  <text x={W - chart.R + 4} y={roicY + 3} fontSize={8} fill="#22d3ee" style={TNUM}>
+                    ROIC {last.roic.toFixed(1)}%
+                  </text>
+                  <text x={W - chart.R + 4} y={ocfY + 3} fontSize={8} fill="#34d399" style={TNUM}>
+                    OCF {last.ocfPerShare.toFixed(2)}
+                  </text>
+                </>
+              );
+            })()}
           </>
         )}
         {/* 轴底线 */}

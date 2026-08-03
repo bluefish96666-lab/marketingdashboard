@@ -10,51 +10,58 @@ import { FinIndustryPanel } from "@/components/dash/fin/FinIndustryPanel";
 import { FinStockRankPanel } from "@/components/dash/fin/FinStockRankPanel";
 import { FinCompanyPanel } from "@/components/dash/fin/FinCompanyPanel";
 import { FinTrendPanel } from "@/components/dash/fin/FinTrendPanel";
+import { FinPeerPanel } from "@/components/dash/fin/FinPeerPanel";
 import { useFullscreen } from "@/hooks/useFullscreen";
 
 const PANEL_ROWS: PanelRowDef[] = [
   {
-    defaultH: 0.5,
+    defaultH: 0.40,
     panels: [
       {
         id: "finCalendar",
         component: FinCalendarPanel,
-        defaultW: 0.38,
+        defaultW: 0.22,
         mobileH: "h-[300px]",
       },
       {
         id: "finForecast",
         component: FinForecastPanel,
-        defaultW: 0.38,
+        defaultW: 0.28,
         mobileH: "h-[340px]",
       },
       {
         id: "finIndustry",
         component: FinIndustryPanel,
-        defaultW: 0.5,
+        defaultW: 0.25,
         mobileH: "h-[360px]",
       },
       {
         id: "finStockRank",
         component: FinStockRankPanel,
-        defaultW: 0.5,
+        defaultW: 0.25,
         mobileH: "h-[400px]",
       },
     ],
   },
   {
-    defaultH: 0.5,
+    defaultH: 0.60,
     panels: [
       {
         id: "finCompany",
         component: FinCompanyPanel,
-        defaultW: 0.5,
+        defaultW: 0.28,
         mobileH: "h-[380px]",
       },
       {
         id: "finTrend",
         component: FinTrendPanel,
-        defaultW: 0.5,
+        defaultW: 0.40,
+        mobileH: "h-[360px]",
+      },
+      {
+        id: "finPeer",
+        component: FinPeerPanel,
+        defaultW: 0.32,
         mobileH: "h-[360px]",
       },
     ],
@@ -70,7 +77,7 @@ export default function FinDashboard() {
         title="财报窗口"
         subtitle="EARNINGS WINDOW"
         accent="cyan"
-        tagline="财报日历 · 业绩预告 · 盈利榜 · 公司趋势"
+        tagline="财报日历 · 业绩预告 · 盈利榜 · 公司深度 · 同业对比"
         linkTo="/"
         linkLabel="市场驾驶舱"
         linkBack
