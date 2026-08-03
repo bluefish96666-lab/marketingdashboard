@@ -89,7 +89,7 @@ export function FinIndustryPanel({ className = "", ...zoomProps }: { className?:
   const { period } = useFin();
   const { data, error, loading } = usePolling(() => api.financeBoard(period), 1800000, [retry, period]);
   const [hover, setHover] = useState(-1);
-  const [mode, setMode] = useState<"bar" | "tree">("bar");
+  const [mode, setMode] = useState<"bar" | "tree">("tree");
 
   const boxRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ w: 400, h: 260 });
