@@ -24,16 +24,17 @@ pub fn run() {
             let cfg = config::load(&h);
 
             // 构建 URL + init script
-            let (url_str, init_script) = if cfg!(debug_assertions) {
-                (Config::dev_url(), make_init_script(&cfg))
+            let init_script = make_init_script(&cfg);
+            let url = if cfg!(debug_assertions) {
+                WebviewUrl::External(Config::dev_url().parse().unwrap())
+            } else if cfg.mode == "remote" {
+                WebviewUrl::External(cfg.main_url().parse().unwrap())
             } else {
-                (cfg.main_url(), make_init_script(&cfg))
+                // 本地模式: WebviewUrl::App 从打包的 dist/ 加载
+                WebviewUrl::App("index.html".into())
             };
 
-            let _main = WebviewWindowBuilder::new(
-                &h, "main",
-                WebviewUrl::External(url_str.parse().unwrap()),
-            )
+            let _main = WebviewWindowBuilder::new(&h, "main", url)
                 .title("市场研究驾驶舱")
                 .inner_size(1400.0, 900.0)
                 .min_inner_size(1024.0, 700.0)

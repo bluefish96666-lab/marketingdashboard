@@ -15,12 +15,18 @@ pub fn save_config(app: AppHandle, mode: String, server_url: String) -> Result<(
 #[tauri::command]
 pub fn reload_app(app: AppHandle) {
     if let Some(w) = app.get_webview_window("main") {
-        let url = if cfg!(debug_assertions) {
-            Config::dev_url()
+        if cfg!(debug_assertions) {
+            let _ = w.navigate(Config::dev_url().parse().unwrap());
         } else {
-            config::load(&app).main_url()
-        };
-        let _ = w.navigate(url.parse().unwrap());
+            let cfg = config::load(&app);
+            if cfg.mode == "remote" {
+                let _ = w.navigate(cfg.main_url().parse().unwrap());
+            } else {
+                // 本地模式: 用 App URL(asset protocol), navigate 不支持,
+                // 改用 eval 触发整页重载
+                let _ = w.eval("location.reload()");
+            }
+        }
     }
 }
 
