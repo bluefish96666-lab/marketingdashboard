@@ -57,6 +57,8 @@ interface QuoteRowProps {
   };
   /** 左侧彩色 accent 竖条(商品面板强调色) */
   accent?: string;
+  /** 现期对照(基差)行: 品种 | 现货 | 期货 | 基差 | 基差率 — 仅 compact 模式使用 */
+  basis?: { spot: number; futures: number; basis: number; basisPct: number };
 }
 
 /** 统一个股行
@@ -65,7 +67,7 @@ interface QuoteRowProps {
  */
 export const QuoteRow = memo(function QuoteRow({
   code, name, price, pct, tag, rank, amount, turnover, spark, boards, flow, variant = "plain", active, onClick, onRemove,
-  unit, sparkData, accent, className,
+  unit, sparkData, accent, basis, className,
 }: QuoteRowProps) {
   // 行宽自适应: 实测宽度决定资金流标签形态(主力净额/净占比 ↔ 净/占)
   // 仅 flow 模式需要; compact 模式无需
@@ -138,11 +140,51 @@ export const QuoteRow = memo(function QuoteRow({
 
   // ---- compact 单行布局(商品/现货) ----
   if (variant === "compact") {
+    // 现期对照(基差): 名称 | spark 图 | 右侧两列数据(现货/期货 + 基差/基差率, 每列上下两值)
+    if (basis) {
+      return (
+        <Tag
+          ref={(el: HTMLElement | null) => { rootRef.current = el; }}
+          onClick={onClick}
+          className={`group grid w-full grid-cols-[72px_minmax(0,1fr)_110px_110px] grid-rows-[20px_16px] items-center gap-x-1 rounded px-2 py-[4px] text-left transition-colors hover:bg-slate-800/40 hover:shadow-[inset_0_0_0_1px_rgba(34,211,238,0.22)] ${active ? "bg-cyan-500/10 ring-1 ring-cyan-500/40" : ""} ${className || ""}`}
+        >
+          {/* 名称+单位, 跨2行 */}
+          <div className="row-span-2 flex min-w-0 flex-col justify-center gap-1 leading-none">
+            <span className="truncate text-[12px] text-slate-200">{name}</span>
+            <span className="truncate text-[10px] text-slate-500">{subtitle}</span>
+          </div>
+          {/* 分时图: 跨2行, 垂直居中 */}
+          <div className="row-span-2 flex h-full min-w-0 items-center">
+            {sp && sp.points.length > 1 && (
+              <Spark points={sp.points} prec={sp.prec} width={160} height={20} fluid session={sparkData?.session || "daily"} />
+            )}
+          </div>
+          {/* 列3: 现货(上) | 期货(下) */}
+          <span className="col-start-3 row-start-1 flex min-w-0 items-center gap-1 leading-none">
+            <span className="shrink-0 text-[9px] text-slate-600">现货</span>
+            <span className="truncate text-[11px] font-semibold text-slate-200" style={TNUM}>{fmtPrice(basis.spot)}</span>
+          </span>
+          <span className="col-start-3 row-start-2 flex min-w-0 items-center gap-1 leading-none">
+            <span className="shrink-0 text-[9px] text-slate-600">期货</span>
+            <span className="truncate text-[11px] text-slate-400" style={TNUM}>{fmtPrice(basis.futures)}</span>
+          </span>
+          {/* 列4: 基差(上) | 基差率(下) */}
+          <span className="col-start-4 row-start-1 flex min-w-0 items-center gap-1 leading-none">
+            <span className="shrink-0 text-[9px] text-slate-600">基差</span>
+            <span className={`truncate text-[11px] font-semibold ${clsChg(basis.basis)}`} style={TNUM}>{basis.basis > 0 ? "+" : ""}{fmtPrice(basis.basis)}</span>
+          </span>
+          <span className="col-start-4 row-start-2 flex min-w-0 items-center gap-1 leading-none">
+            <span className="shrink-0 text-[9px] text-slate-600">基差率</span>
+            <span className={`rounded px-0.5 text-[11px] font-semibold ${bgChg(basis.basisPct)}`} style={TNUM}>{fmtPct(basis.basisPct)}</span>
+          </span>
+        </Tag>
+      );
+    }
     return (
       <Tag
         ref={(el: HTMLElement | null) => { rootRef.current = el; }}
         onClick={onClick}
-        className={`group flex items-center gap-1.5 w-full rounded px-1 py-[3px] text-left transition-colors hover:bg-slate-800/40 ${accent ? "relative" : ""} ${
+        className={`group flex items-center gap-1.5 w-full rounded px-1 py-[3px] text-left transition-colors hover:bg-slate-800/40 hover:shadow-[inset_0_0_0_1px_rgba(34,211,238,0.22)] ${accent ? "relative" : ""} ${
           active ? "bg-cyan-500/10 ring-1 ring-cyan-500/40" : ""
         } ${className || ""}`}
       >
@@ -173,6 +215,59 @@ export const QuoteRow = memo(function QuoteRow({
   const hasAmount = Boolean(amount);
   const hasTurnover = Boolean(turnover);
   const nameW = variant === "card" ? "56px" : "72px";
+
+  // ---- 商品/最小模式(无 flow/amount/turnover): 名称 | spark | 价/幅一列(数据在分时图右侧) ----
+  if (!hasFlow && !hasAmount && !hasTurnover) {
+    return (
+      <Tag
+        ref={(el: HTMLElement | null) => { rootRef.current = el; }}
+        onClick={onClick}
+        className={`group grid w-full grid-cols-[72px_minmax(0,1fr)_72px] grid-rows-[20px_16px] items-center gap-x-1 rounded px-2 py-[4px] text-left transition-colors ${skin} ${accent ? "relative" : ""} ${active ? "bg-cyan-500/10 ring-1 ring-cyan-500/40" : ""}`}
+      >
+        {accent && (
+          <span aria-hidden className="absolute left-0 top-0 h-full w-[3px] rounded-l" style={{ background: accent, opacity: 0.55 }} />
+        )}
+        {rank != null && (
+          <span className={`row-span-2 self-center text-[11px] font-bold leading-none ${rank <= 3 ? "text-amber-400" : "text-slate-600"}`} style={TNUM}>{rank}</span>
+        )}
+        {/* 名称+单位, 跨2行(与原组件同高) */}
+        <div className="row-span-2 flex min-w-0 flex-col justify-center gap-1 leading-none">
+          <span className="truncate text-[12px] text-slate-200">{name}</span>
+          <span className="truncate text-[10px] text-slate-500">{subtitle}</span>
+        </div>
+        {/* 分时图: 跨2行, 垂直居中 */}
+        <div className="row-span-2 flex min-w-0 items-center">
+          {sp && sp.points.length > 1 && (
+            <Spark points={sp.points} prec={sp.prec} width={160} height={20} fluid session={sparkData?.session || "ashare"} />
+          )}
+        </div>
+        {/* 价/幅一列(上下两行), 跨2行右侧 */}
+        <div className="row-span-2 flex flex-col justify-center gap-1 leading-none">
+          <div className="flex items-center justify-end gap-1">
+            <span className="shrink-0 text-[9px] text-slate-600">价</span>
+            <span className={`truncate text-[11px] font-semibold ${pct != null ? clsChg(pct) : "text-slate-400"}`} style={TNUM}>
+              {p != null ? fmtPrice(p) : "—"}
+            </span>
+          </div>
+          <div className="flex items-center justify-end gap-1">
+            <span className="shrink-0 text-[9px] text-slate-600">幅</span>
+            <span className={`truncate rounded px-0.5 text-[10px] font-semibold ${pct != null ? bgChg(pct) : ""}`} style={TNUM}>
+              {pct != null ? fmtPct(pct) : ""}
+            </span>
+          </div>
+        </div>
+        {onRemove && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onRemove(); }}
+            className="row-span-2 self-center text-[10px] leading-none text-slate-600 opacity-0 transition-opacity hover:text-rose-400 group-hover:opacity-100"
+            title="移除"
+          >
+            ×
+          </button>
+        )}
+      </Tag>
+    );
+  }
 
   // 动态网格: 无 flow 时合并为单列 spark, 无 amount/turnover 时折叠对应列
   let gridCols: string;
