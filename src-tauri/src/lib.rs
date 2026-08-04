@@ -5,19 +5,12 @@ use config::Config;
 use tauri::menu::{MenuBuilder, MenuItemBuilder, PredefinedMenuItem, SubmenuBuilder};
 use tauri::{Emitter, Manager, Theme, TitleBarStyle, WebviewUrl, WebviewWindowBuilder};
 
-const WATCHDOG: &str = r#"
-(() => {
-  if (window.__cockpitWatchdog) return;
-  window.__cockpitWatchdog = true;
-  let loaded = false;
-  addEventListener('load', () => { loaded = true; }, { once: true });
-  setTimeout(() => {
-    if (!loaded) {
-      try { window.__TAURI_INTERNALS__.invoke('show_error'); } catch (_) {}
-    }
-  }, 15000);
-})();
-"#;
+fn make_init_script(cfg: &Config) -> String {
+    let api_base = cfg.server_url.trim_end_matches('/');
+    format!(
+        r#"(()=>{{window.__COCKPIT_DESKTOP=1;window.__COCKPIT_API_BASE="{api_base}";if(window.__cockpitWatchdog)return;window.__cockpitWatchdog=!0;let l=!1;addEventListener('load',()=>{{l=!0}},{{once:!0}});setTimeout(()=>{{if(!l)try{{window.__TAURI_INTERNALS__.invoke('show_error')}}catch(_){{}}}},15000)}})();"#
+    )
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -25,16 +18,19 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             let h = app.handle().clone();
-
-            // --- 主窗口 ---
             let cfg = config::load(&h);
-            let url_str = if cfg!(debug_assertions) {
-                Config::dev_url()
+
+            // 构建 URL + init script
+            let (url_str, init_script) = if cfg!(debug_assertions) {
+                (Config::dev_url(), make_init_script(&cfg))
             } else {
-                cfg.main_url()
+                (cfg.main_url(), make_init_script(&cfg))
             };
 
-            let _main = WebviewWindowBuilder::new(&h, "main", WebviewUrl::External(url_str.parse().unwrap()))
+            let _main = WebviewWindowBuilder::new(
+                &h, "main",
+                WebviewUrl::External(url_str.parse().unwrap()),
+            )
                 .title("市场研究驾驶舱")
                 .inner_size(1400.0, 900.0)
                 .min_inner_size(1024.0, 700.0)
@@ -42,7 +38,7 @@ pub fn run() {
                 .resizable(true)
                 .theme(Some(Theme::Dark))
                 .title_bar_style(TitleBarStyle::Overlay)
-                .initialization_script(WATCHDOG)
+                .initialization_script(init_script)
                 .build()?;
 
             // --- 菜单栏 ---
@@ -53,7 +49,6 @@ pub fn run() {
                 .accelerator("CmdOrCtrl+R")
                 .build(&h)?;
             let open_web_item = MenuItemBuilder::with_id("open-web", "打开网页版").build(&h)?;
-
             let undo = PredefinedMenuItem::undo(&h, None::<&str>)?;
             let redo = PredefinedMenuItem::redo(&h, None::<&str>)?;
             let cut = PredefinedMenuItem::cut(&h, None::<&str>)?;
@@ -64,38 +59,19 @@ pub fn run() {
             let fullscreen = PredefinedMenuItem::fullscreen(&h, None::<&str>)?;
 
             let file_menu = SubmenuBuilder::new(&h, "文件")
-                .item(&settings_item)
-                .separator()
-                .item(&reload_item)
-                .build()?;
+                .item(&settings_item).separator().item(&reload_item).build()?;
             let edit_menu = SubmenuBuilder::new(&h, "编辑")
-                .item(&undo)
-                .item(&redo)
-                .separator()
-                .item(&cut)
-                .item(&copy)
-                .item(&paste)
-                .item(&select_all)
-                .build()?;
+                .item(&undo).item(&redo).separator()
+                .item(&cut).item(&copy).item(&paste).item(&select_all).build()?;
             let view_menu = SubmenuBuilder::new(&h, "显示")
-                .item(&reload_item)
-                .separator()
-                .item(&fullscreen)
-                .build()?;
+                .item(&reload_item).separator().item(&fullscreen).build()?;
             let window_menu = SubmenuBuilder::new(&h, "窗口")
-                .item(&minimize)
-                .build()?;
+                .item(&minimize).build()?;
             let help_menu = SubmenuBuilder::new(&h, "帮助")
-                .item(&open_web_item)
-                .build()?;
-
+                .item(&open_web_item).build()?;
             let menu = MenuBuilder::new(&h)
-                .item(&file_menu)
-                .item(&edit_menu)
-                .item(&view_menu)
-                .item(&window_menu)
-                .item(&help_menu)
-                .build()?;
+                .item(&file_menu).item(&edit_menu).item(&view_menu)
+                .item(&window_menu).item(&help_menu).build()?;
             h.set_menu(menu)?;
 
             app.on_menu_event(move |app_handle, event| {
@@ -111,8 +87,9 @@ pub fn run() {
                         }
                     }
                     "open-web" => {
-                        let url = config::load(app_handle).server_url;
-                        let _ = tauri_plugin_opener::open_url(url, None::<&str>);
+                        let _ = tauri_plugin_opener::open_url(
+                            config::load(app_handle).server_url, None::<&str>,
+                        );
                     }
                     _ => {}
                 }

@@ -8,8 +8,7 @@ pub fn load_config(app: AppHandle) -> Config {
 
 #[tauri::command]
 pub fn save_config(app: AppHandle, mode: String, server_url: String) -> Result<(), String> {
-    let cfg = Config { mode, server_url };
-    config::save(&app, &cfg)?;
+    config::save(&app, &Config { mode, server_url })?;
     Ok(())
 }
 
@@ -31,13 +30,11 @@ pub fn open_settings(app: AppHandle) {
         let _ = w.set_focus();
         return;
     }
-
     let url = if cfg!(debug_assertions) {
         "http://localhost:3000/desktop-settings.html"
     } else {
         "tauri://localhost/desktop-settings.html"
     };
-
     let _ = WebviewWindowBuilder::new(&app, "settings", WebviewUrl::External(url.parse().unwrap()))
         .title("服务器设置")
         .inner_size(460.0, 380.0)

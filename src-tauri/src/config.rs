@@ -15,20 +15,22 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Self {
         Self {
-            mode: "local".into(),  // 默认本地模式: 打包的 dist/ 作为前端, API 走 server_url
+            mode: "local".into(),
             server_url: DEFAULT_URL.into(),
         }
     }
 }
 
 impl Config {
+    /// 主窗口 URL:
+    /// - 远程模式: https://server/?desktop=1
+    /// - 本地模式: tauri://localhost/index.html (asset protocol, 配置通过 init script 注入)
     pub fn main_url(&self) -> String {
-        let server = self.server_url.trim_end_matches('/');
         if self.mode == "remote" {
+            let server = self.server_url.trim_end_matches('/');
             format!("{server}/?desktop=1")
         } else {
-            // 本地模式: 从打包资源加载 UI, API 通过 ?apiBase 指向服务器
-            format!("tauri://localhost/index.html?desktop=1&apiBase={server}")
+            "tauri://localhost/index.html".into()
         }
     }
 
@@ -38,10 +40,7 @@ impl Config {
 }
 
 fn config_path(app: &AppHandle) -> PathBuf {
-    app.path()
-        .app_config_dir()
-        .unwrap_or_default()
-        .join("config.json")
+    app.path().app_config_dir().unwrap_or_default().join("config.json")
 }
 
 pub fn load(app: &AppHandle) -> Config {

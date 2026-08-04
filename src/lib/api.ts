@@ -309,8 +309,10 @@ function timeoutSignal(ms: number): AbortSignal {
   return ctrl.signal;
 }
 
-/** 本地桌面壳注入的 API 前缀(通过 ?apiBase= 传入), 默认空字符串 = 同源 */
-const API_BASE = new URLSearchParams(window.location.search).get("apiBase") ?? "";
+/** 本地桌面壳注入的 API 前缀(通过 window.__COCKPIT_API_BASE 或 ?apiBase= 传入), 默认空 = 同源 */
+const API_BASE = window.__COCKPIT_API_BASE
+  ?? new URLSearchParams(window.location.search).get("apiBase")
+  ?? "";
 
 async function get<T>(path: string): Promise<T> {
   const r = await fetch(`${API_BASE}${path}`, { signal: timeoutSignal(10000) });
