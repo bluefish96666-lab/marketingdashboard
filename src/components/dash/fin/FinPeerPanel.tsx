@@ -1,12 +1,19 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { GitCompare } from "lucide-react";
 import { Panel, type PanelZoomProps } from "../Panel";
 import { useFin } from "./FinContext";
 import { useFinBoard, useFinMain } from "./useFinData";
 import { SkeletonRows } from "./SkeletonRows";
 import { TNUM, fmtYi } from "./utils";
+import { clsChg } from "@/lib/format";
+import { useElementSize } from "@/hooks/useElementSize";
+import { TabBar } from "../SharedUI";
 
 type Mode = "table" | "radar";
+const MODE_TABS: { key: Mode; label: string }[] = [
+  { key: "radar", label: "雷达" },
+  { key: "table", label: "表格" },
+];
 
 /** 数值比较条: 公司值 vs 行业均值, 相对宽度指示 */
 function CmpBar({ val, avg }: { val: number; avg: number }) {
@@ -23,8 +30,6 @@ function CmpBar({ val, avg }: { val: number; avg: number }) {
     </div>
   );
 }
-
-const pctCls = (v: number) => (v > 0 ? "text-rose-400" : v < 0 ? "text-emerald-400" : "text-slate-400");
 
 /** 计算前一个报告期(用于全市场完整数据的同业对比降级) */
 function prevPeriodFn(p: string): string {
@@ -105,7 +110,7 @@ export function FinPeerPanel({ className = "", ...zoomProps }: { className?: str
         rank: rankStr(peerPy, cmpPy),
         barVal: cmpPy,
         barAvg: avg(peerPy),
-        colorCls: pctCls(cmpPy),
+        colorCls: clsChg(cmpPy),
       },
       {
         label: "营收增速",
@@ -114,7 +119,7 @@ export function FinPeerPanel({ className = "", ...zoomProps }: { className?: str
         rank: rankStr(peerRy, cmpRy),
         barVal: cmpRy,
         barAvg: avg(peerRy),
-        colorCls: pctCls(cmpRy),
+        colorCls: clsChg(cmpRy),
       },
       {
         label: "ROE",
@@ -161,19 +166,7 @@ export function FinPeerPanel({ className = "", ...zoomProps }: { className?: str
       icon={<GitCompare size={14} />}
       accent="#a78bfa"
       right={
-        <div className="flex items-center gap-2 text-[10px]">
-          {(["radar", "table"] as Mode[]).map((m) => (
-            <button
-              key={m}
-              onClick={() => setMode(m)}
-              className={`flex h-[22px] items-center rounded px-2 ${
-                mode === m ? "bg-violet-500/20 text-violet-300" : "text-slate-400 hover:text-slate-200"
-              }`}
-            >
-              {m === "radar" ? "雷达" : "表格"}
-            </button>
-          ))}
-        </div>
+        <TabBar tabs={MODE_TABS} active={mode} onChange={setMode} accent="violet" />
       }
     >
       {!company.code ? (
@@ -254,19 +247,7 @@ export function FinPeerPanel({ className = "", ...zoomProps }: { className?: str
 /** 雷达图: SVG 多边形 + 轴标签, 自适应面板大小 */
 function RadarChart({ axes, companyName }: { axes: { label: string; company: number; peer: number }[]; companyName: string }) {
   const n = axes.length;
-  const boxRef = useRef<HTMLDivElement>(null);
-  const [size, setSize] = useState({ w: 300, h: 260 });
-
-  useEffect(() => {
-    const el = boxRef.current;
-    if (!el) return;
-    const ro = new ResizeObserver((es) => {
-      const r = es[0].contentRect;
-      if (r.width > 60 && r.height > 60) setSize({ w: r.width, h: r.height });
-    });
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
+  const { ref: boxRef, size } = useElementSize();
 
   if (n < 3) return <div className="flex h-full items-center justify-center text-[11px] text-slate-600">需要至少 3 项指标</div>;
 

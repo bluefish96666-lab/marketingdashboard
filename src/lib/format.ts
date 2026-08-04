@@ -1,5 +1,8 @@
 /** 格式化与涨跌配色(中国市场: 涨红 / 跌绿) */
 
+/** 等宽数字样式片段, 各面板统一使用 */
+export const TNUM = { fontVariantNumeric: "tabular-nums" } as const;
+
 export const fmtPct = (v: number, digits = 2) => `${v > 0 ? "+" : ""}${v.toFixed(digits)}%`;
 
 export const clsChg = (v: number) =>
@@ -22,6 +25,15 @@ export const fmtWan = (wan: number) => {
 export const fmtYuan = (y: number) => {
   const abs = Math.abs(y);
   if (abs >= 1e8) return `${(y / 1e8).toFixed(2)}亿`;
+  if (abs >= 1e4) return `${(y / 1e4).toFixed(0)}万`;
+  return y.toFixed(0);
+};
+
+/** 元 -> 千分位亿(财报榜单主列): 269900000000 → "2,699亿"; 不足亿 → 万 */
+export const fmtYi = (y: number) => {
+  if (!Number.isFinite(y) || y === 0) return "—";
+  const abs = Math.abs(y);
+  if (abs >= 1e8) return `${(y / 1e8).toLocaleString("zh-CN", { maximumFractionDigits: 0 })}亿`;
   if (abs >= 1e4) return `${(y / 1e4).toFixed(0)}万`;
   return y.toFixed(0);
 };

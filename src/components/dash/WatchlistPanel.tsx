@@ -3,33 +3,20 @@ import { Star } from "lucide-react";
 import { Panel, type PanelZoomProps } from "./Panel";
 import { QuoteRow } from "./QuoteRow";
 import { useQuote } from "@/lib/market";
-import { api, type StockSearchResult } from "@/lib/api";
+import { type StockSearchResult } from "@/lib/api";
 import { fmtWan } from "@/lib/format";
+import { normalizeStockCode } from "@/lib/code";
+import { loadJson, saveJson } from "@/lib/storage";
+import { useStockSearch } from "@/hooks/useStockSearch";
 
 const LS_KEY = "dash:watchlist";
 /** 默认自选: 沪硅产业 / 沪电股份 / 云天化 / 立讯精密 */
 const DEFAULT_LIST = ["sh688126", "sz002463", "sh600096", "sz002475"];
 
 function load(): string[] {
-  try {
-    const v = JSON.parse(localStorage.getItem(LS_KEY) || "null");
-    if (Array.isArray(v) && v.every((x) => typeof x === "string" && x)) return v;
-  } catch { /* 忽略损坏数据 */ }
+  const v = loadJson<string[] | null>(LS_KEY, null);
+  if (Array.isArray(v) && v.every((x) => typeof x === "string" && x)) return v;
   return DEFAULT_LIST;
-}
-
-/** 输入归一化为腾讯代码: 6→sh, 0/2/3→sz, 8→nq(新三板), 4/9→bj; 已带前缀则原样 */
-function normalizeCode(input: string): string | null {
-  const s = input.trim().toLowerCase();
-  if (/^(sh|sz|bj|nq)\d{6}$/.test(s)) return s;
-  if (/^\d{6}$/.test(s)) {
-    const c = s[0];
-    if (c === "6") return `sh${s}`;
-    if (c === "0" || c === "2" || c === "3") return `sz${s}`;
-    if (c === "8") return `nq${s}`;
-    return `bj${s}`;
-  }
-  return null;
 }
 
 /** 自选股行: 报价取自统一报价中心(名称/价格/额/换), memo 让未变化的行跳过重渲染 */
@@ -57,50 +44,26 @@ const WatchRow = memo(function WatchRow({
 /** 自选股 / 持仓面板 — localStorage 持久化, 报价经统一报价中心 */
 export function WatchlistPanel({ className = "", ...zoomProps }: { className?: string } & PanelZoomProps) {
   const [codes, setCodes] = useState<string[]>(load);
-  const [input, setInput] = useState("");
   const [invalid, setInvalid] = useState(false);
-  const [suggestions, setSuggestions] = useState<StockSearchResult[]>([]);
-  const [showSuggest, setShowSuggest] = useState(false);
-  const [highlightIdx, setHighlightIdx] = useState(-1);
   const suggestRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const {
+    input, setInput, triggerSearch,
+    suggestions, showSuggest, setShowSuggest,
+    highlightIdx, setHighlightIdx,
+    clear, onKeyDown,
+  } = useStockSearch();
 
   useEffect(() => {
-    try { localStorage.setItem(LS_KEY, JSON.stringify(codes)); } catch { /* 隐私模式/配额满时忽略 */ }
+    saveJson(LS_KEY, codes);
   }, [codes]);
 
-  // 卸载时清理搜索防抖定时器
-  useEffect(() => () => clearTimeout(timerRef.current), []);
-
-  // 防抖搜索
-  const triggerSearch = (val: string) => {
-    clearTimeout(timerRef.current);
-    const t = val.trim();
-    // 纯数字/代码格式不搜索
-    if (/^[\d]{3,6}$/.test(t) || /^(sh|sz|bj)\d{6}$/i.test(t)) {
-      setSuggestions([]);
-      setShowSuggest(false);
-      return;
-    }
-    if (t.length < 1) { setSuggestions([]); setShowSuggest(false); return; }
-    timerRef.current = setTimeout(async () => {
-      try {
-        const res = await api.stockSearch(t);
-        setSuggestions(res);
-        setShowSuggest(res.length > 0);
-        setHighlightIdx(-1);
-      } catch { setSuggestions([]); }
-    }, 200);
-  };
-
   const add = (code?: string) => {
-    const c = code || normalizeCode(input);
-    if (!c) { setInvalid(true); return; }
+    const c = code || normalizeStockCode(input);
+    const valid = /^(sh|sz|bj|nq)\d{6}$/.test(c);
+    if (!valid) { setInvalid(true); return; }
     setInvalid(false);
-    setInput("");
-    setSuggestions([]);
-    setShowSuggest(false);
+    clear();
     setCodes((cs) => (cs.includes(c) ? cs : [...cs, c]));
   };
 
@@ -112,29 +75,6 @@ export function WatchlistPanel({ className = "", ...zoomProps }: { className?: s
     setCodes((cs) => cs.filter((c) => c !== code));
   }, []);
 
-  const onKeyDown = (e: React.KeyboardEvent) => {
-    // 中文输入法选词期间的 Enter 不触发添加
-    if (e.nativeEvent.isComposing) return;
-    if (e.key === "Enter") {
-      if (showSuggest && highlightIdx >= 0 && highlightIdx < suggestions.length) {
-        pickSuggestion(suggestions[highlightIdx]);
-        return;
-      }
-      add();
-      return;
-    }
-    if (!showSuggest || suggestions.length === 0) return;
-    if (e.key === "ArrowDown") {
-      e.preventDefault();
-      setHighlightIdx((i) => (i + 1) % suggestions.length);
-    } else if (e.key === "ArrowUp") {
-      e.preventDefault();
-      setHighlightIdx((i) => (i <= 0 ? suggestions.length - 1 : i - 1));
-    } else if (e.key === "Escape") {
-      setShowSuggest(false);
-    }
-  };
-
   // 点击外部关闭建议
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -145,7 +85,7 @@ export function WatchlistPanel({ className = "", ...zoomProps }: { className?: s
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
-  }, []);
+  }, [setShowSuggest]);
 
   return (
     <Panel
@@ -163,7 +103,7 @@ export function WatchlistPanel({ className = "", ...zoomProps }: { className?: s
             ref={inputRef}
             value={input}
             onChange={(e) => { setInput(e.target.value); setInvalid(false); triggerSearch(e.target.value); }}
-            onKeyDown={onKeyDown}
+            onKeyDown={(e) => onKeyDown(e, pickSuggestion)}
             onFocus={() => suggestions.length > 0 && setShowSuggest(true)}
             placeholder="代码/名称/拼音, 如 688126 / 茅台 / gzmt"
             role="combobox"

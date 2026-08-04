@@ -3,10 +3,8 @@ import { Table } from "lucide-react";
 import { Panel, type PanelZoomProps } from "./Panel";
 import { useSharedPolling } from "@/hooks/useSharedPolling";
 import { api, type SpotRow } from "@/lib/api";
-import { clsChg, fmtPct, fmtPrice } from "@/lib/format";
+import { clsChg, fmtPct, fmtPrice, TNUM } from "@/lib/format";
 import { EXCH_SHORT } from "@/config/goods";
-
-const TNUM = { fontVariantNumeric: "tabular-nums" } as const;
 
 type SortKey = "name" | "spot" | "futures" | "basis" | "basisPct";
 const COLS: { key: SortKey; label: string; align?: "right" }[] = [

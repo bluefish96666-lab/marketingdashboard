@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { Building2 } from "lucide-react";
 import { Panel, type PanelZoomProps } from "../Panel";
 import { useFinBoard } from "./useFinData";
@@ -7,6 +7,8 @@ import { useFin } from "./FinContext";
 import { PeriodTabs } from "./PeriodTabs";
 import { SkeletonRows } from "./SkeletonRows";
 import { TNUM, fmtYi } from "./utils";
+import { useElementSize } from "@/hooks/useElementSize";
+import { TabBar } from "../SharedUI";
 
 const NAME_W = 64; // 行业名列宽
 const LABEL_W = 92; // 条右端双值预留
@@ -91,18 +93,7 @@ export function FinIndustryPanel({ className = "", ...zoomProps }: { className?:
   const [hover, setHover] = useState(-1);
   const [mode, setMode] = useState<"bar" | "tree">("tree");
 
-  const boxRef = useRef<HTMLDivElement>(null);
-  const [size, setSize] = useState({ w: 400, h: 260 });
-  useEffect(() => {
-    const el = boxRef.current;
-    if (!el) return;
-    const ro = new ResizeObserver((es) => {
-      const r = es[0].contentRect;
-      if (r.width > 60 && r.height > 60) setSize({ w: r.width, h: r.height });
-    });
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [data]); // 容器仅在拿到数据后挂载, 数据到达时重新挂观察
+  const { ref: boxRef, size } = useElementSize();
 
   const list = useMemo(() => (data?.industries ?? []).filter((d) => d.netProfit > 0).slice(0, 15), [data]);
 
@@ -142,17 +133,13 @@ export function FinIndustryPanel({ className = "", ...zoomProps }: { className?:
           <div className="flex items-center gap-2 text-[10px]">
             <PeriodTabs />
             <span className="h-3 w-px bg-slate-700" />
-            {(["bar", "tree"] as const).map((m) => (
-              <button
-                key={m}
-                onClick={() => setMode(m)}
-                className={`flex h-[22px] items-center rounded px-2 ${
-                  mode === m ? "bg-cyan-500/20 text-cyan-300" : "text-slate-400 hover:text-slate-200"
-                }`}
-              >
-                {m === "bar" ? "条形" : "树状"}
-              </button>
-            ))}
+            <TabBar
+              tabs={[{ key: "bar" as const, label: "条形" }, { key: "tree" as const, label: "树状" }]}
+              active={mode}
+              onChange={setMode}
+              accent="cyan"
+              size="xs"
+            />
             {data?.disclosed != null && (
               <span className="text-[9px] text-slate-500" style={TNUM}>
                 已披露{data.disclosed}家

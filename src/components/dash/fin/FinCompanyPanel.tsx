@@ -1,25 +1,24 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { FileText } from "lucide-react";
 import { Panel, type PanelZoomProps } from "../Panel";
 import { useFinMain } from "./useFinData";
-import { api, type StockSearchResult } from "@/lib/api";
+import { clsChg } from "@/lib/format";
 import { useFin } from "./FinContext";
 import { SkeletonRows } from "./SkeletonRows";
 import { TNUM, fmtYi, prefixCode, quarterLabel } from "./utils";
-
-const pctCls = (v: number) => (v > 0 ? "text-rose-400" : v < 0 ? "text-emerald-400" : "text-slate-400");
+import { useStockSearch } from "@/hooks/useStockSearch";
 
 /** 公司财报: 搜索框 + 最近查看 chips + 最新报告期指标卡 2×3 */
 export function FinCompanyPanel({ className = "", ...zoomProps }: { className?: string } & PanelZoomProps) {
   const { company, recent, select } = useFin();
   const { data, error, loading, retry } = useFinMain(company.code);
 
-  const [input, setInput] = useState("");
-  const [suggestions, setSuggestions] = useState<StockSearchResult[]>([]);
-  const [showSuggest, setShowSuggest] = useState(false);
   const boxRef = useRef<HTMLDivElement>(null);
-  const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
-  useEffect(() => () => clearTimeout(timerRef.current), []);
+  const {
+    input, triggerSearch,
+    suggestions, showSuggest, setShowSuggest,
+    onKeyDown,
+  } = useStockSearch();
 
   // 点击外部关闭候选
   useEffect(() => {
@@ -28,43 +27,11 @@ export function FinCompanyPanel({ className = "", ...zoomProps }: { className?: 
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
-  }, []);
+  }, [setShowSuggest]);
 
-  const triggerSearch = (val: string) => {
-    setInput(val);
-    clearTimeout(timerRef.current);
-    const t = val.trim();
-    if (t.length < 1) {
-      setSuggestions([]);
-      setShowSuggest(false);
-      return;
-    }
-    timerRef.current = setTimeout(async () => {
-      try {
-        const res = await api.stockSearch(t);
-        setSuggestions(res.slice(0, 8));
-        setShowSuggest(res.length > 0);
-      } catch {
-        setSuggestions([]);
-      }
-    }, 200);
-  };
-
-  const pick = (code: string, name: string) => {
-    select(prefixCode(code), name);
-    setInput("");
-    setSuggestions([]);
+  const pickSuggestion = (s: { code: string; name: string }) => {
+    select(prefixCode(s.code), s.name);
     setShowSuggest(false);
-  };
-
-  const onKeyDown = (e: React.KeyboardEvent) => {
-    if (e.nativeEvent.isComposing) return;
-    if (e.key === "Enter") {
-      if (suggestions.length > 0) pick(suggestions[0].code, suggestions[0].name);
-      else if (/^(sh|sz|bj)?\d{6}$/i.test(input.trim())) pick(input.trim(), input.trim());
-    } else if (e.key === "Escape") {
-      setShowSuggest(false);
-    }
   };
 
   const r0 = data?.reports?.[0];
@@ -85,7 +52,7 @@ export function FinCompanyPanel({ className = "", ...zoomProps }: { className?: 
           <input
             value={input}
             onChange={(e) => triggerSearch(e.target.value)}
-            onKeyDown={onKeyDown}
+            onKeyDown={(e) => onKeyDown(e, pickSuggestion)}
             onFocus={() => suggestions.length > 0 && setShowSuggest(true)}
             placeholder="输入代码/名称"
             className="h-[24px] w-full rounded bg-slate-800/60 px-2 text-[11px] text-slate-200 placeholder:text-[9px] placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-cyan-500/50"
@@ -95,7 +62,7 @@ export function FinCompanyPanel({ className = "", ...zoomProps }: { className?: 
               {suggestions.map((s) => (
                 <button
                   key={s.code}
-                  onClick={() => pick(s.code, s.name)}
+                  onClick={() => pickSuggestion(s)}
                   className="flex h-[22px] w-full items-center gap-2 px-2 text-left hover:bg-slate-800/50"
                 >
                   <span className="w-[62px] shrink-0 text-[9px] text-slate-500" style={TNUM}>
@@ -153,8 +120,8 @@ export function FinCompanyPanel({ className = "", ...zoomProps }: { className?: 
               </span>
             </div>
             <div className="grid min-h-0 flex-1 grid-cols-3 content-start gap-1">
-              <Card label="营收" value={fmtYi(r0.revenue)} sub={`${r0.revenueYoY > 0 ? "+" : ""}${r0.revenueYoY.toFixed(1)}%`} subCls={pctCls(r0.revenueYoY)} />
-              <Card label="净利" value={fmtYi(r0.netProfit)} sub={`${r0.profitYoY > 0 ? "+" : ""}${r0.profitYoY.toFixed(1)}%`} subCls={pctCls(r0.profitYoY)} />
+              <Card label="营收" value={fmtYi(r0.revenue)} sub={`${r0.revenueYoY > 0 ? "+" : ""}${r0.revenueYoY.toFixed(1)}%`} subCls={clsChg(r0.revenueYoY)} />
+              <Card label="净利" value={fmtYi(r0.netProfit)} sub={`${r0.profitYoY > 0 ? "+" : ""}${r0.profitYoY.toFixed(1)}%`} subCls={clsChg(r0.profitYoY)} />
               <Card label="ROE" value={`${r0.roe.toFixed(1)}%`} />
               <Card label="EPS" value={r0.eps.toFixed(2)} />
               <Card label="毛利率" value={`${r0.grossMargin.toFixed(0)}%`} />

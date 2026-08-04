@@ -6,6 +6,7 @@ import { usePolling } from "@/hooks/usePolling";
 import { api, type Board } from "@/lib/api";
 import { clsChg, fmtPct, fmtYuan, hexChg } from "@/lib/format";
 import { isTv } from "@/lib/tv";
+import { TabBar } from "./SharedUI";
 
 type Kind = "01" | "02";
 
@@ -125,25 +126,21 @@ export function SectorPanel({ className = "", ...zoomProps }: { className?: stri
           >
             轮播
           </button>
-          {([["01", "行业"], ["02", "概念"]] as [Kind, string][]).map(([k, label]) => (
-            <button
-              key={k}
-              onClick={() => { setKind(k); setAuto(true); }}
-              className={`rounded px-2 py-0.5 ${kind === k ? "bg-cyan-500/20 text-cyan-300" : "text-slate-400 hover:text-slate-200"}`}
-            >
-              {label}
-            </button>
-          ))}
+          <TabBar
+            tabs={[{ key: "01" as Kind, label: "行业" }, { key: "02" as Kind, label: "概念" }]}
+            active={kind}
+            onChange={(k) => { setKind(k); setAuto(true); }}
+            accent="cyan"
+            size="xs"
+          />
           <span className="mx-1 h-3 w-px bg-slate-700" />
-          {([0, 1] as const).map((d) => (
-            <button
-              key={d}
-              onClick={() => setDir(d)}
-              className={`rounded px-2 py-0.5 ${dir === d ? "bg-cyan-500/20 text-cyan-300" : "text-slate-400 hover:text-slate-200"}`}
-            >
-              {d === 0 ? "领涨" : "领跌"}
-            </button>
-          ))}
+          <TabBar
+            tabs={[{ key: 0 as const, label: "领涨" }, { key: 1 as const, label: "领跌" }]}
+            active={dir}
+            onChange={setDir}
+            accent="cyan"
+            size="xs"
+          />
         </div>
       }
     >

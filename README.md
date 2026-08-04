@@ -174,12 +174,26 @@ During development the frontend talks to the local proxy via `/api`:
 │   ├── FinDashboard.tsx   # Earnings window page (panels in components/dash/fin/)
 │   ├── GoodsDashboard.tsx # Commodity prices page (6-group trend panels + spot/basis panel)
 │   ├── components/
-│   │   └── dash/      # Cockpit panels (indices / sectors / money flow / news / industry chains / AI cockpit / watchlist / commodity trends…)
-│   │       ├── Spark.tsx       # Mini sparklines (A-share session axis / 24h continuous axis / evenly-spaced daily)
-│   │       └── WatchlistPanel.tsx  # Watchlist panel (name/pinyin search, localStorage persistence)
-│   ├── config/        # Static config for indices, commodities, industry chains
-│   ├── hooks/         # usePolling / useSharedPolling / useClock and other shared hooks
-│   └── lib/           # API client, unified quote hub (market.ts) and utilities
+│   │   └── dash/      # Cockpit panels + shared UI primitives
+│   │       ├── fin/       # Earnings window panels (calendar, forecast, industry rank, stock rank, company, trend, peer comparison)
+│   │       │   ├── FinContext.ts     # Shared company selection & reporting period state
+│   │       │   └── utils.ts          # quarterLabel, forecastTone (re-exports from lib/)
+│   │       ├── Spark.tsx       # Mini sparklines (A-share / 24h continuous / daily session axes)
+│   │       ├── SharedUI.tsx    # TabBar (segmented control), AsyncContent (loading/error/empty wrapper)
+│   │       └── ...
+│   ├── config/        # Static config for indices, commodities, industry chains, goods groups
+│   ├── hooks/         # Shared hooks
+│   │   ├── usePolling.ts       # Per-component polling (hidden-tab pause, inflight guard)
+│   │   ├── useSharedPolling.ts # Same-key components share one timer via useSyncExternalStore
+│   │   ├── useElementSize.ts   # ResizeObserver → {ref, size} for SVG auto-sizing
+│   │   ├── useStockSearch.ts   # Debounced search + dropdown + keyboard nav for stock pickers
+│   │   └── ...
+│   └── lib/           # API client, unified quote hub, shared utilities
+│       ├── market.ts      # MarketHub: reference-counted quote subscriptions, single 5s poll loop
+│       ├── api.ts         # Typed fetch wrappers (server-first, browser-direct fallback)
+│       ├── format.ts      # fmtPrice, fmtPct, fmtYi, fmtWan, clsChg, hexChg, TNUM…
+│       ├── code.ts        # normalizeStockCode / toMarketCode — stock code prefix normalization
+│       └── storage.ts     # loadJson / saveJson — typed localStorage with error handling
 └── docs/              # Screenshots and other doc assets
 ```
 

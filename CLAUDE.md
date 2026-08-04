@@ -28,6 +28,14 @@ npm run preview  # Vite preview of dist/
 
 **Unified quote hub** (`src/lib/market.ts`): All panel prices/changes come from a single client-side `MarketHub`. Components subscribe via `useQuote(code)` / `useQuotes(codes)`, which use reference-counting and a single 5s polling loop. The same ticker renders the same frame everywhere — no per-panel duplicate fetches.
 
+**Shared modules** — when adding a new panel, reuse these instead of copying from existing panels:
+- `src/lib/code.ts` — `normalizeStockCode(raw)` / `toMarketCode(raw)` for stock code prefix normalization (do NOT write another 6→sh / 0/2/3→sz mapper)
+- `src/lib/storage.ts` — `loadJson<T>(key, fallback)` / `saveJson(key, value)` for localStorage persistence (do NOT hand-write try-catch JSON.parse/setItem)
+- `src/lib/format.ts` — `TNUM` (tabular-nums style), `clsChg` (red/green color), `fmtYi`/`fmtWan`/`fmtYuan`/`fmtPct`/`fmtPrice` — all formatting + coloring in one place
+- `src/hooks/useElementSize.ts` — `useElementSize(threshold?)` returns `{ ref, size }` for SVG auto-sizing (do NOT hand-write ResizeObserver + useState boilerplate)
+- `src/hooks/useStockSearch.ts` — `useStockSearch()` returns debounced search state + keyboard navigation for stock picker inputs
+- `src/components/dash/SharedUI.tsx` — `TabBar<T>` (segmented control, accent + variant props) and `AsyncContent` (loading skeleton / error+retry / empty / content wrapper) (do NOT copy-paste tab buttons or error templates)
+
 **Panel layout** (`src/components/dash/DashboardLayout.tsx`): The cockpit is a grid of resizable `Panel` components arranged in rows. `DashboardLayout` reads `PanelRowDef[]` (row height ratios + per-panel width ratios) and renders panels wrapped in `React.memo` so zooming one panel doesn't re-render siblings. Panel zoom state is managed by `usePanelZoom` hook.
 
 **Data hooks** — two polling patterns:

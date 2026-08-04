@@ -5,10 +5,9 @@ import { usePolling } from "@/hooks/usePolling";
 import { useQuotes, type HubQuote } from "@/lib/market";
 import { api, type MinuteData } from "@/lib/api";
 import { INDICES, FOREX, type IndexDef } from "@/config/dashboard";
-import { bgChg, clsChg, fmtPct, fmtPrice, fmtWan } from "@/lib/format";
+import { bgChg, clsChg, fmtPct, fmtPrice, fmtWan, TNUM } from "@/lib/format";
 
 const ALL_CODES = [...INDICES.map((i) => i.code), ...FOREX.map((i) => i.code)];
-const TNUM = { fontVariantNumeric: "tabular-nums" } as const;
 
 function IndexRow({ def, q, minute }: { def: IndexDef; q?: HubQuote; minute?: MinuteData }) {
   return (

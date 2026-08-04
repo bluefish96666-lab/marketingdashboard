@@ -6,6 +6,7 @@ import { usePolling } from "@/hooks/usePolling";
 import { api } from "@/lib/api";
 import { fmtYuan } from "@/lib/format";
 import { isTv } from "@/lib/tv";
+import { TabBar } from "./SharedUI";
 
 type Tab = "hot" | "up" | "down";
 const TABS: { key: Tab; label: string; sort: "amount" | "changepercent"; asc: 0 | 1 }[] = [
@@ -28,17 +29,7 @@ export function RankPanel({ className = "", ...zoomProps }: { className?: string
       icon={<ListOrdered size={14} />}
       accent="#fbbf24"
       right={
-        <div className="flex items-center gap-1 text-[11px]">
-          {TABS.map((t) => (
-            <button
-              key={t.key}
-              onClick={() => setTab(t.key)}
-              className={`rounded px-2 py-0.5 ${tab === t.key ? "bg-amber-500/20 text-amber-300" : "text-slate-400 hover:text-slate-200"}`}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
+        <TabBar tabs={TABS} active={tab} onChange={setTab} accent="amber" />
       }
     >
       <div className="h-full overflow-y-auto p-1.5">

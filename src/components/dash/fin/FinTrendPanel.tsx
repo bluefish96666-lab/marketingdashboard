@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { TrendingUp } from "lucide-react";
 import { Panel, type PanelZoomProps } from "../Panel";
 import { useFinMain } from "./useFinData";
@@ -6,6 +6,8 @@ import { type FinanceReport } from "@/lib/api";
 import { useFin } from "./FinContext";
 import { SkeletonRows } from "./SkeletonRows";
 import { TNUM, quarterLabel } from "./utils";
+import { useElementSize } from "@/hooks/useElementSize";
+import { TabBar } from "../SharedUI";
 
 type Tab = "perf" | "quality" | "leverage";
 const TABS: { key: Tab; label: string }[] = [
@@ -36,18 +38,7 @@ function alignZero(aMin: number, aMax: number, bMin: number, bMax: number) {
 }
 
 function TrendChart({ reports, tab }: { reports: FinanceReport[]; tab: Tab }) {
-  const boxRef = useRef<HTMLDivElement>(null);
-  const [size, setSize] = useState({ w: 500, h: 260 });
-  useEffect(() => {
-    const el = boxRef.current;
-    if (!el) return;
-    const ro = new ResizeObserver((es) => {
-      const r = es[0].contentRect;
-      if (r.width > 60 && r.height > 60) setSize({ w: r.width, h: r.height });
-    });
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
+  const { ref: boxRef, size } = useElementSize();
 
   const chart = useMemo(() => {
     const rows = reports.slice(0, 12).reverse(); // 接口为报告期倒序, 翻转为时间正序
@@ -321,19 +312,7 @@ export function FinTrendPanel({ className = "", ...zoomProps }: { className?: st
       icon={<TrendingUp size={14} />}
       accent="#22d3ee"
       right={
-        <div className="flex items-center gap-2 text-[10px]">
-          {TABS.map((t) => (
-            <button
-              key={t.key}
-              onClick={() => setTab(t.key)}
-              className={`flex h-[22px] items-center border-b-2 px-2 ${
-                tab === t.key ? "border-cyan-400 text-cyan-300" : "border-transparent text-slate-500 hover:text-slate-300"
-              }`}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
+        <TabBar tabs={TABS} active={tab} onChange={setTab} accent="cyan" variant="underline" />
       }
     >
       {!company.code ? (

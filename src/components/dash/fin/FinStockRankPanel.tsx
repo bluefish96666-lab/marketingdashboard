@@ -8,8 +8,13 @@ import { useFin } from "./FinContext";
 import { PeriodTabs } from "./PeriodTabs";
 import { SkeletonRows } from "./SkeletonRows";
 import { TNUM, fmtYi, prefixCode } from "./utils";
+import { TabBar } from "../SharedUI";
 
 type Tab = "profit" | "growth";
+const TABS: { key: Tab; label: string }[] = [
+  { key: "profit", label: "净利额" },
+  { key: "growth", label: "增速" },
+];
 const RANK_COLORS = ["#fbbf24", "#fb7185", "#22d3ee"]; // 前三名 amber/rose/cyan
 
 /** 个股盈利榜 TOP20: 净利额 | 增速 双 Tab, 行内相对值底条, 点击载入公司 */
@@ -40,22 +45,7 @@ export function FinStockRankPanel({ className = "", ...zoomProps }: { className?
         <div className="flex items-center gap-2 text-[10px]">
           <PeriodTabs />
           <span className="h-3 w-px bg-slate-700" />
-          {(
-            [
-              { key: "profit", label: "净利额" },
-              { key: "growth", label: "增速" },
-            ] as { key: Tab; label: string }[]
-          ).map((t) => (
-            <button
-              key={t.key}
-              onClick={() => setTab(t.key)}
-              className={`flex h-[22px] items-center border-b-2 px-2 ${
-                tab === t.key ? "border-cyan-400 text-cyan-300" : "border-transparent text-slate-500 hover:text-slate-300"
-              }`}
-            >
-              {t.label}
-            </button>
-          ))}
+          <TabBar tabs={TABS} active={tab} onChange={setTab} accent="cyan" variant="underline" />
         </div>
       }
     >

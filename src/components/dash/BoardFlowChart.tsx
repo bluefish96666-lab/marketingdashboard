@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo } from "react";
 import type { BoardFlow } from "@/lib/api";
-
-const TNUM = { fontVariantNumeric: "tabular-nums" } as const;
+import { TNUM } from "@/lib/format";
+import { useElementSize } from "@/hooks/useElementSize";
 
 /** 流入红色系 / 流出绿色系(按排名渐变) */
 const REDS = ["#fb7185", "#f43f5e", "#fca5a5", "#fb923c", "#fdba74", "#e11d48", "#fecdd3", "#fda4af", "#fcd34d", "#fbbf24"];
@@ -27,18 +27,7 @@ const END_LABEL_W = 86;
  *  progress: 0..1 播放进度(重放用), 1 = 全天
  *  labelMode: "end" 端点标签+标线(默认) / "legend" 图下方图例 */
 export function BoardFlowChart({ flows, progress = 1, labelMode = "end" }: { flows: BoardFlow[]; progress?: number; labelMode?: "end" | "legend" }) {
-  const boxRef = useRef<HTMLDivElement>(null);
-  const [size, setSize] = useState({ w: 400, h: 300 });
-  useEffect(() => {
-    const el = boxRef.current;
-    if (!el) return;
-    const ro = new ResizeObserver((entries) => {
-      const r = entries[0].contentRect;
-      if (r.width > 60 && r.height > 60) setSize({ w: r.width, h: r.height });
-    });
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
+  const { ref: boxRef, size } = useElementSize();
 
   const chart = useMemo(() => {
     const series = flows.filter((f) => f.points.length > 2);

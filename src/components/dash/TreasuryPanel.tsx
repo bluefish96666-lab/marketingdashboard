@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo } from "react";
 import { Panel, type PanelZoomProps } from "./Panel";
 import { usePolling } from "@/hooks/usePolling";
 import { Landmark } from "lucide-react";
 import { useSharedPolling } from "@/hooks/useSharedPolling";
 import { api, type Treasury } from "@/lib/api";
 import { clsChg } from "@/lib/format";
+import { useElementSize } from "@/hooks/useElementSize";
 
 const ORDER = ["US3M", "US6M", "US1Y", "US2Y", "US3Y", "US5Y", "US7Y", "US10Y", "US20Y", "US30Y"];
 const LABEL: Record<string, string> = {
@@ -29,18 +30,7 @@ export function TreasuryPanel({ className = "", ...zoomProps }: { className?: st
   const { data: hist } = usePolling(() => api.treasuryHistory(), 3600000);
 
   // 容器实际像素尺寸 — SVG 坐标按真实尺寸计算, 避免 viewBox 拉伸导致文字变形
-  const boxRef = useRef<HTMLDivElement>(null);
-  const [size, setSize] = useState({ w: 560, h: 130 });
-  useEffect(() => {
-    const el = boxRef.current;
-    if (!el) return;
-    const ro = new ResizeObserver((entries) => {
-      const r = entries[0].contentRect;
-      if (r.width > 40 && r.height > 40) setSize({ w: r.width, h: r.height });
-    });
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
+  const { ref: boxRef, size } = useElementSize();
 
   const rows = useMemo(
     () => (data ? ORDER.map((s) => data.find((d) => d.symbol === s)).filter(Boolean) as Treasury[] : []),

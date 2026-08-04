@@ -9,33 +9,14 @@ import { api, type MysteryStock, type NewsItem } from "@/lib/api";
 import { canonBoardName, unionBoards } from "@/lib/boards";
 import { CHAINS } from "@/config/dashboard";
 import type { Chain, ChainStock } from "@/config/dashboard";
-import { clsChg, fmtPct, fmtTime, fmtWan } from "@/lib/format";
+import { clsChg, fmtPct, fmtTime, fmtWan, TNUM } from "@/lib/format";
+import { toMarketCode } from "@/lib/code";
+import { loadJson, saveJson } from "@/lib/storage";
 
-const TNUM = { fontVariantNumeric: "tabular-nums" } as const;
 const CHAIN_OVERRIDES_KEY = "market-dashboard.chain-overrides.v2";
 const CUSTOM_CHAINS_KEY = "market-dashboard.custom-chains";
-
-function loadJson<T>(key: string, fallback: T): T {
-  if (typeof window === "undefined") return fallback;
-  try { const raw = window.localStorage.getItem(key); return raw ? JSON.parse(raw) as T : fallback; } catch { return fallback; }
-}
-function saveJson(key: string, value: unknown) {
-  if (typeof window === "undefined") return;
-  try { window.localStorage.setItem(key, JSON.stringify(value)); } catch { /* 隐私模式/配额满时静默失败 */ }
-}
-
-function marketCode(code: string) {
-  const raw = String(code || "").trim().toLowerCase();
-  if (/^(hk|us)/.test(raw)) return "";
-  const c = raw.replace(/\D/g, "").slice(-6).padStart(6, "0");
-  if (!c || c === "000000") return "";
-  if (/^6/.test(c)) return `sh${c}`;
-  if (/^[03]/.test(c)) return `sz${c}`;
-  if (/^[489]/.test(c)) return `bj${c}`;
-  return c;
-}
 function toChainStock(row: MysteryStock, tag: string): ChainStock | null {
-  const code = marketCode(row.code);
+  const code = toMarketCode(row.code);
   if (!code) return null;
   return { code, name: row.name, tag };
 }

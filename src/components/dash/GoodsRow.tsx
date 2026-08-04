@@ -1,8 +1,6 @@
 import { memo } from "react";
 import { Spark } from "./Spark";
-import { bgChg, clsChg, fmtPct, fmtPrice } from "@/lib/format";
-
-const TNUM = { fontVariantNumeric: "tabular-nums" } as const;
+import { bgChg, clsChg, fmtPct, fmtPrice, TNUM } from "@/lib/format";
 
 export interface GoodsRowProps {
   name: string;

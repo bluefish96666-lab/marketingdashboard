@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { Panel, type PanelZoomProps } from "../Panel";
 import { useFinBoard } from "./useFinData";
 import { type FinCalendarItem } from "@/lib/api";
@@ -6,6 +6,7 @@ import { useFin } from "./FinContext";
 import { SkeletonRows } from "./SkeletonRows";
 import { CalendarDays, Star } from "lucide-react";
 import { TNUM, prefixCode, quarterLabel } from "./utils";
+import { useElementSize } from "@/hooks/useElementSize";
 
 const DAY = 86400000;
 const STRIP_H = 40; // 顶部柱带总高(柱区 + 8px 刻度行)
@@ -23,18 +24,8 @@ export function FinCalendarPanel({ className = "", ...zoomProps }: { className?:
   const { data, error, loading, retry } = useFinBoard(period);
   const { select } = useFin();
 
-  const boxRef = useRef<HTMLDivElement>(null);
-  const [w, setW] = useState(160);
-  useEffect(() => {
-    const el = boxRef.current;
-    if (!el) return;
-    const ro = new ResizeObserver((es) => {
-      const r = es[0].contentRect;
-      if (r.width > 40) setW(r.width);
-    });
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [data]); // 容器仅在拿到数据后挂载, 数据到达时重新挂观察
+  const { ref: boxRef, size } = useElementSize(40);
+  const w = size.w;
 
   const view = useMemo(() => {
     const cal = data?.calendar ?? [];

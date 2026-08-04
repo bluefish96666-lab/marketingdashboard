@@ -3,10 +3,8 @@ import { usePolling } from "@/hooks/usePolling";
 import { useQuote } from "@/lib/market";
 import { api } from "@/lib/api";
 import { Spark } from "./Spark";
-import { clsChg, fmtPct, fmtPrice, fmtYuan } from "@/lib/format";
+import { clsChg, fmtPct, fmtPrice, fmtYuan, TNUM } from "@/lib/format";
 import { isTv } from "@/lib/tv";
-
-const TNUM = { fontVariantNumeric: "tabular-nums" } as const;
 
 /** 数据格: 9px 标签 + 11px 数值, flex 垂直居中(高度全行一致) */
 function Stat({ label, value, valueCls = "text-slate-300" }: { label?: string; value: ReactNode; valueCls?: string }) {
