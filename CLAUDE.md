@@ -12,6 +12,15 @@ npm run lint     # ESLint on all TS/TSX files
 npm run preview  # Vite preview of dist/
 ```
 
+### Release workflow
+
+When the user asks to publish a release ("发版", "release", "publish"):
+
+1. Determine the bump: `patch` (bug fixes), `minor` (new features), or `major` (breaking changes). Ask if unsure.
+2. Run `npm version <bump>` — this increments `package.json`, commits, and creates the tag in one step.
+3. Push: `git push origin main --follow-tags`
+4. Create the GitHub release with `gh release create v<version> --generate-notes`. Pass `--notes` explicitly only when the auto-generated notes need custom content (e.g. Chinese release notes for this project).
+
 ## Architecture
 
 **Frontend**: React 19 + Vite 7 + TypeScript + Tailwind CSS (shadcn/ui theme). Charts are hand-written SVG (no charting library). Path alias `@/` maps to `src/`.
