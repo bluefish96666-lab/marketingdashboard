@@ -23,7 +23,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         window.minSize = NSSize(width: 1024, height: 700)
         window.appearance = NSAppearance(named: .darkAqua)
         window.backgroundColor = NSColor(red: 7/255, green: 11/255, blue: 18/255, alpha: 1)
-        window.titlebarAppearsTransparent = true
 
         let config = WKWebViewConfiguration()
         webView = WKWebView(frame: .zero, configuration: config)

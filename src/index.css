@@ -152,12 +152,6 @@ header.titlebar button {
   app-region: no-drag;
 }
 
-/* ===== macOS 桌面模式(?desktop=1, Swift WKWebView + Overlay 标题栏) ===== */
-.desktop header.titlebar {
-  -webkit-user-select: none;
-  user-select: none;
-}
-
 /* ===== TV 模式(安卓电视壳 App, ?tv=1 启用) ===== */
 /* 过扫描安全边距: #root 限高并隐藏溢出, 不影响桌面端一屏布局 */
 .tv #root {
