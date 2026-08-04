@@ -153,16 +153,26 @@ header.titlebar button {
 }
 
 /* ===== macOS 桌面模式(?desktop=1, Tauri Overlay 标题栏) ===== */
-.desktop header.titlebar {
+/* 拖拽区: body 顶部的透明条, 不拦截双击事件 */
+.desktop body::before {
+  content: "";
+  display: block;
+  height: 32px;
+  width: 100%;
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 100;
   -webkit-app-region: drag;
   app-region: drag;
+}
+.desktop header.titlebar {
   padding-left: 80px; /* 左侧红绿灯按钮宽度 */
 }
 .desktop header.titlebar button,
 .desktop header.titlebar a,
 .desktop header.titlebar input {
-  -webkit-app-region: no-drag;
-  app-region: no-drag;
+  -webkit-app-region: drag;
 }
 
 /* ===== TV 模式(安卓电视壳 App, ?tv=1 启用) ===== */
