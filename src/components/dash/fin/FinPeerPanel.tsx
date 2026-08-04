@@ -26,36 +26,49 @@ function CmpBar({ val, avg }: { val: number; avg: number }) {
 
 const pctCls = (v: number) => (v > 0 ? "text-rose-400" : v < 0 ? "text-emerald-400" : "text-slate-400");
 
+/** 计算前一个报告期(用于全市场完整数据的同业对比降级) */
+function prevPeriodFn(p: string): string {
+  const y = parseInt(p.slice(0, 4));
+  const md = p.slice(4);
+  const map: Record<string, string> = { "-03-31": "-12-31", "-06-30": "-03-31", "-09-30": "-06-30", "-12-31": "-09-30" };
+  return `${md === "-03-31" ? y - 1 : y}${map[md] || "-06-30"}`;
+}
+
 /** 同行对比: 表格(公司指标 vs 行业均值/排名) + 雷达图 */
 export function FinPeerPanel({ className = "", ...zoomProps }: { className?: string } & PanelZoomProps) {
   const [mode, setMode] = useState<Mode>("radar");
   const { company, period } = useFin();
 
   const { data: board, error: boardErr, loading: boardLoading, retry: retryBoard } = useFinBoard(period);
+  // 降级期: 当前期 peer 太少时用上一期全市场数据做同业对比
+  const prevPeriod = prevPeriodFn(period);
+  const { data: prevBoard, loading: prevLoading } = useFinBoard(prevPeriod);
   const { data: finData, error: finErr, loading: finLoading, retry: retryMain } = useFinMain(company.code);
 
-  const loading = boardLoading || finLoading;
+  const loading = boardLoading || finLoading || prevLoading;
   const error = boardErr || finErr;
   const retry = () => { retryBoard(); retryMain(); };
 
-  // 在 board 中匹配公司（尝试多种代码格式 + 名称匹配）
   const peerData = useMemo(() => {
     if (!board?.stocks?.length || !finData?.reports?.[0]) return null;
     const bare = company.code.replace(/^(sh|sz|bj)/, "");
     let companyInBoard = board.stocks.find(
       (s) => s.code === bare || s.code === company.code || s.code === `${bare}.${company.code.startsWith("sh") ? "SH" : company.code.startsWith("sz") ? "SZ" : "BJ"}`
     );
-    // 代码匹配失败时尝试名称匹配
     if (!companyInBoard) {
       companyInBoard = board.stocks.find((s) => s.name === company.name || s.name === finData.name);
     }
-    // 仍未匹配: 用 finance-main 返回的行业名查找 peer 列表
     const finIndustry = finData.industry || "";
 
     if (!companyInBoard && !finIndustry) return { industry: null, comparisons: null, count: 0 };
 
     const industry = companyInBoard?.industry || finIndustry;
-    const peers = board.stocks.filter((s) => s.industry === industry);
+    const curPeers = board.stocks.filter((s) => s.industry === industry);
+
+    // 当期 peer 太少(<3)时降级使用上一期全市场数据
+    const usePrev = curPeers.length < 3 && prevBoard?.stocks?.length;
+    const peerSource = usePrev ? prevBoard! : board;
+    const peers = peerSource.stocks.filter((s) => s.industry === industry);
     const count = peers.length;
     const avg = (arr: number[]) => (arr.length > 0 ? arr.reduce((a, b) => a + b, 0) / arr.length : 0);
     const rank = (arr: number[], val: number) => arr.filter((v) => v > val).length + 1;
@@ -67,7 +80,6 @@ export function FinPeerPanel({ className = "", ...zoomProps }: { className?: str
     const peerRy = peers.map((s) => s.revenueYoY);
 
     const r0 = finData.reports[0];
-    // 公司在榜内则取榜内数值(用于排名), 否则用 finance-main 的值(仅对比不排名)
     const cmpNp = companyInBoard ? companyInBoard.netProfit : r0.netProfit;
     const cmpRoe = companyInBoard ? companyInBoard.roe : r0.roe;
     const cmpEps = companyInBoard ? companyInBoard.eps : r0.eps;
@@ -75,7 +87,7 @@ export function FinPeerPanel({ className = "", ...zoomProps }: { className?: str
     const cmpRy = companyInBoard ? companyInBoard.revenueYoY : r0.revenueYoY;
 
     const rankStr = (arr: number[], val: number) =>
-      companyInBoard ? `${rank(arr, val)}/${count}` : "—";
+      companyInBoard && !usePrev ? `${rank(arr, val)}/${count}` : "—";
 
     const comparisons = [
       {
@@ -122,8 +134,8 @@ export function FinPeerPanel({ className = "", ...zoomProps }: { className?: str
       },
     ];
 
-    return { industry, comparisons, count, inBoard: !!companyInBoard };
-  }, [board, finData, company.code, company.name]);
+    return { industry, comparisons, count, inBoard: !!companyInBoard, usePrev };
+  }, [board, prevBoard, finData, company.code, company.name]);
 
   // 雷达图数据: 归一化到 0-1, 公司 vs 行业均值
   const radarData = useMemo(() => {
@@ -190,10 +202,13 @@ export function FinPeerPanel({ className = "", ...zoomProps }: { className?: str
             <span className="text-[11px] font-semibold text-violet-300">{peerData.industry}</span>
             <span className="text-[9px] text-slate-500">
               共 {peerData.count} 家
-              {peerData.inBoard && peerData.count > 0 ? " · 排名第" : ""}
+              {peerData.inBoard && !peerData.usePrev && peerData.count > 0 ? " · 排名第" : ""}
             </span>
             {!peerData.inBoard && (
               <span className="text-[8px] text-amber-400/70">(未入榜,仅对比均值)</span>
+            )}
+            {peerData.usePrev && (
+              <span className="text-[8px] text-amber-400/70">(当期样本不足,引用上期全市场数据)</span>
             )}
           </div>
           {/* 表头 */}
