@@ -164,13 +164,6 @@ header.titlebar button {
   -webkit-app-region: no-drag;
   app-region: no-drag;
 }
-/* 补偿 Overlay 标题栏的 32px: 所有 h-screen/min-h-screen 元素减去红绿灯高度 */
-.desktop .h-screen,
-.desktop .min-h-screen,
-.desktop .lg\:h-screen {
-  height: calc(100vh - var(--dt-pt, 32px));
-  min-height: calc(100vh - var(--dt-pt, 32px));
-}
 
 /* ===== TV 模式(安卓电视壳 App, ?tv=1 启用) ===== */
 /* 过扫描安全边距: #root 限高并隐藏溢出, 不影响桌面端一屏布局 */

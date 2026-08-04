@@ -9,7 +9,8 @@ fn make_init_script(cfg: &Config) -> String {
     let api_base = cfg.server_url.trim_end_matches('/');
     format!(
         r#"(()=>{{window.__COCKPIT_DESKTOP=1;window.__COCKPIT_API_BASE="{api_base}";
-// 双击标题栏区域 → 切换全屏(Overlay 标题栏没有原生双击行为)
+// Overlay 标题栏避让红绿灯: body 下移 32px, 全屏时 Tauri 自动隐藏红绿灯无需避让
+var s=document.createElement('style');s.textContent='body{{padding-top:32px;box-sizing:border-box}}';document.head.appendChild(s);
 addEventListener('dblclick',e=>{{if(e.target.closest('header.titlebar'))try{{window.__TAURI_INTERNALS__.invoke('toggle_fullscreen')}}catch(_){{}}}});
 if(window.__cockpitWatchdog)return;window.__cockpitWatchdog=!0;let l=!1;addEventListener('load',()=>{{l=!0}},{{once:!0}});setTimeout(()=>{{if(!l)try{{window.__TAURI_INTERNALS__.invoke('show_error')}}catch(_){{}}}},15000)}})();"#
     )
@@ -35,7 +36,7 @@ pub fn run() {
             };
 
             let _main = WebviewWindowBuilder::new(&h, "main", url)
-                .title("市场研究驾驶舱")
+                .title("")
                 .inner_size(1400.0, 900.0)
                 .min_inner_size(1024.0, 700.0)
                 .center()
