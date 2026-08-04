@@ -33,7 +33,12 @@ pub fn reload_app(app: AppHandle) {
 #[tauri::command]
 pub fn toggle_fullscreen(app: AppHandle) {
     if let Some(w) = app.get_webview_window("main") {
-        let _ = w.set_fullscreen(!w.is_fullscreen().unwrap_or(false));
+        // macOS 原生 zoom 行为(绿色按钮), 而非新建桌面全屏
+        if w.is_maximized().unwrap_or(false) {
+            let _ = w.unmaximize();
+        } else {
+            let _ = w.maximize();
+        }
     }
 }
 

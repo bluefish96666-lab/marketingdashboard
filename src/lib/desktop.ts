@@ -19,4 +19,6 @@ export const isDesktop = detectDesktop();
 export function initDesktopMode() {
   if (!isDesktop) return;
   document.documentElement.classList.add("desktop");
+  // Overlay 标题栏: 注入顶部偏移量, CSS 用 calc(100vh - var(--dt-pt)) 自适应
+  document.documentElement.style.setProperty("--dt-pt", "32px");
 }
