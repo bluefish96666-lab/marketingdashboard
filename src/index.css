@@ -152,6 +152,20 @@ header.titlebar button {
   app-region: no-drag;
 }
 
+/* ===== macOS 桌面模式(?desktop=1, Tauri Overlay 标题栏) ===== */
+/* WKWebView 不支持 env(titlebar-area-*), 使用硬编码回退值 */
+.desktop header.titlebar {
+  -webkit-app-region: drag;
+  app-region: drag;
+  padding-left: 80px; /* macOS 红绿灯按钮宽度 */
+}
+.desktop header.titlebar button,
+.desktop header.titlebar a,
+.desktop header.titlebar input {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
 /* ===== TV 模式(安卓电视壳 App, ?tv=1 启用) ===== */
 /* 过扫描安全边距: #root 限高并隐藏溢出, 不影响桌面端一屏布局 */
 .tv #root {

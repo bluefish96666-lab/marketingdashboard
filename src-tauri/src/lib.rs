@@ -3,7 +3,7 @@ mod config;
 
 use config::Config;
 use tauri::menu::{MenuBuilder, MenuItemBuilder, PredefinedMenuItem, SubmenuBuilder};
-use tauri::{Emitter, Manager, Theme, WebviewUrl, WebviewWindowBuilder};
+use tauri::{Emitter, Manager, Theme, TitleBarStyle, WebviewUrl, WebviewWindowBuilder};
 
 const WATCHDOG: &str = r#"
 (() => {
@@ -41,6 +41,7 @@ pub fn run() {
                 .center()
                 .resizable(true)
                 .theme(Some(Theme::Dark))
+                .title_bar_style(TitleBarStyle::Overlay)
                 .initialization_script(WATCHDOG)
                 .build()?;
 
