@@ -34,7 +34,7 @@ A-shares / HK / US stocks · Commodities · US Treasury yields · Sector heat ·
 - **🏷️ Commodity prices page (/goods)** — Main-contract futures daily trends across 6 groups (precious / base / ferrous / energy-chem / agri / international energy) with 30d–365d ranges, plus Sunsirs spot quotes (accumulated daily) and spot–futures basis tables
 - **📰 7×24 news flash** — Scrolling global financial news with auto-highlighted macro keywords and industry-chain mentions
 - **🖥️ Installable desktop app** — Built-in PWA support (Web Manifest + Service Worker); install from the browser address bar and run in a standalone window
-- **🍎 Native macOS app** — Tauri v2 (Rust + WKWebView) thin shell, ~5MB, follows the same pattern as Android TV
+- **🍎 Native macOS app** — Swift WKWebView thin shell, follows the same pattern as Android TV
 - **📺 Android TV app** — Native WebView shell (`android-tv/`) with D-pad spatial navigation, fullscreen panel zoom (proportional scaling + slideshow), split-flap ticker, tuned for legacy engines and weak GPUs
 - **⚡ Zero-dependency data service** — Built-in Node proxy aggregates public market-data endpoints with in-memory caching; most endpoints need no API key and work out of the box
 
@@ -104,15 +104,15 @@ Open the deployed page in Chrome / Edge and click the **install icon** on the ri
 
 ### macOS Desktop App
 
-The `src-tauri/` directory contains a Tauri v2 (Rust + WKWebView) shell that wraps the web app as a native macOS application. Follows the same pattern as Android TV — a thin native window around the same web UI.
+The `macos/` directory contains a native Swift WKWebView shell. Same pattern as Android TV — a thin native window around the same web UI.
 
-**Prerequisites**: Rust toolchain (`rustup`), macOS SDK (Command Line Tools or Xcode)
+**Prerequisites**: Xcode
 
 ```bash
-npm install                    # includes @tauri-apps/cli + @tauri-apps/api
-npm run tauri dev              # dev: opens native window loading localhost:3000
-npm run build && npm run tauri build  # production: .app bundle in src-tauri/target/release/bundle/macos/
+open macos/MarketCockpit.xcodeproj  # Open in Xcode, press ⌘R to build & run
 ```
+
+Loads `http://localhost:3000/?desktop=1` by default (run `npm start` first).
 
 ### Android TV app
 
@@ -181,10 +181,9 @@ During development the frontend talks to the local proxy via `/api`:
 ├── server/
 │   ├── dev.cjs        # Dev entry: starts Vite and the data proxy together
 │   └── index.cjs      # Data proxy + production static file serving
-├── src-tauri/          # macOS desktop app (Tauri v2, Rust + WKWebView)
-│   ├── Cargo.toml
-│   ├── tauri.conf.json
-│   └── src/main.rs
+├── macos/              # macOS desktop app (Swift + WKWebView)
+│   ├── MarketCockpit.xcodeproj
+│   └── MarketCockpit/
 ├── src/
 │   ├── App.tsx        # Cockpit layout & routing (/ market cockpit, /ai AI cockpit, /goods commodity prices, /fin earnings window)
 │   ├── AiDashboard.tsx    # AI cockpit page

@@ -7,12 +7,8 @@ import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { initTvMode } from '@/lib/tv'
 import { initTvFocus } from '@/lib/tvFocus'
 import { initDesktopMode } from '@/lib/desktop'
-
-// TV 模式: ?tv=1 或电视 UA 时启用遥控器方向键导航(非 TV 环境零副作用)
 initTvMode()
 initTvFocus()
-
-// macOS 桌面: ?desktop=1 时添加 .desktop class(非桌面环境零副作用)
 initDesktopMode()
 
 // PWA: 仅生产环境注册 Service Worker(缓存静态构建产物, 行情接口不缓存)

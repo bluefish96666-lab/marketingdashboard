@@ -152,17 +152,9 @@ header.titlebar button {
   app-region: no-drag;
 }
 
-/* ===== macOS 桌面模式(?desktop=1, Tauri Overlay 标题栏) ===== */
+/* ===== macOS 桌面模式(?desktop=1, 原生 Overlay 标题栏) ===== */
 .desktop header.titlebar {
-  -webkit-app-region: drag;
-  app-region: drag;
   padding-left: 80px; /* 左侧红绿灯按钮宽度 */
-}
-.desktop header.titlebar button,
-.desktop header.titlebar a,
-.desktop header.titlebar input {
-  -webkit-app-region: no-drag;
-  app-region: no-drag;
 }
 
 /* ===== TV 模式(安卓电视壳 App, ?tv=1 启用) ===== */

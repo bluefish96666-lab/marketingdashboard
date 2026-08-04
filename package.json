@@ -8,8 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "start": "node server/index.cjs",
-    "tauri": "tauri"
+    "start": "node server/index.cjs"
   },
   "dependencies": {
     "iconv-lite": "^0.7.3",
@@ -24,8 +23,6 @@
     "@babel/preset-react": "^7.29.7",
     "@babel/preset-typescript": "^7.29.7",
     "@eslint/js": "^9.39.1",
-    "@tauri-apps/api": "^2",
-    "@tauri-apps/cli": "^2",
     "@types/node": "^24.10.1",
     "@types/react": "^19.2.5",
     "@types/react-dom": "^19.2.3",

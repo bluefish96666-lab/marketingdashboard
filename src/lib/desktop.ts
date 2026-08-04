@@ -1,24 +1,9 @@
-/** macOS 桌面壳检测 — 支持两种注入方式:
- *  1. Tauri initialization_script → window.__COCKPIT_DESKTOP (生产)
- *  2. Query param ?desktop=1 (开发) */
-
-declare global {
-  interface Window {
-    __COCKPIT_DESKTOP?: number;
-    __COCKPIT_API_BASE?: string;
-  }
-}
-
-function detectDesktop(): boolean {
-  if (window.__COCKPIT_DESKTOP) return true;
+/** macOS 桌面壳检测: 通过 ?desktop=1 查询参数 */
+export function isDesktop(): boolean {
   return new URLSearchParams(window.location.search).get("desktop") === "1";
 }
 
-export const isDesktop = detectDesktop();
-
 export function initDesktopMode() {
-  if (!isDesktop) return;
+  if (!isDesktop()) return;
   document.documentElement.classList.add("desktop");
-  // Overlay 标题栏: 注入顶部偏移量, CSS 用 calc(100vh - var(--dt-pt)) 自适应
-  document.documentElement.style.setProperty("--dt-pt", "32px");
 }
