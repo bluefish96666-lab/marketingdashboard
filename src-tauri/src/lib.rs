@@ -3,7 +3,7 @@ mod config;
 
 use config::Config;
 use tauri::menu::{MenuBuilder, MenuItemBuilder, PredefinedMenuItem, SubmenuBuilder};
-use tauri::{Emitter, Manager, Theme, TitleBarStyle, WebviewUrl, WebviewWindowBuilder};
+use tauri::{Manager, Theme, TitleBarStyle, WebviewUrl, WebviewWindowBuilder};
 
 fn make_init_script(cfg: &Config) -> String {
     let api_base = cfg.server_url.trim_end_matches('/');
@@ -81,9 +81,7 @@ pub fn run() {
             app.on_menu_event(move |app_handle, event| {
                 match event.id().as_ref() {
                     "settings" => {
-                        if let Some(w) = app_handle.get_webview_window("main") {
-                            let _ = w.emit("open-settings", ());
-                        }
+                        crate::commands::open_settings(app_handle.clone());
                     }
                     "reload" => {
                         if let Some(w) = app_handle.get_webview_window("main") {
