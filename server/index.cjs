@@ -1659,6 +1659,18 @@ const routes = {
   "/api/quotes": async (q) => handleQuotes(q.get("codes") || ""), // 内部按代码独立缓存(TTL 1.5s)
   "/api/minute": async (q) =>
     cached(`minute:${q.get("code")}`, 5000, () => handleMinute(q.get("code") || "sh000001")),
+  // 批量分钟线: 将 N 次单独请求合并为 1 次, 大幅降低冷启动爆发请求数
+  "/api/batch-minute": async (q) => {
+    const codes = (q.get("codes") || "").split(",").filter(Boolean);
+    if (codes.length === 0) return {};
+    if (codes.length > 30) codes.length = 30; // 上限防滥用
+    const map = {};
+    // 逐个走缓存(每个 code 各自 5s TTL), 但共享一次 HTTP 往返
+    await Promise.all(codes.map(async (c) => {
+      try { map[c] = await cached(`minute:${c}`, 5000, () => handleMinute(c)); } catch { map[c] = null; }
+    }));
+    return map;
+  },
   "/api/boards": async (q) =>
     cached(`boards:${q.get("type")}:${q.get("dir")}:${q.get("n")}`, 5000, () =>
       handleBoards(q.get("type") || "01", q.get("dir") || "0", q.get("n") || "30")
@@ -1679,6 +1691,17 @@ const routes = {
       handleChemSpot(q.get("id") || "", q.get("name") || q.get("id") || "")), // 生意社化工现货, 8h缓存
   "/api/future-minute": async (q) =>
     cached(`fmin:${q.get("code")}`, 60000, () => handleFutureMinute(q.get("code") || "")),
+  // 批量期货分钟线
+  "/api/batch-fmin": async (q) => {
+    const codes = (q.get("codes") || "").split(",").filter(Boolean);
+    if (codes.length === 0) return {};
+    if (codes.length > 20) codes.length = 20;
+    const map = {};
+    await Promise.all(codes.map(async (c) => {
+      try { map[c] = await cached(`fmin:${c}`, 60000, () => handleFutureMinute(c)); } catch { map[c] = null; }
+    }));
+    return map;
+  },
   "/api/rank": async (q) =>
     cached(`rank:${q.get("sort")}:${q.get("asc")}:${q.get("n")}`, 5000, () =>
       handleRank(q.get("sort") || "changepercent", q.get("asc") || "0", q.get("n") || "30")
@@ -1796,28 +1819,36 @@ function clientIp(req) {
   return req.socket.remoteAddress || "unknown";
 }
 
-// 固定窗口计数器: windowMs 内超过 max 次返回 false; 定时清扫防 Map 无界增长
+// 滑动窗口计数器: 记录最近 windowMs 内的请求时间戳, 超 max 返回 false。
+// 相比固定窗口(首请求起计), 滑动窗口在连续轮询场景下更公平, 不会因窗口边界触发误限。
 function makeLimiter(windowMs, max) {
-  const hits = new Map(); // ip -> { ts, count }
+  const hits = new Map(); // ip -> number[] (请求时间戳)
   const sweeper = setInterval(() => {
-    const now = Date.now();
-    for (const [ip, h] of hits) if (now - h.ts > windowMs) hits.delete(ip);
-  }, windowMs);
+    const cutoff = Date.now() - windowMs;
+    for (const [ip, ts] of hits) {
+      const idx = ts.findIndex((t) => t >= cutoff);
+      if (idx > 0) hits.set(ip, ts.slice(idx));
+      else if (idx === -1) hits.delete(ip);
+    }
+  }, Math.min(windowMs, 30000));
   sweeper.unref();
   return (ip) => {
     const now = Date.now();
-    const h = hits.get(ip);
-    if (!h || now - h.ts > windowMs) {
-      hits.set(ip, { ts: now, count: 1 });
-      return true;
-    }
-    h.count++;
-    return h.count <= max;
+    const cutoff = now - windowMs;
+    let ts = hits.get(ip);
+    if (!ts) { hits.set(ip, [now]); return true; }
+    // 剔除过期时间戳
+    const idx = ts.findIndex((t) => t >= cutoff);
+    if (idx > 0) ts = ts.slice(idx);
+    else if (idx === -1) { hits.set(ip, [now]); return true; }
+    ts.push(now);
+    hits.set(ip, ts);
+    return ts.length <= max;
   };
 }
 
-const apiLimiter = makeLimiter(60 * 1000, 240); // 公开 /api: 每 IP 每分钟 240 次(单大屏客户端实测约 100+)
-const protectedLimiter = makeLimiter(60 * 1000, 20); // 私有 key 端点: 每 IP 每分钟 20 次, 防脚本刷配额
+const apiLimiter = makeLimiter(60 * 1000, 600); // 公开 /api: 每 IP 每分钟 600 次(10/s), 容纳多标签页 + 冷启动爆发
+const protectedLimiter = makeLimiter(60 * 1000, 30); // 私有 key 端点: 每 IP 每分钟 30 次, 防脚本刷配额
 
 // 读取 POST body, 超过 limit 字节即停止累积({ tooBig: true }), 防止无限读入
 function readBodyWithLimit(req, limit) {

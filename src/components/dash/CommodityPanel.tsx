@@ -13,11 +13,12 @@ export function CommodityPanel({ className = "", ...zoomProps }: { className?: s
   const data = useQuotes(COMMODITIES.map((c) => c.code));
   const { data: minutes } = usePolling(
     async () => {
-      const results = await Promise.allSettled(COMMODITIES.map((c) => api.futureMinute(c.code)));
+      const codes = COMMODITIES.map((c) => c.code);
+      const batch = await api.batchFutureMinute(codes);
       const map: Record<string, MinuteData> = {};
-      results.forEach((r, i) => {
-        if (r.status === "fulfilled") map[COMMODITIES[i].code] = r.value;
-      });
+      for (const [code, data] of Object.entries(batch)) {
+        if (data) map[code] = data;
+      }
       return map;
     },
     60000

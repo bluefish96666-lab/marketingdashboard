@@ -39,11 +39,11 @@ export function IndexPanel({ className = "", ...zoomProps }: { className?: strin
   const { data: minutes } = usePolling(
     async () => {
       const codes = ALL_CODES.filter((c) => !c.startsWith("wh"));
-      const results = await Promise.allSettled(codes.map((c) => api.minute(c)));
+      const batch = await api.batchMinute(codes);
       const map: Record<string, MinuteData> = {};
-      results.forEach((r, i) => {
-        if (r.status === "fulfilled") map[codes[i]] = r.value;
-      });
+      for (const [code, data] of Object.entries(batch)) {
+        if (data) map[code] = data;
+      }
       return map;
     },
     15000

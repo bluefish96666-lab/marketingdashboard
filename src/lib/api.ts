@@ -462,6 +462,9 @@ export const api = {
     withFallback(() => get<Record<string, Quote>>(`/api/quotes?codes=${codes.join(",")}`), () => directQuotes(codes)),
   minute: (code: string) =>
     withFallback(() => get<MinuteData>(`/api/minute?code=${code}`), () => directMinute(code)),
+  /** 批量分钟线: N 个 code → 1 次 HTTP 往返(内部仍各自缓存), 上限 30 个 */
+  batchMinute: (codes: string[]) =>
+    get<Record<string, MinuteData | null>>(`/api/batch-minute?codes=${codes.slice(0, 30).join(",")}`),
   boards: (type: "01" | "02", dir: 0 | 1 = 0, n = 30) =>
     withFallback(() => get<Board[]>(`/api/boards?type=${type}&dir=${dir}&n=${n}`), () => directBoards(type, dir, n)),
   boardStocks: (code: string, n = 12) => get<BoardStock[]>(`/api/board-stocks?code=${encodeURIComponent(code)}&n=${n}`),
@@ -471,6 +474,8 @@ export const api = {
   stockBoards: (code: string) => get<StockBoards>(`/api/stock-boards?code=${encodeURIComponent(code)}`),
   stockFlow: (code: string) => flowLoader(code),
   futureMinute: (code: string) => get<MinuteData>(`/api/future-minute?code=${encodeURIComponent(code)}`),
+  batchFutureMinute: (codes: string[]) =>
+    get<Record<string, MinuteData | null>>(`/api/batch-fmin?codes=${codes.slice(0, 20).join(",")}`),
   futureDaily: (code: string) => get<FutureDaily>(`/api/future-daily?code=${encodeURIComponent(code)}`),
   futuresBatch: (codes: string[]) =>
     get<Record<string, FutureQuote>>(`/api/futures?list=${codes.map(encodeURIComponent).join(",")}`),
