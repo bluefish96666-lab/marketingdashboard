@@ -10,6 +10,8 @@ npm run build    # TypeScript check + Vite production build → dist/
 npm start        # Production: single Node process serves API + static files on :3000
 npm run lint     # ESLint on all TS/TSX files
 npm run preview  # Vite preview of dist/
+npm run tauri dev  # macOS: start Vite + open native Tauri window (WKWebView)
+npm run tauri build # macOS: build .app bundle (requires Rust + macOS SDK)
 ```
 
 ### Release workflow
@@ -54,6 +56,8 @@ When the user asks to publish a release ("发版", "release", "publish"):
 **API client** (`src/lib/api.ts`): Typed fetch wrappers. Server-first with browser-direct fallback for Tencent-sourced endpoints (quotes, minute data, boards) and Wallstreetcn news — so the app partially works without the proxy. The `api` object also includes a batched `stockFlow` loader that merges concurrent calls within a 60ms window.
 
 **TV mode** (`src/lib/tv.ts`, `src/lib/tvFocus.ts`): Enabled via `?tv=1` or Android TV UA detection. Activates D-pad spatial navigation (scored by edge distance + axis overlap), fullscreen panel zoom overlays (CSS zoom, zero reflow), and performance adaptations (reduced polling, trimmed lists, disabled blurs/animations). All TV behavior is gated behind `isTv` checks — zero desktop impact.
+
+**macOS desktop app** (`src-tauri/`): A thin Tauri v2 (Rust + WKWebView) shell that loads the web app. Same pattern as Android TV — just a native window around the same web UI. `npm run tauri dev` opens a native window for development; `npm run tauri build` produces a `.app` bundle. The shell loads `dist/` for production builds or `http://localhost:3000` in dev mode.
 
 **Static config** (`src/config/dashboard.ts`): Index definitions, commodity codes, and 8 industry-chain templates (LLM, embodied AI, semiconductors, new energy, innovative drugs, new industrialization, digital government, smart medicine) — each with upstream/midstream/downstream stock lists and search keywords.
 

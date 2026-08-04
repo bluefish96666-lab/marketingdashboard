@@ -7,6 +7,14 @@ import { inspectAttr } from 'kimi-plugin-inspect-react'
 export default defineConfig({
   base: './',
   plugins: [inspectAttr(), react()],
+  build: {
+    rollupOptions: {
+      input: {
+        main: path.resolve(__dirname, "index.html"),
+        settings: path.resolve(__dirname, "desktop-settings.html"),
+      },
+    },
+  },
   // 构建时间注入, TV 调试角标用来确认服务器是否已部署新版
   define: {
     __BUILD_TIME__: JSON.stringify(new Date().toISOString()),

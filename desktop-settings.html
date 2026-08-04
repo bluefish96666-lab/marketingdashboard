@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>服务器设置</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #070b12; color: #e2e8f0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      padding: 24px; display: flex; flex-direction: column; gap: 16px;
+      -webkit-app-region: drag;
+    }
+    h2 { font-size: 15px; font-weight: 600; color: #e2e8f0; }
+    label { font-size: 12px; color: #94a3b8; display: flex; flex-direction: column; gap: 6px; }
+    input, button {
+      font-size: 13px; padding: 6px 10px; border-radius: 6px;
+      border: 1px solid #334155; background: #0f172a; color: #e2e8f0;
+      -webkit-app-region: no-drag;
+    }
+    input:focus { border-color: #22d3ee; outline: none; }
+    button {
+      cursor: pointer; font-weight: 600;
+      background: #22d3ee15; border-color: #22d3ee40; color: #22d3ee;
+      align-self: flex-end; padding: 6px 20px;
+    }
+    button:hover { background: #22d3ee25; }
+    .hint { font-size: 11px; color: #64748b; }
+    .error { font-size: 12px; color: #fb7185; }
+    .success { font-size: 12px; color: #34d399; }
+  </style>
+</head>
+<body>
+  <h2>服务器设置</h2>
+  <label>服务器地址
+    <input id="url" type="text" placeholder="https://mrd.hermes.cc.cd" />
+    <span class="hint">默认: https://mrd.hermes.cc.cd</span>
+  </label>
+  <button id="save">保存</button>
+  <div id="msg"></div>
+  <script type="module" src="/src/desktop/settings.ts"></script>
+</body>
+</html>
