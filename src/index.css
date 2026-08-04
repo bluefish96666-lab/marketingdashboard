@@ -154,9 +154,6 @@ header.titlebar button {
 
 /* ===== macOS 桌面模式(?desktop=1, Swift WKWebView + Overlay 标题栏) ===== */
 .desktop header.titlebar {
-  padding-left: 80px;         /* 左侧红绿灯按钮宽度 */
-  padding-top: 24px;          /* 标题文字下移避开红绿灯 */
-  height: 56px !important;    /* 补偿: 默认 h-9(36px) + 24px = 60px, 取 56px 避免过高 */
   -webkit-user-select: none;
   user-select: none;
 }
