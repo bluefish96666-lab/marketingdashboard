@@ -11,7 +11,7 @@ fn make_init_script(cfg: &Config) -> String {
         r#"(()=>{{window.__COCKPIT_DESKTOP=1;window.__COCKPIT_API_BASE="{api_base}";
 // Overlay 标题栏避让红绿灯: body 下移 32px, 全屏时 Tauri 自动隐藏红绿灯无需避让
 var s=document.createElement('style');s.textContent='body{{padding-top:32px;box-sizing:border-box}}';document.head.appendChild(s);
-addEventListener('dblclick',e=>{{if(e.target.closest('header.titlebar'))try{{window.__TAURI_INTERNALS__.invoke('toggle_fullscreen')}}catch(_){{}}}});
+addEventListener('dblclick',e=>{{if(!e.target.closest('button,a,input,select,textarea'))try{{window.__TAURI_INTERNALS__.invoke('toggle_fullscreen')}}catch(_){{}}}});
 if(window.__cockpitWatchdog)return;window.__cockpitWatchdog=!0;let l=!1;addEventListener('load',()=>{{l=!0}},{{once:!0}});setTimeout(()=>{{if(!l)try{{window.__TAURI_INTERNALS__.invoke('show_error')}}catch(_){{}}}},15000)}})();"#
     )
 }
