@@ -7,8 +7,8 @@ pub fn load_config(app: AppHandle) -> Config {
 }
 
 #[tauri::command]
-pub fn save_config(app: AppHandle, server_url: String) -> Result<(), String> {
-    let cfg = Config { server_url };
+pub fn save_config(app: AppHandle, mode: String, server_url: String) -> Result<(), String> {
+    let cfg = Config { mode, server_url };
     config::save(&app, &cfg)?;
     Ok(())
 }
@@ -40,7 +40,7 @@ pub fn open_settings(app: AppHandle) {
 
     let _ = WebviewWindowBuilder::new(&app, "settings", WebviewUrl::External(url.parse().unwrap()))
         .title("服务器设置")
-        .inner_size(460.0, 320.0)
+        .inner_size(460.0, 380.0)
         .resizable(false)
         .center()
         .build();

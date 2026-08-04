@@ -8,19 +8,28 @@ pub const DEFAULT_URL: &str = "https://mrd.hermes.cc.cd";
 #[derive(Serialize, Deserialize, Clone)]
 #[serde(default)]
 pub struct Config {
+    pub mode: String,       // "local" | "remote"
     pub server_url: String,
 }
 
 impl Default for Config {
     fn default() -> Self {
-        Self { server_url: DEFAULT_URL.into() }
+        Self {
+            mode: "local".into(),  // 默认本地模式: 打包的 dist/ 作为前端, API 走 server_url
+            server_url: DEFAULT_URL.into(),
+        }
     }
 }
 
 impl Config {
     pub fn main_url(&self) -> String {
         let server = self.server_url.trim_end_matches('/');
-        format!("{server}/?desktop=1")
+        if self.mode == "remote" {
+            format!("{server}/?desktop=1")
+        } else {
+            // 本地模式: 从打包资源加载 UI, API 通过 ?apiBase 指向服务器
+            format!("tauri://localhost/index.html?desktop=1&apiBase={server}")
+        }
     }
 
     pub fn dev_url() -> String {

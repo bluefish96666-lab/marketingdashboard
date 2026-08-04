@@ -33,9 +33,19 @@
 </head>
 <body>
   <h2>服务器设置</h2>
+  <div style="display:flex;flex-direction:column;gap:8px;font-size:12px;-webkit-app-region:no-drag">
+    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;color:#e2e8f0">
+      <input type="radio" id="mode-local" name="mode" value="local" checked />
+      本地模式 — 从应用内加载 UI，API 请求走服务器地址
+    </label>
+    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;color:#e2e8f0">
+      <input type="radio" id="mode-remote" name="mode" value="remote" />
+      远程模式 — UI + API 均从服务器加载（需要服务器在线）
+    </label>
+  </div>
   <label>服务器地址
     <input id="url" type="text" placeholder="https://mrd.hermes.cc.cd" />
-    <span class="hint">默认: https://mrd.hermes.cc.cd</span>
+    <span class="hint">默认: https://mrd.hermes.cc.cd，本地开发可用 http://localhost:3000</span>
   </label>
   <button id="save">保存</button>
   <div id="msg"></div>
