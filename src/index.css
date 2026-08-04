@@ -153,28 +153,11 @@ header.titlebar button {
 }
 
 /* ===== macOS 桌面模式(?desktop=1, Swift WKWebView + Overlay 标题栏) ===== */
-/* Overlay 标题栏: 红绿灯按钮浮在左上角, 页面需要下移 + 左移避让 */
-.desktop body {
-  padding-top: 32px;          /* 红绿灯按钮区域 */
-  box-sizing: border-box;
-}
-.desktop #root {
-  height: calc(100vh - 32px); /* 补偿 body padding */
-  overflow: hidden;
-}
-/* 所有页面根容器均使用 100vh, 需统一补偿 */
-.desktop .h-screen,
-.desktop .min-h-screen {
-  min-height: calc(100vh - 32px) !important;
-}
-@media (min-width: 1024px) {
-  .desktop .lg\:h-screen {
-    height: calc(100vh - 32px) !important;
-  }
-}
 .desktop header.titlebar {
   padding-left: 80px;         /* 左侧红绿灯按钮宽度 */
-  -webkit-user-select: none;  /* 禁止选中标题文字 */
+  padding-top: 24px;          /* 标题文字下移避开红绿灯 */
+  height: 56px !important;    /* 补偿: 默认 h-9(36px) + 24px = 60px, 取 56px 避免过高 */
+  -webkit-user-select: none;
   user-select: none;
 }
 
