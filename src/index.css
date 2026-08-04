@@ -153,11 +153,13 @@ header.titlebar button {
 }
 
 /* ===== macOS 桌面模式(?desktop=1, Tauri Overlay 标题栏) ===== */
-/* WKWebView 不支持 env(titlebar-area-*), 使用硬编码回退值 */
+/* Overlay 模式: 红绿灯按钮浮在内容之上, header 需要为按钮留出空间 */
 .desktop header.titlebar {
   -webkit-app-region: drag;
   app-region: drag;
-  padding-left: 80px; /* macOS 红绿灯按钮宽度 */
+  padding-left: 80px; /* 左侧红绿灯按钮宽度 */
+  padding-top: 4px;   /* 顶部留白, 防止文字被按钮遮挡 */
+  height: 36px;       /* 略高于默认 h-9(36px), 给按钮垂直居中空间 */
 }
 .desktop header.titlebar button,
 .desktop header.titlebar a,

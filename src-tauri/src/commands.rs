@@ -25,6 +25,13 @@ pub fn reload_app(app: AppHandle) {
 }
 
 #[tauri::command]
+pub fn toggle_fullscreen(app: AppHandle) {
+    if let Some(w) = app.get_webview_window("main") {
+        let _ = w.set_fullscreen(!w.is_fullscreen().unwrap_or(false));
+    }
+}
+
+#[tauri::command]
 pub fn open_settings(app: AppHandle) {
     if let Some(w) = app.get_webview_window("settings") {
         let _ = w.set_focus();

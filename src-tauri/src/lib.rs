@@ -8,7 +8,10 @@ use tauri::{Emitter, Manager, Theme, TitleBarStyle, WebviewUrl, WebviewWindowBui
 fn make_init_script(cfg: &Config) -> String {
     let api_base = cfg.server_url.trim_end_matches('/');
     format!(
-        r#"(()=>{{window.__COCKPIT_DESKTOP=1;window.__COCKPIT_API_BASE="{api_base}";if(window.__cockpitWatchdog)return;window.__cockpitWatchdog=!0;let l=!1;addEventListener('load',()=>{{l=!0}},{{once:!0}});setTimeout(()=>{{if(!l)try{{window.__TAURI_INTERNALS__.invoke('show_error')}}catch(_){{}}}},15000)}})();"#
+        r#"(()=>{{window.__COCKPIT_DESKTOP=1;window.__COCKPIT_API_BASE="{api_base}";
+// 双击标题栏区域 → 切换全屏(Overlay 标题栏没有原生双击行为)
+addEventListener('dblclick',e=>{{if(e.target.closest('header.titlebar'))try{{window.__TAURI_INTERNALS__.invoke('toggle_fullscreen')}}catch(_){{}}}});
+if(window.__cockpitWatchdog)return;window.__cockpitWatchdog=!0;let l=!1;addEventListener('load',()=>{{l=!0}},{{once:!0}});setTimeout(()=>{{if(!l)try{{window.__TAURI_INTERNALS__.invoke('show_error')}}catch(_){{}}}},15000)}})();"#
     )
 }
 
@@ -102,6 +105,7 @@ pub fn run() {
             commands::save_config,
             commands::reload_app,
             commands::open_settings,
+            commands::toggle_fullscreen,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

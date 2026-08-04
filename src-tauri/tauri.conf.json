@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "MarketCockpit",
+  "productName": "市场研究驾驶舱",
   "version": "1.0.1",
   "identifier": "app.marketcockpit.desktop",
   "build": {
