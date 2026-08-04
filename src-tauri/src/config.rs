@@ -3,7 +3,8 @@ use std::fs;
 use std::path::PathBuf;
 use tauri::{AppHandle, Manager};
 
-pub const DEFAULT_URL: &str = "https://mrd.hermes.cc.cd";
+pub const DEFAULT_URL: &str = "http://localhost:3000";
+pub const REMOTE_URL: &str = "https://mrd.hermes.cc.cd";
 
 #[derive(Serialize, Deserialize, Clone)]
 #[serde(default)]
