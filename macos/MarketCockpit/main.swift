@@ -12,7 +12,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var settingsWC: NSWindowController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        let saved = UserDefaults.standard.string(forKey: URL_KEY) ?? DEFAULT_URL
+        let url = UserDefaults.standard.string(forKey: URL_KEY) ?? DEFAULT_URL
 
         window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 1400, height: 900),
@@ -25,7 +25,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         window.backgroundColor = NSColor(red: 7/255, green: 11/255, blue: 18/255, alpha: 1)
         window.titlebarAppearsTransparent = true
 
-        // WKWebView config
         let config = WKWebViewConfiguration()
         webView = WKWebView(frame: .zero, configuration: config)
         webView.navigationDelegate = self
@@ -33,25 +32,25 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         webView.setValue(false, forKey: "drawsBackground")
         window.contentView = webView
 
-        loadURL(saved)
+        loadURL(url)
         window.makeKeyAndOrderFront(nil)
         buildMenu()
     }
 
-    func loadURL(_ urlString: String) {
+    func loadURL(_ server: String) {
         errorView?.removeFromSuperview()
         errorView = nil
-        guard let url = URL(string: "\(urlString)/?desktop=1") else { return }
-        webView.load(URLRequest(url: url, cachePolicy: .useProtocolCachePolicy, timeoutInterval: 15))
+        guard let u = URL(string: "\(server)/?desktop=1") else { return }
+        webView.load(URLRequest(url: u, cachePolicy: .useProtocolCachePolicy, timeoutInterval: 15))
     }
 
-    func showError(_ urlString: String) {
+    func showError(_ server: String) {
         let v = NSView(frame: webView.bounds)
         v.autoresizingMask = [.width, .height]
         v.wantsLayer = true
         v.layer?.backgroundColor = NSColor(red: 7/255, green: 11/255, blue: 18/255, alpha: 1).cgColor
 
-        let icon = NSTextField(labelWithString: "📡")
+        let icon = NSTextField(labelWithString: "\u{1F4E1}")
         icon.font = NSFont.systemFont(ofSize: 48)
         icon.frame = NSRect(x: 0, y: 240, width: v.bounds.width, height: 60)
         icon.alignment = .center
@@ -62,34 +61,29 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         title.frame = NSRect(x: 0, y: 200, width: v.bounds.width, height: 30)
         title.alignment = .center
 
-        let desc = NSTextField(labelWithString: "请确认服务器可访问，或修改服务器地址后重试。")
+        let desc = NSTextField(labelWithString: "\(server)\n请确认服务器可访问，或修改地址后重试。")
         desc.font = NSFont.systemFont(ofSize: 13)
         desc.textColor = NSColor(red: 148/255, green: 163/255, blue: 184/255, alpha: 1)
-        desc.frame = NSRect(x: 0, y: 172, width: v.bounds.width, height: 20)
+        desc.frame = NSRect(x: 0, y: 155, width: v.bounds.width, height: 36)
         desc.alignment = .center
 
         let retryBtn = NSButton(title: "重试", target: self, action: #selector(retryLoad))
-        retryBtn.frame = NSRect(x: v.bounds.width/2 - 90, y: 120, width: 80, height: 28)
+        retryBtn.frame = NSRect(x: v.bounds.width/2 - 90, y: 110, width: 80, height: 28)
         retryBtn.bezelStyle = .rounded
         retryBtn.contentTintColor = NSColor(red: 34/255, green: 211/255, blue: 238/255, alpha: 1)
 
         let settingsBtn = NSButton(title: "服务器设置", target: self, action: #selector(openSettings))
-        settingsBtn.frame = NSRect(x: v.bounds.width/2 + 10, y: 120, width: 80, height: 28)
+        settingsBtn.frame = NSRect(x: v.bounds.width/2 + 10, y: 110, width: 80, height: 28)
         settingsBtn.bezelStyle = .rounded
 
-        v.addSubview(icon)
-        v.addSubview(title)
-        v.addSubview(desc)
-        v.addSubview(retryBtn)
-        v.addSubview(settingsBtn)
-
+        v.addSubview(icon); v.addSubview(title); v.addSubview(desc)
+        v.addSubview(retryBtn); v.addSubview(settingsBtn)
         webView.addSubview(v)
         errorView = v
     }
 
     @objc func retryLoad() {
-        let url = UserDefaults.standard.string(forKey: URL_KEY) ?? DEFAULT_URL
-        loadURL(url)
+        loadURL(UserDefaults.standard.string(forKey: URL_KEY) ?? DEFAULT_URL)
     }
 
     @objc func openSettings() {
@@ -106,66 +100,58 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Menu
     func buildMenu() {
         let mainMenu = NSMenu()
+        let d = self as AnyObject // target
 
-        // App menu
+        // App
         let appMenu = NSMenu()
         appMenu.addItem(NSMenuItem(title: "关于市场研究驾驶舱", action: nil, keyEquivalent: ""))
         appMenu.addItem(NSMenuItem.separator())
-        let settingsItem = NSMenuItem(title: "服务器设置…", action: #selector(openSettings), keyEquivalent: ",")
-        appMenu.addItem(settingsItem)
+        let appSettings = NSMenuItem(title: "服务器设置…", action: #selector(openSettings), keyEquivalent: ","); appSettings.target = d as? AnyObject
+        appMenu.addItem(appSettings)
         appMenu.addItem(NSMenuItem.separator())
         appMenu.addItem(NSMenuItem(title: "退出", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
-        let appMenuItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
-        appMenuItem.submenu = appMenu
-        mainMenu.addItem(appMenuItem)
+        let appItem = NSMenuItem(); appItem.submenu = appMenu; mainMenu.addItem(appItem)
 
         // File
         let fileMenu = NSMenu(title: "文件")
-        fileMenu.addItem(NSMenuItem(title: "服务器设置…", action: #selector(openSettings), keyEquivalent: ","))
+        let fs = NSMenuItem(title: "服务器设置…", action: #selector(openSettings), keyEquivalent: ","); fs.target = d as? AnyObject
+        fileMenu.addItem(fs)
         fileMenu.addItem(NSMenuItem.separator())
-        fileMenu.addItem(NSMenuItem(title: "重新加载", action: #selector(retryLoad), keyEquivalent: "r"))
-        let fileItem = NSMenuItem(title: "文件", action: nil, keyEquivalent: "")
-        fileItem.submenu = fileMenu
-        mainMenu.addItem(fileItem)
+        let fr = NSMenuItem(title: "重新加载", action: #selector(retryLoad), keyEquivalent: "r"); fr.target = d as? AnyObject
+        fileMenu.addItem(fr)
+        let fi = NSMenuItem(title: "文件", action: nil, keyEquivalent: ""); fi.submenu = fileMenu; mainMenu.addItem(fi)
 
         // View
         let viewMenu = NSMenu(title: "显示")
-        viewMenu.addItem(NSMenuItem(title: "重新加载", action: #selector(retryLoad), keyEquivalent: "r"))
+        let vr = NSMenuItem(title: "重新加载", action: #selector(retryLoad), keyEquivalent: "r"); vr.target = d as? AnyObject
+        viewMenu.addItem(vr)
         viewMenu.addItem(NSMenuItem.separator())
         viewMenu.addItem(NSMenuItem(title: "进入全屏幕", action: #selector(NSWindow.toggleFullScreen(_:)), keyEquivalent: "f"))
-        let viewItem = NSMenuItem(title: "显示", action: nil, keyEquivalent: "")
-        viewItem.submenu = viewMenu
-        mainMenu.addItem(viewItem)
+        let vi = NSMenuItem(title: "显示", action: nil, keyEquivalent: ""); vi.submenu = viewMenu; mainMenu.addItem(vi)
 
         // Window
         let windowMenu = NSMenu(title: "窗口")
         windowMenu.addItem(NSMenuItem(title: "最小化", action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m"))
         windowMenu.addItem(NSMenuItem(title: "缩放", action: #selector(NSWindow.performZoom(_:)), keyEquivalent: ""))
-        let windowItem = NSMenuItem(title: "窗口", action: nil, keyEquivalent: "")
-        windowItem.submenu = windowMenu
-        mainMenu.addItem(windowItem)
+        let wi = NSMenuItem(title: "窗口", action: nil, keyEquivalent: ""); wi.submenu = windowMenu; mainMenu.addItem(wi)
 
         NSApplication.shared.mainMenu = mainMenu
     }
 }
 
-// MARK: - WK Navigation Delegate
+// MARK: - WK Navigation
 extension AppDelegate: WKNavigationDelegate {
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
-        let url = UserDefaults.standard.string(forKey: URL_KEY) ?? DEFAULT_URL
-        showError(url)
+        showError(UserDefaults.standard.string(forKey: URL_KEY) ?? DEFAULT_URL)
     }
-
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        errorView?.removeFromSuperview()
-        errorView = nil
+        errorView?.removeFromSuperview(); errorView = nil
     }
 }
 
-// MARK: - WK UI Delegate
+// MARK: - WK UI
 extension AppDelegate: WKUIDelegate {
     func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration, for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
-        // Open external links in system browser
         if navigationAction.targetFrame == nil, let url = navigationAction.request.url {
             NSWorkspace.shared.open(url)
         }
@@ -175,58 +161,46 @@ extension AppDelegate: WKUIDelegate {
 
 // MARK: - Settings Window
 class SettingsWindowController: NSWindowController {
-
     var onSave: ((String) -> Void)?
+    private var urlField: NSTextField!
+    private var localRadio: NSButton!
+    private var remoteRadio: NSButton!
 
     convenience init() {
-        let w = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 460, height: 280),
-            styleMask: [.titled, .closable],
-            backing: .buffered, defer: false)
+        let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 460, height: 240), styleMask: [.titled, .closable], backing: .buffered, defer: false)
         w.title = "服务器设置"
         w.appearance = NSAppearance(named: .darkAqua)
         w.isReleasedWhenClosed = false
 
-        // Content
-        let content = NSView(frame: NSRect(x: 0, y: 0, width: 460, height: 280))
-
-        let modeLabel = NSTextField(labelWithString: "运行模式")
-        modeLabel.font = NSFont.boldSystemFont(ofSize: 13)
-        modeLabel.textColor = NSColor(red: 226/255, green: 232/255, blue: 240/255, alpha: 1)
-        modeLabel.frame = NSRect(x: 20, y: 236, width: 420, height: 20)
-        content.addSubview(modeLabel)
-
-        let localRadio = NSButton(radioButtonWithTitle: "本地模式 — 连接本地 npm start 服务器 (localhost:3000)", target: nil, action: nil)
-        localRadio.frame = NSRect(x: 24, y: 212, width: 416, height: 20)
-        localRadio.font = NSFont.systemFont(ofSize: 12)
-        localRadio.state = .on
-        content.addSubview(localRadio)
-
-        let remoteRadio = NSButton(radioButtonWithTitle: "远程模式 — 连接部署服务器 (https://mrd.hermes.cc.cd)", target: nil, action: nil)
-        remoteRadio.frame = NSRect(x: 24, y: 192, width: 416, height: 20)
-        remoteRadio.font = NSFont.systemFont(ofSize: 12)
-        content.addSubview(remoteRadio)
-
-        // Group the radios
-        // ... simplified: just use URL text field
+        let content = NSView(frame: NSRect(x: 0, y: 0, width: 460, height: 240))
 
         let urlLabel = NSTextField(labelWithString: "服务器地址")
         urlLabel.font = NSFont.boldSystemFont(ofSize: 13)
         urlLabel.textColor = NSColor(red: 226/255, green: 232/255, blue: 240/255, alpha: 1)
-        urlLabel.frame = NSRect(x: 20, y: 160, width: 420, height: 20)
+        urlLabel.frame = NSRect(x: 20, y: 192, width: 420, height: 20)
         content.addSubview(urlLabel)
 
-        let urlField = NSTextField(frame: NSRect(x: 20, y: 124, width: 420, height: 28))
-        urlField.placeholderString = DEFAULT_URL
-        urlField.stringValue = UserDefaults.standard.string(forKey: URL_KEY) ?? DEFAULT_URL
-        urlField.bezelStyle = .roundedBezel
-        urlField.font = NSFont.systemFont(ofSize: 13)
-        content.addSubview(urlField)
+        let uf = NSTextField(frame: NSRect(x: 20, y: 156, width: 420, height: 28))
+        uf.placeholderString = DEFAULT_URL
+        uf.stringValue = UserDefaults.standard.string(forKey: URL_KEY) ?? DEFAULT_URL
+        uf.bezelStyle = .roundedBezel
+        uf.font = NSFont.systemFont(ofSize: 13)
+        content.addSubview(uf)
 
-        let hint = NSTextField(labelWithString: "本地开发默认 http://localhost:3000（先运行 npm start）")
+        let localBtn = NSButton(radioButtonWithTitle: "本地模式 — localhost:3000", target: nil, action: nil)
+        localBtn.frame = NSRect(x: 24, y: 112, width: 416, height: 20); localBtn.font = NSFont.systemFont(ofSize: 12)
+        localBtn.state = (uf.stringValue.contains("localhost") || uf.stringValue.contains("127.0.0.1")) ? .on : .off
+        content.addSubview(localBtn)
+
+        let remoteBtn = NSButton(radioButtonWithTitle: "远程模式 — 部署服务器", target: nil, action: nil)
+        remoteBtn.frame = NSRect(x: 24, y: 92, width: 416, height: 20); remoteBtn.font = NSFont.systemFont(ofSize: 12)
+        remoteBtn.state = localBtn.state == .on ? .off : .on
+        content.addSubview(remoteBtn)
+
+        let hint = NSTextField(labelWithString: "本地: http://localhost:3000 (先运行 npm start)  |  远程: https://mrd.hermes.cc.cd")
         hint.font = NSFont.systemFont(ofSize: 11)
         hint.textColor = NSColor(red: 100/255, green: 116/255, blue: 139/255, alpha: 1)
-        hint.frame = NSRect(x: 20, y: 108, width: 420, height: 16)
+        hint.frame = NSRect(x: 20, y: 72, width: 420, height: 16)
         content.addSubview(hint)
 
         let saveBtn = NSButton(title: "保存并重载", target: nil, action: nil)
@@ -243,36 +217,18 @@ class SettingsWindowController: NSWindowController {
         w.contentView = content
         self.init(window: w)
 
-        // After init: set self-referencing properties
-        saveBtn.target = self
-        saveBtn.action = #selector(save)
-        cancelBtn.target = self
-        cancelBtn.action = #selector(close)
-        localRadio.target = self
-        localRadio.action = #selector(modeChanged)
-        remoteRadio.target = self
-        remoteRadio.action = #selector(modeChanged)
+        saveBtn.target = self; saveBtn.action = #selector(save)
+        cancelBtn.target = self; cancelBtn.action = #selector(closeWindow)
+        localBtn.target = self; localBtn.action = #selector(modeChanged)
+        remoteBtn.target = self; remoteBtn.action = #selector(modeChanged)
 
-        // Store refs
-        self.urlField = urlField
-        self.localRadio = localRadio
-        self.remoteRadio = remoteRadio
-        localRadio.target = self
-        localRadio.action = #selector(modeChanged)
-        remoteRadio.target = self
-        remoteRadio.action = #selector(modeChanged)
+        self.urlField = uf
+        self.localRadio = localBtn
+        self.remoteRadio = remoteBtn
     }
 
-    var urlField: NSTextField!
-    var localRadio: NSButton!
-    var remoteRadio: NSButton!
-
     @objc func modeChanged() {
-        if localRadio.state == .on {
-            urlField.stringValue = "http://localhost:3000"
-        } else {
-            urlField.stringValue = "https://mrd.hermes.cc.cd"
-        }
+        urlField.stringValue = localRadio.state == .on ? "http://localhost:3000" : "https://mrd.hermes.cc.cd"
     }
 
     @objc func save() {
@@ -284,13 +240,12 @@ class SettingsWindowController: NSWindowController {
             alert.runModal()
             return
         }
+        UserDefaults.standard.set(url, forKey: URL_KEY)
         onSave?(url)
-        close()
-    }
-
-    override func close() {
         window?.close()
     }
+
+    @objc func closeWindow() { window?.close() }
 }
 
 // MARK: - Entry
