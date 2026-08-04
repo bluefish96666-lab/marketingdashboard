@@ -1,7 +1,8 @@
 import { useMemo, useState } from "react";
+import { BarChart3 } from "lucide-react";
 import { Panel, type PanelZoomProps } from "../Panel";
-import { usePolling } from "@/hooks/usePolling";
-import { api, type FinBoardStock } from "@/lib/api";
+import { useFinBoard } from "./useFinData";
+import { type FinBoardStock } from "@/lib/api";
 import { fmtPct } from "@/lib/format";
 import { useFin } from "./FinContext";
 import { PeriodTabs } from "./PeriodTabs";
@@ -14,9 +15,8 @@ const RANK_COLORS = ["#fbbf24", "#fb7185", "#22d3ee"]; // 前三名 amber/rose/c
 /** 个股盈利榜 TOP20: 净利额 | 增速 双 Tab, 行内相对值底条, 点击载入公司 */
 export function FinStockRankPanel({ className = "", ...zoomProps }: { className?: string } & PanelZoomProps) {
   const [tab, setTab] = useState<Tab>("profit");
-  const [retry, setRetry] = useState(0);
   const { select, period } = useFin();
-  const { data, error, loading } = usePolling(() => api.financeBoard(period), 1800000, [retry, period]);
+  const { data, error, loading, retry } = useFinBoard(period);
 
   const rows = useMemo(() => {
     const stocks = data?.stocks ?? [];
@@ -34,7 +34,7 @@ export function FinStockRankPanel({ className = "", ...zoomProps }: { className?
       className={className}
       {...zoomProps}
       title="个股盈利榜"
-      icon="≣"
+      icon={<BarChart3 size={14} />}
       accent="#fb7185"
       right={
         <div className="flex items-center gap-2 text-[10px]">
@@ -64,7 +64,7 @@ export function FinStockRankPanel({ className = "", ...zoomProps }: { className?
           <SkeletonRows rows={14} />
         ) : (
           <div className="flex h-full items-center justify-center text-[11px]">
-            <button className="h-full w-full text-slate-500" onClick={() => setRetry((r) => r + 1)}>
+            <button className="h-full w-full text-slate-500" onClick={retry}>
               数据获取失败，点击重试{error ? `(${error})` : ""}
             </button>
           </div>

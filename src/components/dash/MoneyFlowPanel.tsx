@@ -1,3 +1,4 @@
+import { ArrowLeftRight } from "lucide-react";
 import { Panel, type PanelZoomProps } from "./Panel";
 import { QuoteRow } from "./QuoteRow";
 import { usePolling } from "@/hooks/usePolling";
@@ -15,7 +16,7 @@ export function MoneyFlowPanel({ className = "", ...zoomProps }: { className?: s
       className={className}
       {...zoomProps}
       title="主力净流入排行"
-      icon="⇄"
+      icon={<ArrowLeftRight size={14} />}
       accent="#fb7185"
       right={
         <span className="text-[10px] text-slate-500">

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Zap } from "lucide-react";
 import { Panel, type PanelZoomProps } from "../Panel";
 import { usePolling } from "@/hooks/usePolling";
 import { api, type FinForecastItem } from "@/lib/api";
@@ -61,7 +62,7 @@ export function FinForecastPanel({ className = "", ...zoomProps }: { className?:
       className={className}
       {...zoomProps}
       title="业绩预告"
-      icon="⚡"
+      icon={<Zap size={14} />}
       accent="#fbbf24"
       right={
         stats &&

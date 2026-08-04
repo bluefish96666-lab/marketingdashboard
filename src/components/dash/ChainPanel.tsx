@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "lucide-react";
 import { Panel, type PanelZoomProps } from "./Panel";
 import { QuoteRow } from "./QuoteRow";
 import { usePolling } from "@/hooks/usePolling";
@@ -226,7 +227,7 @@ export function ChainPanel({ className = "", ...zoomProps }: { className?: strin
         className={className}
         {...zoomProps}
         title="产业链上下游全景"
-        icon="⛓"
+        icon={<Link size={14} />}
         accent="#34d399"
         right={
           <div className="flex items-center gap-1">

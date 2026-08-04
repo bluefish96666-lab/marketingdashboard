@@ -1,8 +1,8 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { GitCompare } from "lucide-react";
 import { Panel, type PanelZoomProps } from "../Panel";
-import { usePolling } from "@/hooks/usePolling";
-import { api } from "@/lib/api";
 import { useFin } from "./FinContext";
+import { useFinBoard, useFinMain } from "./useFinData";
 import { SkeletonRows } from "./SkeletonRows";
 import { TNUM, fmtYi } from "./utils";
 
@@ -29,37 +29,35 @@ const pctCls = (v: number) => (v > 0 ? "text-rose-400" : v < 0 ? "text-emerald-4
 /** 同行对比: 表格(公司指标 vs 行业均值/排名) + 雷达图 */
 export function FinPeerPanel({ className = "", ...zoomProps }: { className?: string } & PanelZoomProps) {
   const [mode, setMode] = useState<Mode>("table");
-  const [retry, setRetry] = useState(0);
   const { company, period } = useFin();
 
-  const {
-    data: board,
-    error: boardErr,
-    loading: boardLoading,
-  } = usePolling(() => api.financeBoard(period), 1800000, [retry, period]);
-
-  const {
-    data: finData,
-    error: finErr,
-    loading: finLoading,
-  } = usePolling(() => api.financeMain(company.code), 1800000, [company.code, retry]);
+  const { data: board, error: boardErr, loading: boardLoading, retry: retryBoard } = useFinBoard(period);
+  const { data: finData, error: finErr, loading: finLoading, retry: retryMain } = useFinMain(company.code);
 
   const loading = boardLoading || finLoading;
   const error = boardErr || finErr;
+  const retry = () => { retryBoard(); retryMain(); };
 
-  // 在 board 中匹配公司（尝试多种代码格式）
+  // 在 board 中匹配公司（尝试多种代码格式 + 名称匹配）
   const peerData = useMemo(() => {
     if (!board?.stocks?.length || !finData?.reports?.[0]) return null;
     const bare = company.code.replace(/^(sh|sz|bj)/, "");
-    const companyInBoard = board.stocks.find(
+    let companyInBoard = board.stocks.find(
       (s) => s.code === bare || s.code === company.code || s.code === `${bare}.${company.code.startsWith("sh") ? "SH" : company.code.startsWith("sz") ? "SZ" : "BJ"}`
     );
-    if (!companyInBoard) return { industry: null, comparisons: null, count: 0 };
+    // 代码匹配失败时尝试名称匹配
+    if (!companyInBoard) {
+      companyInBoard = board.stocks.find((s) => s.name === company.name || s.name === finData.name);
+    }
+    // 仍未匹配: 用 finance-main 返回的行业名查找 peer 列表
+    const finIndustry = finData.industry || "";
 
-    const industry = companyInBoard.industry;
+    if (!companyInBoard && !finIndustry) return { industry: null, comparisons: null, count: 0 };
+
+    const industry = companyInBoard?.industry || finIndustry;
     const peers = board.stocks.filter((s) => s.industry === industry);
     const count = peers.length;
-    const avg = (arr: number[]) => arr.reduce((a, b) => a + b, 0) / count;
+    const avg = (arr: number[]) => (arr.length > 0 ? arr.reduce((a, b) => a + b, 0) / arr.length : 0);
     const rank = (arr: number[], val: number) => arr.filter((v) => v > val).length + 1;
 
     const peerNp = peers.map((s) => s.netProfit);
@@ -69,26 +67,30 @@ export function FinPeerPanel({ className = "", ...zoomProps }: { className?: str
     const peerRy = peers.map((s) => s.revenueYoY);
 
     const r0 = finData.reports[0];
-    const cmpNp = companyInBoard.netProfit;
-    const cmpRoe = companyInBoard.roe;
-    const cmpEps = companyInBoard.eps;
-    const cmpPy = companyInBoard.profitYoY;
-    const cmpRy = companyInBoard.revenueYoY;
+    // 公司在榜内则取榜内数值(用于排名), 否则用 finance-main 的值(仅对比不排名)
+    const cmpNp = companyInBoard ? companyInBoard.netProfit : r0.netProfit;
+    const cmpRoe = companyInBoard ? companyInBoard.roe : r0.roe;
+    const cmpEps = companyInBoard ? companyInBoard.eps : r0.eps;
+    const cmpPy = companyInBoard ? companyInBoard.profitYoY : r0.profitYoY;
+    const cmpRy = companyInBoard ? companyInBoard.revenueYoY : r0.revenueYoY;
+
+    const rankStr = (arr: number[], val: number) =>
+      companyInBoard ? `${rank(arr, val)}/${count}` : "—";
 
     const comparisons = [
       {
         label: "净利",
         companyVal: fmtYi(r0.netProfit),
-        peerVal: fmtYi(avg(peerNp)),
-        rank: `${rank(peerNp, cmpNp)}/${count}`,
+        peerVal: count > 0 ? fmtYi(avg(peerNp)) : "—",
+        rank: rankStr(peerNp, cmpNp),
         barVal: cmpNp,
         barAvg: avg(peerNp),
       },
       {
         label: "净利增速",
         companyVal: `${cmpPy > 0 ? "+" : ""}${cmpPy.toFixed(1)}%`,
-        peerVal: `${avg(peerPy) > 0 ? "+" : ""}${avg(peerPy).toFixed(1)}%`,
-        rank: `${rank(peerPy, cmpPy)}/${count}`,
+        peerVal: count > 0 ? `${avg(peerPy) > 0 ? "+" : ""}${avg(peerPy).toFixed(1)}%` : "—",
+        rank: rankStr(peerPy, cmpPy),
         barVal: cmpPy,
         barAvg: avg(peerPy),
         colorCls: pctCls(cmpPy),
@@ -96,8 +98,8 @@ export function FinPeerPanel({ className = "", ...zoomProps }: { className?: str
       {
         label: "营收增速",
         companyVal: `${cmpRy > 0 ? "+" : ""}${cmpRy.toFixed(1)}%`,
-        peerVal: `${avg(peerRy) > 0 ? "+" : ""}${avg(peerRy).toFixed(1)}%`,
-        rank: `${rank(peerRy, cmpRy)}/${count}`,
+        peerVal: count > 0 ? `${avg(peerRy) > 0 ? "+" : ""}${avg(peerRy).toFixed(1)}%` : "—",
+        rank: rankStr(peerRy, cmpRy),
         barVal: cmpRy,
         barAvg: avg(peerRy),
         colorCls: pctCls(cmpRy),
@@ -105,23 +107,23 @@ export function FinPeerPanel({ className = "", ...zoomProps }: { className?: str
       {
         label: "ROE",
         companyVal: `${cmpRoe.toFixed(1)}%`,
-        peerVal: `${avg(peerRoe).toFixed(1)}%`,
-        rank: `${rank(peerRoe, cmpRoe)}/${count}`,
+        peerVal: count > 0 ? `${avg(peerRoe).toFixed(1)}%` : "—",
+        rank: rankStr(peerRoe, cmpRoe),
         barVal: cmpRoe,
         barAvg: avg(peerRoe),
       },
       {
         label: "EPS",
         companyVal: cmpEps.toFixed(2),
-        peerVal: avg(peerEps).toFixed(2),
-        rank: `${rank(peerEps, cmpEps)}/${count}`,
+        peerVal: count > 0 ? avg(peerEps).toFixed(2) : "—",
+        rank: rankStr(peerEps, cmpEps),
         barVal: cmpEps,
         barAvg: avg(peerEps),
       },
     ];
 
-    return { industry, comparisons, count };
-  }, [board, finData, company.code]);
+    return { industry, comparisons, count, inBoard: !!companyInBoard };
+  }, [board, finData, company.code, company.name]);
 
   // 雷达图数据: 归一化到 0-1, 公司 vs 行业均值
   const radarData = useMemo(() => {
@@ -144,7 +146,7 @@ export function FinPeerPanel({ className = "", ...zoomProps }: { className?: str
       className={className}
       {...zoomProps}
       title="同业对比"
-      icon="≋"
+      icon={<GitCompare size={14} />}
       accent="#a78bfa"
       right={
         <div className="flex items-center gap-2 text-[10px]">
@@ -171,15 +173,15 @@ export function FinPeerPanel({ className = "", ...zoomProps }: { className?: str
           <SkeletonRows rows={8} />
         ) : (
           <div className="flex h-full items-center justify-center text-[11px]">
-            <button className="h-full w-full text-slate-500" onClick={() => setRetry((r) => r + 1)}>
+            <button className="h-full w-full text-slate-500" onClick={retry}>
               数据获取失败，点击重试{error ? `(${error})` : ""}
             </button>
           </div>
         )
       ) : !hasPeer ? (
         <div className="flex h-full flex-col items-center justify-center gap-1 text-[11px] text-slate-600">
-          <span>该公司未出现在当期行业榜单中</span>
-          <span className="text-[9px] text-slate-700">可能在统计样本外或代码不一致</span>
+          <span>未找到该公司行业信息</span>
+          <span className="text-[9px] text-slate-700">该股票可能不在当期统计范围内</span>
         </div>
       ) : mode === "table" ? (
         <div className="flex h-full min-h-0 flex-col">
@@ -187,8 +189,12 @@ export function FinPeerPanel({ className = "", ...zoomProps }: { className?: str
           <div className="flex shrink-0 items-center gap-2 border-b border-slate-800/60 px-2 py-1">
             <span className="text-[11px] font-semibold text-violet-300">{peerData.industry}</span>
             <span className="text-[9px] text-slate-500">
-              共 {peerData.count} 家 · 排名第
+              共 {peerData.count} 家
+              {peerData.inBoard && peerData.count > 0 ? " · 排名第" : ""}
             </span>
+            {!peerData.inBoard && (
+              <span className="text-[8px] text-amber-400/70">(未入榜,仅对比均值)</span>
+            )}
           </div>
           {/* 表头 */}
           <div className="flex shrink-0 items-center gap-2 border-b border-slate-800/40 px-2 py-0.5 text-[8.5px] text-slate-500">
@@ -230,15 +236,34 @@ export function FinPeerPanel({ className = "", ...zoomProps }: { className?: str
   );
 }
 
-/** 简易雷达图: SVG 多边形 + 轴标签 */
+/** 雷达图: SVG 多边形 + 轴标签, 自适应面板大小 */
 function RadarChart({ axes, companyName }: { axes: { label: string; company: number; peer: number }[]; companyName: string }) {
   const n = axes.length;
+  const boxRef = useRef<HTMLDivElement>(null);
+  const [size, setSize] = useState({ w: 300, h: 260 });
+
+  useEffect(() => {
+    const el = boxRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver((es) => {
+      const r = es[0].contentRect;
+      if (r.width > 60 && r.height > 60) setSize({ w: r.width, h: r.height });
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   if (n < 3) return <div className="flex h-full items-center justify-center text-[11px] text-slate-600">需要至少 3 项指标</div>;
 
-  const CX = 150;
-  const CY = 120;
-  const R = 80;
+  const { w: W, h: H } = size;
+  const padding = 28;
+  const legendH = 20;
+  const plotH = H - legendH;
+  const CX = W / 2;
+  const CY = (plotH - padding) / 2 + padding * 0.6;
+  const R = Math.min(CX - padding, CY - padding, (plotH - padding * 2) / 2);
   const levels = 5;
+  const fontSize = Math.max(9, Math.min(12, R / 8));
 
   const angle = (i: number) => (Math.PI * 2 * i) / n - Math.PI / 2;
   const pt = (i: number, r: number) => ({
@@ -246,20 +271,18 @@ function RadarChart({ axes, companyName }: { axes: { label: string; company: num
     y: CY + r * Math.sin(angle(i)),
   });
 
-  // 背景网格
   const grids = Array.from({ length: levels }, (_, li) => {
     const r = ((li + 1) / levels) * R;
     return axes.map((_, i) => pt(i, r));
   });
 
-  // 公司多边形
   const companyPts = axes.map((a, i) => pt(i, a.company * R));
   const peerPts = axes.map((a, i) => pt(i, a.peer * R));
+  const labelR = R + Math.max(14, fontSize * 1.6);
 
   return (
-    <div className="flex h-full min-h-0 flex-col items-center justify-center">
-      <svg width="300" height="260" className="shrink-0">
-        {/* 径向网格 */}
+    <div ref={boxRef} className="flex h-full min-h-0 flex-col items-center justify-center">
+      <svg width={W} height={plotH} className="block">
         {grids.map((ring, li) => (
           <polygon
             key={li}
@@ -269,12 +292,10 @@ function RadarChart({ axes, companyName }: { axes: { label: string; company: num
             strokeWidth={1}
           />
         ))}
-        {/* 轴 */}
         {axes.map((_, i) => {
           const outer = pt(i, R);
           return <line key={i} x1={CX} y1={CY} x2={outer.x} y2={outer.y} stroke="#1e293b" strokeWidth={1} />;
         })}
-        {/* 行业均值 */}
         <polygon
           points={peerPts.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ")}
           fill="#fbbf24"
@@ -283,7 +304,6 @@ function RadarChart({ axes, companyName }: { axes: { label: string; company: num
           strokeWidth={1}
           strokeDasharray="3 2"
         />
-        {/* 公司值 */}
         <polygon
           points={companyPts.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ")}
           fill="#a78bfa"
@@ -291,15 +311,14 @@ function RadarChart({ axes, companyName }: { axes: { label: string; company: num
           stroke="#a78bfa"
           strokeWidth={1.5}
         />
-        {/* 轴标签 */}
         {axes.map((a, i) => {
-          const outer = pt(i, R + 16);
+          const outer = pt(i, labelR);
           return (
             <text
               key={i}
               x={outer.x}
-              y={outer.y + 3}
-              fontSize={9}
+              y={outer.y + fontSize * 0.35}
+              fontSize={fontSize}
               fill="#94a3b8"
               textAnchor="middle"
               style={TNUM}
@@ -309,8 +328,7 @@ function RadarChart({ axes, companyName }: { axes: { label: string; company: num
           );
         })}
       </svg>
-      {/* 图例 */}
-      <div className="flex items-center gap-4 text-[9px]">
+      <div className="flex shrink-0 items-center gap-4 text-[10px]" style={{ height: legendH }}>
         <span className="flex items-center gap-1">
           <span className="inline-block h-2 w-3 rounded-sm bg-violet-400/40" />
           <span className="text-slate-400">

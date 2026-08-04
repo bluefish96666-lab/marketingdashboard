@@ -721,7 +721,7 @@ function emEnqueue(fn) {
 }
 
 async function handleStockBoards(code) {
-  const m = String(code || "").toLowerCase().match(/^(sh|sz|bj)(\d{6})$/);
+  const m = String(code || "").toLowerCase().match(/^(sh|sz|bj|nq)(\d{6})$/);
   if (!m) throw new Error("bad code");
   const market = m[1] === "sh" ? 1 : 0;
   return emEnqueue(async () => {
@@ -806,7 +806,7 @@ async function handleStockFlows(codesParam) {
     .toLowerCase()
     .split(",")
     .map((s) => s.trim())
-    .filter((s) => /^(sh|sz|bj)\d{6}$/.test(s))
+    .filter((s) => /^(sh|sz|bj|nq)\d{6}$/.test(s))
     .slice(0, 150);
   const now = Date.now();
   const out = {};
@@ -1082,12 +1082,13 @@ async function emDataPages(url) {
   return j?.result?.pages || 0;
 }
 
-// sh600519/sz000001/bj430047 或裸 6 位 → SECUCODE(600519.SH); 6/9→SH, 0/2/3→SZ, 4/8→BJ
+// sh600519/sz000001/bj920748/nq872094 或裸 6 位 → SECUCODE(600519.SH); 有前缀优先用前缀, 否则 6→SH, 0/2/3→SZ, 8→NQ, 4/9→BJ
 function secuCode(raw) {
-  const m = String(raw || "").toLowerCase().match(/^(?:sh|sz|bj)?(\d{6})$/);
+  const m = String(raw || "").toLowerCase().match(/^(sh|sz|bj|nq)?(\d{6})$/);
   if (!m) return null;
-  const c = m[1];
-  const ex = c[0] === "6" || c[0] === "9" ? "SH" : c[0] === "4" || c[0] === "8" ? "BJ" : "SZ";
+  const prefix = m[1];
+  const c = m[2];
+  const ex = prefix ? prefix.toUpperCase() : c[0] === "6" ? "SH" : ["0","2","3"].includes(c[0]) ? "SZ" : c[0] === "8" ? "NQ" : "BJ";
   return `${c}.${ex}`;
 }
 
@@ -1113,14 +1114,22 @@ async function handleFinanceMain(code) {
     err.status = 400;
     throw err;
   }
-  const url =
+  const finUrl =
     `https://datacenter.eastmoney.com/securities/api/data/v1/get?reportName=RPT_F10_FINANCE_MAINFINADATA` +
     `&columns=ALL&filter=${encodeURIComponent(`(SECUCODE="${secu}")`)}` +
     `&pageNumber=1&pageSize=12&sortTypes=-1&sortColumns=REPORT_DATE&source=HSF10&client=PC`;
-  const rows = await emDataGet(url);
+  const orgUrl =
+    `https://datacenter.eastmoney.com/securities/api/data/v1/get?reportName=RPT_F10_ORG_BASICINFO` +
+    `&columns=ALL&filter=${encodeURIComponent(`(SECUCODE="${secu}")`)}` +
+    `&pageNumber=1&pageSize=1&source=HSF10&client=PC`;
+  const [finRows, orgRows] = await Promise.all([emDataGet(finUrl), emDataGet(orgUrl).catch(() => [])]);
+  const org = orgRows[0] || {};
+  // 行业: 优先二级行业(与 finance-board 的 BOARD_NAME 对应), 降级一级/三级/证监会行业
+  const industry = org.BOARD_NAME_2LEVEL || org.BOARD_NAME_1LEVEL || org.BOARD_NAME_3LEVEL || org.CSRC_INDUSTRY_NAME || "";
   return {
-    name: rows[0]?.SECURITY_NAME_ABBR || "",
-    reports: rows.map((r) => ({
+    name: finRows[0]?.SECURITY_NAME_ABBR || "",
+    industry,
+    reports: finRows.map((r) => ({
       label: r.REPORT_DATE_NAME || "",
       date: String(r.REPORT_DATE || "").slice(0, 10),
       revenue: num(r.TOTALOPERATEREVE),
@@ -1142,24 +1151,26 @@ const finBoardUrl = (period, extra) =>
   `https://datacenter-web.eastmoney.com/api/data/v1/get?reportName=RPT_LICO_FN_CPD&columns=ALL` +
   `&filter=${encodeURIComponent(`(REPORTDATE='${period}')`)}&pageNumber=1&sortTypes=-1&source=WEB&client=WEB&${extra}`;
 
-// 宏观数据包: 个股盈利榜 TOP50 + 行业聚合 TOP15 + 披露日历 60 条(三次上游请求合并) + 已披露家数
+// 宏观数据包: 个股盈利榜 TOP300(含同业对比用) + 行业聚合 TOP15 + 披露日历 60 条 + 已披露家数
 async function handleFinanceBoard(period) {
   const [stockRows, indRows, calRows, disclosed] = await Promise.all([
-    emDataGet(finBoardUrl(period, "sortColumns=PARENT_NETPROFIT&pageSize=50")),
+    emDataGet(finBoardUrl(period, "sortColumns=PARENT_NETPROFIT&pageSize=300")),
     emDataGet(finBoardUrl(period, "sortColumns=PARENT_NETPROFIT&pageSize=500")),
     emDataGet(finBoardUrl(period, "sortColumns=NOTICE_DATE&pageSize=60")),
     emDataPages(finBoardUrl(period, "sortColumns=NOTICE_DATE&pageSize=1")),
   ]);
-  const stocks = stockRows.map((r) => ({
-    code: r.SECURITY_CODE || "",
-    name: r.SECURITY_NAME_ABBR || "",
-    industry: r.BOARD_NAME || "",
-    netProfit: num(r.PARENT_NETPROFIT),
-    profitYoY: num(r.SJLTZ),
-    revenueYoY: num(r.YSTZ),
-    roe: num(r.WEIGHTAVG_ROE),
-    eps: num(r.BASIC_EPS),
-  }));
+  const stocks = stockRows
+    .filter((r) => r.BOARD_NAME) // 排除行业为 null 的股票(如中欣晶圆)
+    .map((r) => ({
+      code: r.SECURITY_CODE || "",
+      name: r.SECURITY_NAME_ABBR || "",
+      industry: r.BOARD_NAME || "",
+      netProfit: num(r.PARENT_NETPROFIT),
+      profitYoY: num(r.SJLTZ),
+      revenueYoY: num(r.YSTZ),
+      roe: num(r.WEIGHTAVG_ROE),
+      eps: num(r.BASIC_EPS),
+    }));
   // 行业聚合: 净利润合计 + 家数 + 平均净利同比
   const agg = new Map();
   for (const r of indRows) {
@@ -1477,20 +1488,48 @@ setTimeout(collectSpotDaily, 60 * 1000).unref();
 /* ---------------- 股票搜索(名称/拼音首字母→代码) ---------------- */
 async function handleStockSearch(query) {
   if (!query || query.length < 1) return [];
-  const url = `https://suggest3.sinajs.cn/suggest/type=&key=${encodeURIComponent(query)}`;
-  const resp = await fetch(url, { signal: AbortSignal.timeout(5000) });
-  const buf = await resp.arrayBuffer();
-  const text = new TextDecoder("gbk").decode(buf);
-  const m = text.match(/suggestvalue="([^"]+)"/);
-  if (!m) return [];
-  // 格式: name,type,code,fullCode,pinyin,...;
   const results = [];
-  for (const part of m[1].split(";")) {
-    const f = part.split(",");
-    if (f.length >= 4 && /^(sh|sz|bj)\d{6}$/.test(f[3])) {
-      results.push({ code: f[3], name: f[0], pinyin: f[4] || "" });
+
+  // 1. 新浪搜索(覆盖沪深北)
+  const sinaUrl = `https://suggest3.sinajs.cn/suggest/type=&key=${encodeURIComponent(query)}`;
+  try {
+    const resp = await fetch(sinaUrl, { signal: AbortSignal.timeout(5000) });
+    const buf = await resp.arrayBuffer();
+    const text = new TextDecoder("gbk").decode(buf);
+    const m = text.match(/suggestvalue="([^"]+)"/);
+    if (m) {
+      for (const part of m[1].split(";")) {
+        const f = part.split(",");
+        if (f.length >= 4 && /^(sh|sz|bj)\d{6}$/.test(f[3])) {
+          results.push({ code: f[3], name: f[0], pinyin: f[4] || "" });
+        }
+      }
     }
-  }
+  } catch { /* 新浪不可用时降级 */ }
+
+  // 2. 东方财富搜索(覆盖新三板 NEEQ)
+  const emUrl = `https://searchadapter.eastmoney.com/api/suggest/get?input=${encodeURIComponent(query)}&type=14&token=D43BF722C8E33BDC906FB84D85E326E8&count=8`;
+  try {
+    const emResp = await fetch(emUrl, {
+      headers: { "User-Agent": UA, Referer: "https://www.eastmoney.com/" },
+      signal: AbortSignal.timeout(5000),
+    });
+    const emJson = await emResp.json();
+    const emData = emJson?.QuotationCodeTable?.Data || [];
+    for (const d of emData) {
+      const code = d.Code;
+      if (!code || !/^\d{6}$/.test(code)) continue;
+      // Classify: "NEEQ"→nq, 上交所→sh, 深交所→sz, 北交所→bj
+      const classify = d.Classify || "";
+      const prefix = classify === "NEEQ" ? "nq" : /^60/.test(code) ? "sh" : /^[023]/.test(code) ? "sz" : "bj";
+      const fullCode = `${prefix}${code}`;
+      // 避免与新浪结果重复
+      if (!results.some((r) => r.code === fullCode)) {
+        results.push({ code: fullCode, name: d.Name || "", pinyin: d.PinYin || "" });
+      }
+    }
+  } catch { /* 东财不可用时降级 */ }
+
   return results.slice(0, 10);
 }
 /* ------------------------------------------------------------- */

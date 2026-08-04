@@ -241,6 +241,7 @@ export interface FinanceReport {
 
 export interface FinanceMain {
   name: string;
+  industry: string;
   reports: FinanceReport[];
 }
 

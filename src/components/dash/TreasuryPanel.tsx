@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Panel, type PanelZoomProps } from "./Panel";
 import { usePolling } from "@/hooks/usePolling";
+import { Landmark } from "lucide-react";
 import { useSharedPolling } from "@/hooks/useSharedPolling";
 import { api, type Treasury } from "@/lib/api";
 import { clsChg } from "@/lib/format";
@@ -94,7 +95,7 @@ export function TreasuryPanel({ className = "", ...zoomProps }: { className?: st
   const spread3m10y = m3 && y10 ? (y10.yield - m3.yield) * 100 : null;
 
   return (
-    <Panel className={className} {...zoomProps} title="美债国债市场" icon="◧" accent="#a78bfa"
+    <Panel className={className} {...zoomProps} title="美债国债市场" icon={<Landmark size={14} />} accent="#a78bfa"
       right={<span className="text-[10px] text-slate-500">CNBC · 60s</span>}>
       <div className="flex h-full flex-col p-2.5">
         {/* 利差指标 */}

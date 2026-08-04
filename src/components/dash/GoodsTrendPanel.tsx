@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { TrendingUp } from "lucide-react";
 import { Panel, type PanelZoomProps } from "./Panel";
 import { GoodsRow } from "./GoodsRow";
 import { usePolling } from "@/hooks/usePolling";
@@ -42,7 +43,7 @@ export function GoodsTrendPanel({ group, title, accent, className = "", ...zoomP
       className={className}
       {...zoomProps}
       title={title}
-      icon="◈"
+      icon={<TrendingUp size={14} />}
       accent={accent}
       right={
         <div className="flex items-center gap-1 text-[11px]">

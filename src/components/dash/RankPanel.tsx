@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { ListOrdered } from "lucide-react";
 import { Panel, type PanelZoomProps } from "./Panel";
 import { QuoteRow } from "./QuoteRow";
 import { usePolling } from "@/hooks/usePolling";
@@ -24,7 +25,7 @@ export function RankPanel({ className = "", ...zoomProps }: { className?: string
       className={className}
       {...zoomProps}
       title="个股榜单"
-      icon="≣"
+      icon={<ListOrdered size={14} />}
       accent="#fbbf24"
       right={
         <div className="flex items-center gap-1 text-[11px]">

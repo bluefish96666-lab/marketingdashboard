@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
+import { FileText } from "lucide-react";
 import { Panel, type PanelZoomProps } from "../Panel";
-import { usePolling } from "@/hooks/usePolling";
+import { useFinMain } from "./useFinData";
 import { api, type StockSearchResult } from "@/lib/api";
 import { useFin } from "./FinContext";
 import { SkeletonRows } from "./SkeletonRows";
@@ -11,8 +12,7 @@ const pctCls = (v: number) => (v > 0 ? "text-rose-400" : v < 0 ? "text-emerald-4
 /** 公司财报: 搜索框 + 最近查看 chips + 最新报告期指标卡 2×3 */
 export function FinCompanyPanel({ className = "", ...zoomProps }: { className?: string } & PanelZoomProps) {
   const { company, recent, select } = useFin();
-  const [retry, setRetry] = useState(0);
-  const { data, error, loading } = usePolling(() => api.financeMain(company.code), 1800000, [company.code, retry]);
+  const { data, error, loading, retry } = useFinMain(company.code);
 
   const [input, setInput] = useState("");
   const [suggestions, setSuggestions] = useState<StockSearchResult[]>([]);
@@ -75,7 +75,7 @@ export function FinCompanyPanel({ className = "", ...zoomProps }: { className?: 
       className={className}
       {...zoomProps}
       title="公司财报"
-      icon="◈"
+      icon={<FileText size={14} />}
       accent="#22d3ee"
       right={<span className="max-w-[110px] truncate text-[10px] text-cyan-300">{displayName}</span>}
     >
@@ -135,7 +135,7 @@ export function FinCompanyPanel({ className = "", ...zoomProps }: { className?: 
             <SkeletonRows rows={6} />
           ) : (
             <div className="flex min-h-0 flex-1 items-center justify-center text-[11px]">
-              <button className="h-full w-full text-slate-500" onClick={() => setRetry((r) => r + 1)}>
+              <button className="h-full w-full text-slate-500" onClick={retry}>
                 数据获取失败，点击重试{error ? `(${error})` : ""}
               </button>
             </div>

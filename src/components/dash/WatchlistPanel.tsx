@@ -1,4 +1,5 @@
 import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { Star } from "lucide-react";
 import { Panel, type PanelZoomProps } from "./Panel";
 import { QuoteRow } from "./QuoteRow";
 import { useQuote } from "@/lib/market";
@@ -17,15 +18,16 @@ function load(): string[] {
   return DEFAULT_LIST;
 }
 
-/** 输入归一化为腾讯代码: 6/9→sh, 0/2/3→sz, 4/8→bj; 已带 sh/sz/bj 前缀则原样 */
+/** 输入归一化为腾讯代码: 6→sh, 0/2/3→sz, 8→nq(新三板), 4/9→bj; 已带前缀则原样 */
 function normalizeCode(input: string): string | null {
   const s = input.trim().toLowerCase();
-  if (/^(sh|sz|bj)\d{6}$/.test(s)) return s;
+  if (/^(sh|sz|bj|nq)\d{6}$/.test(s)) return s;
   if (/^\d{6}$/.test(s)) {
     const c = s[0];
-    if (c === "6" || c === "9") return `sh${s}`;
+    if (c === "6") return `sh${s}`;
     if (c === "0" || c === "2" || c === "3") return `sz${s}`;
-    if (c === "4" || c === "8") return `bj${s}`;
+    if (c === "8") return `nq${s}`;
+    return `bj${s}`;
   }
   return null;
 }
@@ -150,7 +152,7 @@ export function WatchlistPanel({ className = "", ...zoomProps }: { className?: s
       className={className}
       {...zoomProps}
       title="自选股"
-      icon="★"
+      icon={<Star size={14} />}
       accent="#fbbf24"
       right={<span className="text-[10px] text-slate-500">{codes.length}只 · 5s</span>}
     >

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Rss } from "lucide-react";
 import { Panel, type PanelZoomProps } from "./Panel";
 import { useSharedPolling } from "@/hooks/useSharedPolling";
 import { api, type NewsItem } from "@/lib/api";
@@ -61,7 +62,7 @@ export function NewsPanel({ className = "", ...zoomProps }: { className?: string
       className={className}
       {...zoomProps}
       title="实时热点新闻 · 7×24 快讯"
-      icon="↯"
+      icon={<Rss size={14} />}
       accent="#f472b6"
       right={
         <label className="flex cursor-pointer items-center gap-1.5 text-[10px] text-slate-400">

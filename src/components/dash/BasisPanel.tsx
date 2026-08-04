@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { Table } from "lucide-react";
 import { Panel, type PanelZoomProps } from "./Panel";
 import { useSharedPolling } from "@/hooks/useSharedPolling";
 import { api, type SpotRow } from "@/lib/api";
@@ -45,7 +46,7 @@ export function BasisPanel({ className = "", ...zoomProps }: { className?: strin
       className={className}
       {...zoomProps}
       title="现期对照 · 基差"
-      icon="▥"
+      icon={<Table size={14} />}
       accent="#38bdf8"
       right={<span className="text-[10px] text-slate-500">{data ? `${data.rows.length} 品种` : ""}</span>}
     >

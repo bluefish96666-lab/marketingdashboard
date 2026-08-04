@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { TrendingUp } from "lucide-react";
 import { Panel, type PanelZoomProps } from "../Panel";
-import { usePolling } from "@/hooks/usePolling";
-import { api, type FinanceReport } from "@/lib/api";
+import { useFinMain } from "./useFinData";
+import { type FinanceReport } from "@/lib/api";
 import { useFin } from "./FinContext";
 import { SkeletonRows } from "./SkeletonRows";
 import { TNUM, quarterLabel } from "./utils";
@@ -163,10 +164,10 @@ function TrendChart({ reports, tab }: { reports: FinanceReport[]; tab: Tab }) {
           ? chart.ticks.map((t, i) => (
               <g key={i}>
                 <line x1={L} y1={t.y} x2={W - chart.R} y2={t.y} stroke={GRID} strokeWidth={1} />
-                <text x={L - 3} y={t.y + 3} fontSize={8} fill={AXIS} textAnchor="end" style={TNUM}>
+                <text x={L - 3} y={t.y + 3} fontSize={9} fill={AXIS} textAnchor="end" style={TNUM}>
                   {(t.m / 1e8).toFixed(0)}亿
                 </text>
-                <text x={W - chart.R + 3} y={t.y + 3} fontSize={8} fill={AXIS} style={TNUM}>
+                <text x={W - chart.R + 3} y={t.y + 3} fontSize={9} fill={AXIS} style={TNUM}>
                   {t.p.toFixed(0)}%
                 </text>
               </g>
@@ -175,10 +176,10 @@ function TrendChart({ reports, tab }: { reports: FinanceReport[]; tab: Tab }) {
           ? chart.ticks.map((t, i) => (
               <g key={i}>
                 <line x1={L} y1={t.y} x2={W - chart.R} y2={t.y} stroke={GRID} strokeWidth={1} />
-                <text x={L - 3} y={t.y + 3} fontSize={8} fill={AXIS} textAnchor="end" style={TNUM}>
+                <text x={L - 3} y={t.y + 3} fontSize={9} fill={AXIS} textAnchor="end" style={TNUM}>
                   {t.l.toFixed(0)}%
                 </text>
-                <text x={W - chart.R + 3} y={t.y + 3} fontSize={8} fill={AXIS} style={TNUM}>
+                <text x={W - chart.R + 3} y={t.y + 3} fontSize={9} fill={AXIS} style={TNUM}>
                   {t.r.toFixed(1)}
                 </text>
               </g>
@@ -186,7 +187,7 @@ function TrendChart({ reports, tab }: { reports: FinanceReport[]; tab: Tab }) {
           : chart.ticks.map((t, i) => (
               <g key={i}>
                 <line x1={L} y1={t.y} x2={W - chart.R} y2={t.y} stroke={GRID} strokeWidth={1} />
-                <text x={L - 3} y={t.y + 3} fontSize={8} fill={AXIS} textAnchor="end" style={TNUM}>
+                <text x={L - 3} y={t.y + 3} fontSize={9} fill={AXIS} textAnchor="end" style={TNUM}>
                   {t.v.toFixed(0)}%
                 </text>
               </g>
@@ -198,7 +199,7 @@ function TrendChart({ reports, tab }: { reports: FinanceReport[]; tab: Tab }) {
         {/* X 刻度: 隔期标注 */}
         {chart.rows.map((r, i) =>
           i % 2 === 0 ? (
-            <text key={r.date} x={chart.cx(i)} y={H - 4} fontSize={8} fill={TICK} textAnchor="middle" style={TNUM}>
+            <text key={r.date} x={chart.cx(i)} y={H - 4} fontSize={9} fill={TICK} textAnchor="middle" style={TNUM}>
               {quarterLabel(r.date)}
             </text>
           ) : null
@@ -251,7 +252,7 @@ function TrendChart({ reports, tab }: { reports: FinanceReport[]; tab: Tab }) {
                   strokeWidth={0.6}
                   strokeOpacity={0.5}
                 />
-                <text x={W - chart.R + 4} y={l.labelY + 3} fontSize={8.5} fill={l.s.color} style={TNUM}>
+                <text x={W - chart.R + 4} y={l.labelY + 3} fontSize={10} fill={l.s.color} style={TNUM}>
                   {l.s.name} {l.s.lastV.toFixed(1)}
                 </text>
               </g>
@@ -288,10 +289,10 @@ function TrendChart({ reports, tab }: { reports: FinanceReport[]; tab: Tab }) {
               const ocfY = chart.Yl(last.ocfPerShare);
               return (
                 <>
-                  <text x={W - chart.R + 4} y={roicY + 3} fontSize={8} fill="#22d3ee" style={TNUM}>
+                  <text x={W - chart.R + 4} y={roicY + 3} fontSize={9} fill="#22d3ee" style={TNUM}>
                     ROIC {last.roic.toFixed(1)}%
                   </text>
-                  <text x={W - chart.R + 4} y={ocfY + 3} fontSize={8} fill="#34d399" style={TNUM}>
+                  <text x={W - chart.R + 4} y={ocfY + 3} fontSize={9} fill="#34d399" style={TNUM}>
                     OCF {last.ocfPerShare.toFixed(2)}
                   </text>
                 </>
@@ -309,16 +310,15 @@ function TrendChart({ reports, tab }: { reports: FinanceReport[]; tab: Tab }) {
 /** 公司趋势: 业绩(分组柱+同比双轴) | 质量(ROE/毛利率/净利率) */
 export function FinTrendPanel({ className = "", ...zoomProps }: { className?: string } & PanelZoomProps) {
   const [tab, setTab] = useState<Tab>("perf");
-  const [retry, setRetry] = useState(0);
   const { company } = useFin();
-  const { data, error, loading } = usePolling(() => api.financeMain(company.code), 1800000, [company.code, retry]);
+  const { data, error, loading, retry } = useFinMain(company.code);
 
   return (
     <Panel
       className={className}
       {...zoomProps}
       title="公司趋势"
-      icon="◧"
+      icon={<TrendingUp size={14} />}
       accent="#22d3ee"
       right={
         <div className="flex items-center gap-2 text-[10px]">
@@ -353,7 +353,7 @@ export function FinTrendPanel({ className = "", ...zoomProps }: { className?: st
           <SkeletonRows rows={8} />
         ) : (
           <div className="flex h-full items-center justify-center text-[11px]">
-            <button className="h-full w-full text-slate-500" onClick={() => setRetry((r) => r + 1)}>
+            <button className="h-full w-full text-slate-500" onClick={retry}>
               数据获取失败，点击重试{error ? `(${error})` : ""}
             </button>
           </div>

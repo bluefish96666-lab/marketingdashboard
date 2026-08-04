@@ -1,6 +1,7 @@
 import { Panel, type PanelZoomProps } from "./Panel";
 import { Spark } from "./Spark";
 import { usePolling } from "@/hooks/usePolling";
+import { Diamond } from "lucide-react";
 import { useQuotes } from "@/lib/market";
 import { api, type MinuteData } from "@/lib/api";
 import { COMMODITIES } from "@/config/dashboard";
@@ -23,7 +24,7 @@ export function CommodityPanel({ className = "", ...zoomProps }: { className?: s
   );
 
   return (
-    <Panel className={className} {...zoomProps} title="大宗商品" icon="◆" accent="#f5c542"
+    <Panel className={className} {...zoomProps} title="大宗商品" icon={<Diamond size={14} />} accent="#f5c542"
       right={<span className="text-[10px] text-slate-500">10s</span>}>
       <div className="flex h-full flex-col divide-y divide-slate-800/60">
         {COMMODITIES.map((c) => {

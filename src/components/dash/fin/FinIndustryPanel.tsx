@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Building2 } from "lucide-react";
 import { Panel, type PanelZoomProps } from "../Panel";
-import { usePolling } from "@/hooks/usePolling";
-import { api } from "@/lib/api";
+import { useFinBoard } from "./useFinData";
+// (data via useFinBoard)
 import { useFin } from "./FinContext";
 import { PeriodTabs } from "./PeriodTabs";
 import { SkeletonRows } from "./SkeletonRows";
@@ -85,9 +86,8 @@ function layoutTreemap(items: TMItem[], X: number, Y: number, W: number, H: numb
 
 /** 行业盈利榜 TOP15: 条形矩阵(默认, 对数压缩, 条色=同比) / 树状图(线框化, 面积∝净利) 可切换 */
 export function FinIndustryPanel({ className = "", ...zoomProps }: { className?: string } & PanelZoomProps) {
-  const [retry, setRetry] = useState(0);
   const { period } = useFin();
-  const { data, error, loading } = usePolling(() => api.financeBoard(period), 1800000, [retry, period]);
+  const { data, error, loading, retry } = useFinBoard(period);
   const [hover, setHover] = useState(-1);
   const [mode, setMode] = useState<"bar" | "tree">("tree");
 
@@ -135,7 +135,7 @@ export function FinIndustryPanel({ className = "", ...zoomProps }: { className?:
       className={className}
       {...zoomProps}
       title="行业盈利榜"
-      icon="▤"
+      icon={<Building2 size={14} />}
       accent="#34d399"
       right={
         !empty && (
@@ -167,7 +167,7 @@ export function FinIndustryPanel({ className = "", ...zoomProps }: { className?:
           <SkeletonRows rows={12} />
         ) : (
           <div className="flex h-full items-center justify-center text-[11px]">
-            <button className="h-full w-full text-slate-500" onClick={() => setRetry((r) => r + 1)}>
+            <button className="h-full w-full text-slate-500" onClick={retry}>
               数据获取失败，点击重试{error ? `(${error})` : ""}
             </button>
           </div>

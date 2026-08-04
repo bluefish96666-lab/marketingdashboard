@@ -23,13 +23,13 @@ export const quarterLabel = (s: string) => {
   return s;
 };
 
-/** 裸 6 位代码补市场前缀: 6/9→sh, 0/2/3→sz, 4/8→bj; 已带前缀原样返回 */
+/** 裸 6 位代码补市场前缀: 6→sh, 0/2/3→sz, 8→nq(新三板), 4/9→bj; 已带前缀原样返回 */
 export const prefixCode = (code: string) => {
   const s = code.trim().toLowerCase();
-  if (/^(sh|sz|bj)\d{6}$/.test(s)) return s;
+  if (/^(sh|sz|bj|nq)\d{6}$/.test(s)) return s;
   if (/^\d{6}$/.test(s)) {
     const c = s[0];
-    return (c === "6" || c === "9" ? "sh" : c === "4" || c === "8" ? "bj" : "sz") + s;
+    return (c === "6" ? "sh" : ["0", "2", "3"].includes(c) ? "sz" : c === "8" ? "nq" : "bj") + s;
   }
   return s;
 };

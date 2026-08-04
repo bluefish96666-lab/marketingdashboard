@@ -1,3 +1,4 @@
+import { Diamond } from "lucide-react";
 import { Panel, type PanelZoomProps } from "./Panel";
 import { GoodsRow } from "./GoodsRow";
 import { usePolling } from "@/hooks/usePolling";
@@ -28,7 +29,7 @@ export function SpotPanel({ className = "", ...zoomProps }: { className?: string
       className={className}
       {...zoomProps}
       title="现货价格"
-      icon="◆"
+      icon={<Diamond size={14} />}
       accent="#f5c542"
       right={<span className="text-[10px] text-slate-500">生意社{data?.date ? ` · ${data.date}` : ""}</span>}
     >

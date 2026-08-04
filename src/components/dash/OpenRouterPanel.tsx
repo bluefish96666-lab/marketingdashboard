@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, Fragment } from "react";
+import { Cpu } from "lucide-react";
 import { Panel, type PanelZoomProps } from "./Panel";
 import { useOpenRouterUsage } from "@/lib/api";
 import type { OrUsageDay } from "@/lib/api";
@@ -190,7 +191,7 @@ export function OpenRouterPanel({ className, panelId, isZoomed, onToggleZoom }: 
   return (
     <Panel
       title="公有云大模型 Token 消耗"
-      icon="⟁"
+      icon={<Cpu size={14} />}
       accent="#a78bfa"
       className={className}
       panelId={panelId}

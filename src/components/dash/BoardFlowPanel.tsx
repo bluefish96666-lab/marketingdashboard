@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Activity } from "lucide-react";
 import { Panel, type PanelZoomProps } from "./Panel";
 import { BoardFlowChart } from "./BoardFlowChart";
 import { usePolling } from "@/hooks/usePolling";
@@ -54,7 +55,7 @@ export function BoardFlowPanel({ className = "", ...zoomProps }: { className?: s
       className={className}
       {...zoomProps}
       title="板块资金流向"
-      icon="∿"
+      icon={<Activity size={14} />}
       accent="#f43f5e"
       right={
         <div className="flex items-center gap-2">

@@ -10,7 +10,7 @@ export interface PanelZoomProps {
 
 interface PanelProps extends PanelZoomProps {
   title: string;
-  icon?: string;
+  icon?: ReactNode;
   right?: ReactNode;
   children: ReactNode;
   className?: string;
@@ -79,7 +79,7 @@ export function Panel({
     >
       <header className="flex h-8 shrink-0 items-center gap-2 border-b border-slate-700/40 px-2.5">
         <span className="inline-block h-3.5 w-1 rounded-sm" style={{ background: accent }} />
-        {icon && <span className="text-[13px] leading-none" style={{ color: accent }}>{icon}</span>}
+        {icon && <span style={{ color: accent, display: "inline-flex", alignItems: "center" }}>{icon}</span>}
         <h2 className="text-[13px] font-semibold tracking-wide text-slate-200">{title}</h2>
         <div className="ml-auto flex items-center gap-2">
           {right}

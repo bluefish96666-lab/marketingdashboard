@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Layers } from "lucide-react";
 import { Panel, type PanelZoomProps } from "./Panel";
 import { QuoteRow } from "./QuoteRow";
 import { usePolling } from "@/hooks/usePolling";
@@ -107,7 +108,7 @@ export function SectorPanel({ className = "", ...zoomProps }: { className?: stri
       className={className}
       {...zoomProps}
       title="市场板块实时热点"
-      icon="▤"
+      icon={<Layers size={14} />}
       accent="#22d3ee"
       right={
         <div className="flex items-center gap-1 text-[11px]">
