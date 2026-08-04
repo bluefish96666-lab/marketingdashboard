@@ -23,16 +23,9 @@ impl Default for Config {
 }
 
 impl Config {
-    /// 主窗口 URL:
-    /// - 远程模式: https://server/?desktop=1
-    /// - 本地模式: tauri://localhost/index.html (asset protocol, 配置通过 init script 注入)
     pub fn main_url(&self) -> String {
-        if self.mode == "remote" {
-            let server = self.server_url.trim_end_matches('/');
-            format!("{server}/?desktop=1")
-        } else {
-            "tauri://localhost/index.html".into()
-        }
+        let server = self.server_url.trim_end_matches('/');
+        format!("{server}/?desktop=1")
     }
 
     pub fn dev_url() -> String {

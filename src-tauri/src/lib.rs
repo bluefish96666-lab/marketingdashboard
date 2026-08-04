@@ -10,7 +10,7 @@ fn make_init_script(cfg: &Config) -> String {
     format!(
         r#"(()=>{{window.__COCKPIT_DESKTOP=1;window.__COCKPIT_API_BASE="{api_base}";
 // Overlay 标题栏避让红绿灯: body 下移 32px, 全屏时 Tauri 自动隐藏红绿灯无需避让
-var s=document.createElement('style');s.textContent='body{{padding-top:32px;box-sizing:border-box}}';document.head.appendChild(s);
+var s=document.createElement('style');s.textContent='html{{padding-top:32px;box-sizing:border-box;height:100vh;overflow:hidden}}#root{{height:calc(100vh-32px)!important;min-height:calc(100vh-32px)!important}}';document.head.appendChild(s);
 addEventListener('dblclick',e=>{{if(!e.target.closest('button,a,input,select,textarea'))try{{window.__TAURI_INTERNALS__.invoke('toggle_fullscreen')}}catch(_){{}}}});
 if(window.__cockpitWatchdog)return;window.__cockpitWatchdog=!0;let l=!1;addEventListener('load',()=>{{l=!0}},{{once:!0}});setTimeout(()=>{{if(!l)try{{window.__TAURI_INTERNALS__.invoke('show_error')}}catch(_){{}}}},15000)}})();"#
     )
@@ -24,16 +24,11 @@ pub fn run() {
             let h = app.handle().clone();
             let cfg = config::load(&h);
 
-            // 构建 URL + init script
             let init_script = make_init_script(&cfg);
-            let url = if cfg!(debug_assertions) {
-                WebviewUrl::External(Config::dev_url().parse().unwrap())
-            } else if cfg.mode == "remote" {
-                WebviewUrl::External(cfg.main_url().parse().unwrap())
-            } else {
-                // 本地模式: WebviewUrl::App 从打包的 dist/ 加载
-                WebviewUrl::App("index.html".into())
-            };
+            let url = WebviewUrl::External(
+                if cfg!(debug_assertions) { Config::dev_url() } else { cfg.main_url() }
+                .parse().unwrap(),
+            );
 
             let _main = WebviewWindowBuilder::new(&h, "main", url)
                 .title("")
