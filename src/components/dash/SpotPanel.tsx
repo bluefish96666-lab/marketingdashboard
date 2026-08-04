@@ -1,6 +1,6 @@
 import { Diamond } from "lucide-react";
 import { Panel, type PanelZoomProps } from "./Panel";
-import { GoodsRow } from "./GoodsRow";
+import { QuoteRow } from "./QuoteRow";
 import { usePolling } from "@/hooks/usePolling";
 import { useSharedPolling } from "@/hooks/useSharedPolling";
 import { api, type ChemSpot } from "@/lib/api";
@@ -38,11 +38,11 @@ export function SpotPanel({ className = "", ...zoomProps }: { className?: string
           const c = chems?.find((x) => x.id === def.id);
           if (!c) return null;
           const hist = c.history.map((h) => ({ t: h.t, c: h.p }));
-          return <GoodsRow key={def.id} name={def.name} unit={def.unit} price={c.price} pct={dailyPct(hist)} daily={hist} />;
+          return <QuoteRow key={def.id} code="" name={def.name} unit={def.unit} price={c.price} pct={dailyPct(hist)} spark sparkData={hist.length > 1 ? { points: hist.map((h) => ({ t: h.t, p: h.c })), prec: hist[0].c, session: "daily" } : undefined} />;
         })}
         {data?.rows.map((r) => {
           const hist = (data.history[r.name] || []).map((h) => ({ t: h.t, c: h.p }));
-          return <GoodsRow key={r.name} name={r.name} unit={EXCH_SHORT[r.exchange] || r.exchange} price={r.spot} pct={dailyPct(hist)} daily={hist} />;
+          return <QuoteRow key={r.name} code="" name={r.name} unit={EXCH_SHORT[r.exchange] || r.exchange} price={r.spot} pct={dailyPct(hist)} spark sparkData={hist.length > 1 ? { points: hist.map((h) => ({ t: h.t, p: h.c })), prec: hist[0].c, session: "daily" } : undefined} />;
         })}
         {!data && !chems && <div className="p-4 text-center text-[10px] text-slate-600">现货数据加载中…</div>}
       </div>

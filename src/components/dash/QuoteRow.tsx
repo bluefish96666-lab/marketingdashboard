@@ -3,7 +3,7 @@ import { usePolling } from "@/hooks/usePolling";
 import { useQuote } from "@/lib/market";
 import { api } from "@/lib/api";
 import { Spark } from "./Spark";
-import { clsChg, fmtPct, fmtPrice, fmtYuan, TNUM } from "@/lib/format";
+import { bgChg, clsChg, fmtPct, fmtPrice, fmtYuan, TNUM } from "@/lib/format";
 import { isTv } from "@/lib/tv";
 
 /** 数据格: 9px 标签 + 11px 数值, flex 垂直居中(高度全行一致) */
@@ -22,7 +22,7 @@ function Stat({ label, value, valueCls = "text-slate-300" }: { label?: string; v
 const COMPACT_WIDTH = 400;
 
 interface QuoteRowProps {
-  /** 腾讯格式代码, 如 sh688126 */
+  /** 腾讯格式代码, 如 sh688126; 商品/现货无代码时传空串跳过 MarketHub */
   code: string;
   name: string;
   price?: number;
@@ -35,17 +35,28 @@ interface QuoteRowProps {
   amount?: string;
   /** 换手率(已格式化文本) */
   turnover?: string;
-  /** 显示分时曲线(60s 轮询) */
+  /** 显示分时曲线(60s 轮询) — compact 模式下配合 sparkData 使用 */
   spark?: boolean;
   /** 显示所属行业/概念(5min 重试, 服务端 24h 缓存) */
   boards?: boolean;
   /** 显示主力净额/净占比(东财口径, 30s 轮询) */
   flow?: boolean;
-  /** card = 带边框的卡片样式(产业链) */
-  variant?: "plain" | "card";
+  /** card = 带边框的卡片样式(产业链); compact = 单行商品行 */
+  variant?: "plain" | "card" | "compact";
   active?: boolean;
   onClick?: () => void;
   onRemove?: () => void;
+  className?: string;
+  /** 名称下方副文本 — compact 模式传入单位("元/吨"), 其他模式不传时显示 code */
+  unit?: string;
+  /** 外部 Spark 数据 — 传入则直接渲染, 跳过内部 minute 轮询 */
+  sparkData?: {
+    points: { t: string; p: number }[];
+    prec: number;
+    session?: "ashare" | "h24" | "daily";
+  };
+  /** 左侧彩色 accent 竖条(商品面板强调色) */
+  accent?: string;
 }
 
 /** 统一个股行
@@ -54,25 +65,30 @@ interface QuoteRowProps {
  */
 export const QuoteRow = memo(function QuoteRow({
   code, name, price, pct, tag, rank, amount, turnover, spark, boards, flow, variant = "plain", active, onClick, onRemove,
+  unit, sparkData, accent, className,
 }: QuoteRowProps) {
   // 行宽自适应: 实测宽度决定资金流标签形态(主力净额/净占比 ↔ 净/占)
+  // 仅 flow 模式需要; compact 模式无需
   const rootRef = useRef<HTMLElement | null>(null);
   const [rowWidth, setRowWidth] = useState(0);
   useEffect(() => {
+    if (!flow) return;
     const el = rootRef.current;
     if (!el) return;
     const ro = new ResizeObserver((entries) => setRowWidth(entries[0].contentRect.width));
     ro.observe(el);
     return () => ro.disconnect();
-  }, []);
+  }, [flow]);
   const compact = rowWidth > 0 && rowWidth < COMPACT_WIDTH;
 
   // 可见性联动轮询: 行在视口内才启动分时/板块/资金流轮询, 离开视口即停, 回到视口恢复
   // TV(老WebView+缩放渲染)IntersectionObserver 可能不触发, 导致行永不订阅、内容不更新;
   // TV 列表行数已收紧(15~40), 直接全部视为可见
-  const [visible, setVisible] = useState(isTv);
+  // compact 模式无内部轮询(sparkData 由外部提供), 无需 IO
+  const needsVisible = (spark && !sparkData) || boards || flow;
+  const [visible, setVisible] = useState(isTv || !needsVisible);
   useEffect(() => {
-    if (isTv) return;
+    if (isTv || !needsVisible) return;
     const el = rootRef.current;
     if (!el) return;
     const io = new IntersectionObserver((entries) => {
@@ -80,7 +96,7 @@ export const QuoteRow = memo(function QuoteRow({
     });
     io.observe(el);
     return () => io.disconnect();
-  }, []);
+  }, [needsVisible]);
 
   // 统一报价中心: 价格/涨跌幅唯一来源(视口内才注册; props 仅作注册前的兜底)
   const hub = useQuote(code, visible);
@@ -88,9 +104,9 @@ export const QuoteRow = memo(function QuoteRow({
   const pc = hub?.pct ?? pct;
 
   const { data: minute } = usePolling(
-    () => (spark && visible ? api.minute(code) : Promise.resolve(null)),
+    () => (spark && !sparkData && visible ? api.minute(code) : Promise.resolve(null)),
     60000,
-    [code, spark, visible],
+    [code, spark, visible, !!sparkData],
     // 分时数据未变时复用旧引用, 避免 Spark 重算/重渲染
     (a, b) => JSON.stringify(a) === JSON.stringify(b)
   );
@@ -106,13 +122,75 @@ export const QuoteRow = memo(function QuoteRow({
     [code, flow, visible]
   );
 
+  // Spark 数据源: 外部 sparkData 优先, 其次内部 minute 轮询
+  const sp = sparkData ?? (spark && minute ? { points: minute.points, prec: minute.prec } : null);
+
   const Tag = onClick ? "button" : "div";
   const skin =
     variant === "card"
       ? "border border-slate-700/25 bg-slate-800/15 hover:border-cyan-500/40 hover:bg-slate-800/30"
-      : "hover:bg-slate-800/40 hover:shadow-[inset_0_0_0_1px_rgba(34,211,238,0.22)]";
+      : variant === "compact"
+        ? ""
+        : "hover:bg-slate-800/40 hover:shadow-[inset_0_0_0_1px_rgba(34,211,238,0.22)]";
 
   const ratioBar = fl ? Math.min(100, Math.abs(fl.netRatio) * 2) : 0;
+  const subtitle = unit ?? code;
+
+  // ---- compact 单行布局(商品/现货) ----
+  if (variant === "compact") {
+    return (
+      <Tag
+        ref={(el: HTMLElement | null) => { rootRef.current = el; }}
+        onClick={onClick}
+        className={`group flex items-center gap-1.5 w-full rounded px-1 py-[3px] text-left transition-colors hover:bg-slate-800/40 ${accent ? "relative" : ""} ${
+          active ? "bg-cyan-500/10 ring-1 ring-cyan-500/40" : ""
+        } ${className || ""}`}
+      >
+        {accent && (
+          <span aria-hidden className="absolute left-0 top-0 h-full w-[3px] rounded-l" style={{ background: accent, opacity: 0.55 }} />
+        )}
+          <div className="w-[72px] shrink-0 leading-none">
+            <div className="truncate text-[11px] text-slate-300">{name}</div>
+            {subtitle && <div className="mt-0.5 truncate text-[8px] text-slate-600">{subtitle}</div>}
+          </div>
+          <span className={`w-[72px] shrink-0 text-right text-[12px] font-semibold ${pct != null ? clsChg(pct) : "text-slate-400"}`} style={TNUM}>
+            {p != null ? fmtPrice(p) : "—"}
+          </span>
+          <span className={`w-[52px] shrink-0 rounded px-0.5 text-right text-[10px] font-semibold ${pct != null ? bgChg(pct) : ""}`} style={TNUM}>
+            {pct != null ? fmtPct(pct) : ""}
+          </span>
+          <span className="min-w-0 flex-1">
+            {sp && sp.points.length > 1 && (
+              <Spark points={sp.points} prec={sp.prec} width={120} height={20} fluid session={sparkData?.session || "ashare"} />
+            )}
+          </span>
+      </Tag>
+    );
+  }
+
+  // ---- plain / card 双行 Grid 布局(个股) ----
+  const hasFlow = Boolean(flow);
+  const hasAmount = Boolean(amount);
+  const hasTurnover = Boolean(turnover);
+  const nameW = variant === "card" ? "56px" : "72px";
+
+  // 动态网格: 无 flow 时合并为单列 spark, 无 amount/turnover 时折叠对应列
+  let gridCols: string;
+  let sparkColSpan: number;
+  const prefix = rank != null ? "auto " : "";
+  const suffix = onRemove ? " auto" : "";
+
+  if (hasFlow) {
+    gridCols = `${prefix}${nameW} minmax(0,1fr) minmax(0,1fr) ${hasAmount ? "64px" : "0px"} ${variant === "card" ? "54px" : "60px"}${suffix}`;
+    sparkColSpan = 2;
+  } else if (hasAmount || hasTurnover) {
+    gridCols = `${prefix}${nameW} minmax(0,1fr) 64px ${variant === "card" ? "54px" : "60px"}${suffix}`;
+    sparkColSpan = 1;
+  } else {
+    // 商品/最小模式: 名称 | spark(跨3列填满) | 价格 | 涨跌幅
+    gridCols = `${prefix}${nameW} minmax(0,1fr) 72px 52px${suffix}`;
+    sparkColSpan = 3;
+  }
 
   return (
     <Tag
@@ -121,18 +199,16 @@ export const QuoteRow = memo(function QuoteRow({
       }}
       onClick={onClick}
       className={`group block w-full rounded px-2 py-[4px] text-left transition-colors ${skin} ${
-        active ? "bg-cyan-500/10 ring-1 ring-cyan-500/40" : ""
-      }`}
+        accent ? "relative" : ""
+      } ${active ? "bg-cyan-500/10 ring-1 ring-cyan-500/40" : ""}`}
     >
+      {accent && (
+        <span aria-hidden className="absolute left-0 top-0 h-full w-[3px] rounded-l" style={{ background: accent, opacity: 0.55 }} />
+      )}
       <div
         className="grid items-center gap-x-1"
         style={{
-          // 名称+代码 / 分时(跨2列) / 成交额 / 现价 固定列宽, 保证各行分时图等宽
-          gridTemplateColumns: `${rank != null ? "auto " : ""}${
-            variant === "card"
-              ? "56px minmax(0,1fr) minmax(0,1fr) 54px 54px"
-              : "64px minmax(0,1fr) minmax(0,1fr) 64px 60px"
-          }${onRemove ? " auto" : ""}`,
+          gridTemplateColumns: gridCols,
           // 固定两行高: 分时区恒占 20px, 数据区 16px, 各行一致
           gridTemplateRows: "20px 16px",
         }}
@@ -149,16 +225,22 @@ export const QuoteRow = memo(function QuoteRow({
         {/* 左格: 名称+代码, 跨2行 */}
         <div className="row-span-2 flex min-w-0 flex-col justify-center gap-1 leading-none">
           <span className="truncate text-[12px] text-slate-200">{name}</span>
-          <span className="text-[10px] text-slate-500">{code}</span>
+          <span className="text-[10px] text-slate-500">{subtitle}</span>
         </div>
 
-        {/* 第一行: 分时图(跨2列, 恒占 20px 高度) */}
-        <div className="col-span-2 flex h-[20px] min-w-0 items-center self-center">
-          {spark && minute && <Spark points={minute.points} prec={minute.prec} width={160} height={20} fluid />}
+        {/* 第一行: 分时图(跨 sparkColSpan 列, 恒占 20px 高度) */}
+        <div className={`flex h-[20px] min-w-0 items-center self-center`} style={{ gridColumn: `span ${sparkColSpan}` }}>
+          {sp && sp.points.length > 1 && (
+            <Spark points={sp.points} prec={sp.prec} width={160} height={20} fluid session={sparkData?.session || "ashare"} />
+          )}
         </div>
-        {/* 第一行: 成交额 / 现价 */}
-        {amount ? <Stat label="额" value={amount} /> : <div />}
-        <Stat label="价" value={p != null ? fmtPrice(p) : "—"} />
+        {/* 第一行: 成交额 / 现价(仅 flow 或 amount 模式) */}
+        {hasFlow || hasAmount ? (
+          hasAmount ? <Stat label="额" value={amount} /> : <div />
+        ) : null}
+        {hasFlow || hasAmount || hasTurnover ? (
+          <Stat label="价" value={p != null ? fmtPrice(p) : "—"} />
+        ) : null}
         {/* 末列: 删除按钮, 跨2行 */}
         {onRemove && (
           <div className="row-span-2 self-center">
@@ -176,16 +258,16 @@ export const QuoteRow = memo(function QuoteRow({
         )}
 
         {/* 第二行: 主力净额 / 净占比(进度条) / 换手率 / 涨跌幅 */}
-        {flow ? (
+        {hasFlow ? (
           <Stat
             label={compact ? "净" : "主力净额"}
             value={fl ? fmtYuan(fl.netIn) : "—"}
             valueCls={`font-semibold ${fl ? clsChg(fl.netIn) : "text-slate-600"}`}
           />
         ) : (
-          <div />
+          (hasFlow || hasAmount || hasTurnover) ? <div /> : null
         )}
-        {flow ? (
+        {hasFlow ? (
           <div className="flex min-w-0 items-center gap-1 overflow-hidden whitespace-nowrap leading-none">
             <span className="shrink-0 text-[9px] text-slate-600">{compact ? "占" : "净占比"}</span>
             <span className="h-1 min-w-0 flex-1 self-center rounded-full bg-slate-800">
@@ -199,14 +281,30 @@ export const QuoteRow = memo(function QuoteRow({
             </span>
           </div>
         ) : (
-          <div />
+          (hasFlow || hasAmount || hasTurnover) ? <div /> : null
         )}
-        {turnover ? <Stat label="换" value={turnover} /> : <div />}
-        <Stat
-          label="幅"
-          value={pc != null ? fmtPct(pc, variant === "card" ? 1 : 2) : ""}
-          valueCls={`font-semibold ${pc != null ? clsChg(pc) : "text-slate-600"}`}
-        />
+        {hasTurnover ? <Stat label="换" value={turnover} /> : (
+          (hasFlow || hasAmount || hasTurnover) ? <div /> : null
+        )}
+        {/* 涨跌幅: 商品模式只有 price+pct 两列, 显示在两行; 个股模式在第二行 */}
+        {!hasFlow && !hasAmount && !hasTurnover ? (
+          // 商品模式: price 在第一行, chg% 在第二行; 但第一行 spark 占位了, 需要调整
+          // 这里在第二行渲染 price + chg%
+          <>
+            <Stat label="价" value={p != null ? fmtPrice(p) : "—"} />
+            <Stat
+              label="幅"
+              value={pc != null ? fmtPct(pc, 1) : ""}
+              valueCls={`font-semibold ${pc != null ? clsChg(pc) : "text-slate-600"}`}
+            />
+          </>
+        ) : (
+          <Stat
+            label="幅"
+            value={pc != null ? fmtPct(pc, variant === "card" ? 1 : 2) : ""}
+            valueCls={`font-semibold ${pc != null ? clsChg(pc) : "text-slate-600"}`}
+          />
+        )}
       </div>
 
       {/* 底部整行: 标签 · 行业 · 概念(boards 开启时恒占一行) */}

@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { TrendingUp } from "lucide-react";
 import { Panel, type PanelZoomProps } from "./Panel";
-import { GoodsRow } from "./GoodsRow";
+import { QuoteRow } from "./QuoteRow";
 import { usePolling } from "@/hooks/usePolling";
 import { useQuotes } from "@/lib/market";
 import { api } from "@/lib/api";
@@ -63,7 +63,18 @@ export function GoodsTrendPanel({ group, title, accent, className = "", ...zoomP
         {defs.map((g) => {
           const daily = (dailies?.[g.code] || []).slice(-range);
           const q = quotes?.[g.sina];
-          return <GoodsRow key={g.code} name={g.name} unit={g.unit} price={q?.price} pct={q?.pct} daily={daily} />;
+          return (
+            <QuoteRow
+              key={g.code}
+              code={g.sina}
+              name={g.name}
+              unit={g.unit}
+              price={q?.price}
+              pct={q?.pct}
+              spark
+              sparkData={daily.length > 1 ? { points: daily.map((d) => ({ t: d.t, p: d.c })), prec: daily[0].c, session: "daily" } : undefined}
+            />
+          );
         })}
         {!dailies && <div className="p-4 text-center text-[10px] text-slate-600">日线数据加载中…</div>}
       </div>
