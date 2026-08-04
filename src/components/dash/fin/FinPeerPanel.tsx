@@ -28,7 +28,7 @@ const pctCls = (v: number) => (v > 0 ? "text-rose-400" : v < 0 ? "text-emerald-4
 
 /** 同行对比: 表格(公司指标 vs 行业均值/排名) + 雷达图 */
 export function FinPeerPanel({ className = "", ...zoomProps }: { className?: string } & PanelZoomProps) {
-  const [mode, setMode] = useState<Mode>("table");
+  const [mode, setMode] = useState<Mode>("radar");
   const { company, period } = useFin();
 
   const { data: board, error: boardErr, loading: boardLoading, retry: retryBoard } = useFinBoard(period);
@@ -150,7 +150,7 @@ export function FinPeerPanel({ className = "", ...zoomProps }: { className?: str
       accent="#a78bfa"
       right={
         <div className="flex items-center gap-2 text-[10px]">
-          {(["table", "radar"] as Mode[]).map((m) => (
+          {(["radar", "table"] as Mode[]).map((m) => (
             <button
               key={m}
               onClick={() => setMode(m)}
@@ -158,7 +158,7 @@ export function FinPeerPanel({ className = "", ...zoomProps }: { className?: str
                 mode === m ? "bg-violet-500/20 text-violet-300" : "text-slate-400 hover:text-slate-200"
               }`}
             >
-              {m === "table" ? "表格" : "雷达"}
+              {m === "radar" ? "雷达" : "表格"}
             </button>
           ))}
         </div>
