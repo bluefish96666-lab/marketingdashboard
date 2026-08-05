@@ -359,8 +359,22 @@ function parseTencent(text: string): Record<string, Quote> {
   return out;
 }
 
+// 浏览器直连兜底节流: 服务端不可达时(每 5s 轮询一次), 同 key 5s 内不重复直连上游,
+// 把 N 个客户端的裸连风暴压回"单用户轮询量级"(与服务端 TTL 缓存对齐的客户端侧防护)
+const directCooldown = new Map<string, number>();
+const DIRECT_COOLDOWN_MS = 5000;
+function throttleDirect(key: string): boolean {
+  const now = Date.now();
+  const last = directCooldown.get(key) || 0;
+  if (now - last < DIRECT_COOLDOWN_MS) return true;
+  directCooldown.set(key, now);
+  return false;
+}
+
 async function directQuotes(codes: string[]): Promise<Record<string, Quote>> {
-  const r = await fetch(`https://qt.gtimg.cn/q=${codes.join(",")}`);
+  const fresh = codes.filter((c) => !throttleDirect(`q:${c}`));
+  if (!fresh.length) return {};
+  const r = await fetch(`https://qt.gtimg.cn/q=${fresh.join(",")}`);
   const text = new TextDecoder("gbk").decode(await r.arrayBuffer());
   return parseTencent(text);
 }
@@ -374,12 +388,14 @@ function mapBoards(list: Record<string, string>[]): Board[] {
 }
 
 async function directBoards(type: "01" | "02", dir: 0 | 1, n: number): Promise<Board[]> {
+  if (throttleDirect(`b:${type}:${dir}`)) return [];
   const r = await fetch(`https://ifzq.gtimg.cn/appstock/app/mktHs/rank?l=${n}&p=1&t=${type}/averatio&o=${dir}`);
   const j = await r.json();
   return mapBoards(j?.data || []);
 }
 
 async function directMinute(code: string): Promise<MinuteData> {
+  if (throttleDirect(`m:${code}`)) return { code, prec: 0, points: [] };
   const r = await fetch(`https://ifzq.gtimg.cn/appstock/app/minute/query?code=${code}`);
   const j = await r.json();
   const d = j?.data?.[code];
@@ -414,6 +430,7 @@ interface WscnItem {
 }
 
 async function directNews(size: number): Promise<NewsItem[]> {
+  if (throttleDirect("news")) return [];
   const r = await fetch(
     `https://api-one-wscn.awtmt.com/apiv1/content/lives?channel=global-channel&limit=${Math.min(size, 50)}`
   );

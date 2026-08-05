@@ -3,7 +3,7 @@ import { Panel, type PanelZoomProps } from "../Panel";
 import { useFinBoard } from "./useFinData";
 import { type FinCalendarItem } from "@/lib/api";
 import { useFin } from "./FinContext";
-import { SkeletonRows } from "./SkeletonRows";
+import { AsyncContent } from "../SharedUI";
 import { CalendarDays, Star } from "lucide-react";
 import { TNUM, prefixCode, quarterLabel } from "./utils";
 import { useElementSize } from "@/hooks/useElementSize";
@@ -117,17 +117,8 @@ export function FinCalendarPanel({ className = "", ...zoomProps }: { className?:
         )
       }
     >
-      {!data ? (
-        loading ? (
-          <SkeletonRows rows={6} />
-        ) : (
-          <div className="flex h-full items-center justify-center text-[11px]">
-            <button className="h-full w-full text-slate-500" onClick={retry}>
-              数据获取失败，点击重试{error ? `(${error})` : ""}
-            </button>
-          </div>
-        )
-      ) : (
+      <AsyncContent loading={loading} error={error} empty={false} onRetry={retry}>
+        {data && (
         <div className="flex h-full min-h-0 flex-col">
           {/* 全宽 40px 柱带: 今日 amber 实色 + 柱顶 8px 数字, 未来 cyan/40 */}
           <div ref={boxRef} className="shrink-0">
@@ -239,7 +230,7 @@ export function FinCalendarPanel({ className = "", ...zoomProps }: { className?:
                   <button
                     key={`${it.date}-${it.code}`}
                     onClick={() => select(prefixCode(it.code), it.name)}
-                    className="flex h-[18px] min-w-0 items-center gap-1.5 border-b border-slate-800/60 px-2 text-left hover:bg-slate-800/40"
+                    className="flex h-[20px] min-w-0 items-center gap-1.5 border-b border-slate-800/60 px-2 text-left hover:bg-slate-800/40"
                   >
                     <span className="min-w-0 flex-1 truncate text-[11px] text-slate-200">{it.name}</span>
                     {view.heavy.has(it.code) && <Star size={9} className="shrink-0 text-amber-400" />}
@@ -251,6 +242,7 @@ export function FinCalendarPanel({ className = "", ...zoomProps }: { className?:
           </div>
         </div>
       )}
+      </AsyncContent>
     </Panel>
   );
 }

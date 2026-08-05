@@ -5,45 +5,32 @@ import { usePolling } from "@/hooks/usePolling";
 import { api, type FinForecastItem } from "@/lib/api";
 import { TNUM, fmtYi, forecastTone } from "./utils";
 import { useFin } from "./FinContext";
-import { SkeletonRows } from "./SkeletonRows";
+import { AsyncContent, DataRow, RowName, ToneChip } from "../SharedUI";
+import { clsChg, fmtPct } from "@/lib/format";
 import { prefixCode } from "./utils";
 
-const CHIP_CLS = {
-  good: "border-rose-400/60 bg-rose-400/10 text-rose-300",
-  bad: "border-emerald-400/60 bg-emerald-400/10 text-emerald-300",
-  neutral: "border-slate-500/60 bg-slate-500/10 text-slate-400",
-} as const;
-
-/** 明细行: 固定列 日期 w40 | 名称 flex | chip w34 | 净利区间 w140 右对齐 | 同比 w120 右对齐, 行高 18px */
+/** 明细行: 固定列 日期 w40 | 名称 flex | chip w34 | 净利区间 w140 右对齐 | 同比 w120 右对齐, 行高 20px */
 function Row({ it }: { it: FinForecastItem }) {
   const { select } = useFin();
   const tone = forecastTone(it.type);
   const mid = (it.yoyLow + it.yoyHigh) / 2;
-  const yoyCls = mid > 0 ? "text-rose-400" : mid < 0 ? "text-emerald-400" : "text-slate-400";
+  const yoyCls = clsChg(mid);
   return (
-    <button
-      onClick={() => select(prefixCode(it.code), it.name)}
-      className="flex h-[18px] w-full items-center gap-1.5 border-b border-slate-800/60 px-2 text-left hover:bg-slate-800/40"
-    >
+    <DataRow onClick={() => select(prefixCode(it.code), it.name)}>
       <span className="w-[40px] shrink-0 whitespace-nowrap text-[9px] text-slate-500" style={TNUM}>
         {it.date.slice(5)}
       </span>
-      <span className="min-w-0 flex-1 truncate text-[11px] text-slate-200">{it.name}</span>
-      <span
-        className={`flex w-[34px] shrink-0 items-center justify-center gap-0.5 rounded border px-0.5 text-[8.5px] leading-[12px] ${CHIP_CLS[tone]}`}
-      >
-        {it.type === "首亏" && <span className="inline-block h-[3px] w-[3px] rounded-full bg-amber-400" />}
+      <RowName>{it.name}</RowName>
+      <ToneChip tone={tone === "good" ? "rose" : tone === "bad" ? "emerald" : "slate"} dot={it.type === "首亏"}>
         {it.type}
-      </span>
+      </ToneChip>
       <span className="w-[140px] shrink-0 truncate text-right text-[11px] text-slate-300" style={TNUM}>
         {fmtYi(it.profitLow)}~{fmtYi(it.profitHigh)}
       </span>
-      <span className={`w-[120px] shrink-0 text-right text-[10px] ${yoyCls}`} style={TNUM}>
-        {it.yoyLow > 0 ? "+" : ""}
-        {it.yoyLow.toFixed(1)}%~{it.yoyHigh > 0 ? "+" : ""}
-        {it.yoyHigh.toFixed(1)}%
+      <span className={`w-[120px] shrink-0 text-right text-[11px] ${yoyCls}`} style={TNUM}>
+        {fmtPct(it.yoyLow, 1)}~{fmtPct(it.yoyHigh, 1)}
       </span>
-    </button>
+    </DataRow>
   );
 }
 
@@ -75,20 +62,8 @@ export function FinForecastPanel({ className = "", ...zoomProps }: { className?:
         )
       }
     >
-      {!data ? (
-        loading ? (
-          <SkeletonRows rows={8} />
-        ) : (
-          <div className="flex h-full items-center justify-center text-[11px]">
-            <button className="h-full w-full text-slate-500" onClick={() => setRetry((r) => r + 1)}>
-              数据获取失败，点击重试{error ? `(${error})` : ""}
-            </button>
-          </div>
-        )
-      ) : !hasItems ? (
-        <div className="flex h-full items-center justify-center text-[11px] text-slate-600">当前非业绩预告密集披露期</div>
-      ) : (
-        <div className="flex h-full min-h-0 flex-col">
+      <AsyncContent loading={loading} error={error} empty={!data || !hasItems} emptyMessage="当前非业绩预告密集披露期" onRetry={() => setRetry((r) => r + 1)}>
+        {data && hasItems && <div className="flex h-full min-h-0 flex-col">
           {/* 3px 贴头堆叠条: 预喜 rose / 预悲 emerald / 未定 slate */}
           <div className="flex h-[3px] w-full shrink-0">
             {stats!.good > 0 && <div className="h-full bg-rose-400" style={{ width: `${(stats!.good / total) * 100}%` }} />}
@@ -103,8 +78,8 @@ export function FinForecastPanel({ className = "", ...zoomProps }: { className?:
               <Row key={`${it.date}-${it.code}`} it={it} />
             ))}
           </div>
-        </div>
-      )}
+        </div>}
+      </AsyncContent>
     </Panel>
   );
 }

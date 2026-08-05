@@ -5,10 +5,9 @@ import { useFinBoard } from "./useFinData";
 // (data via useFinBoard)
 import { useFin } from "./FinContext";
 import { PeriodTabs } from "./PeriodTabs";
-import { SkeletonRows } from "./SkeletonRows";
 import { TNUM, fmtYi } from "./utils";
 import { useElementSize } from "@/hooks/useElementSize";
-import { TabBar } from "../SharedUI";
+import { AsyncContent, TabBar } from "../SharedUI";
 
 const NAME_W = 64; // 行业名列宽
 const LABEL_W = 92; // 条右端双值预留
@@ -149,19 +148,7 @@ export function FinIndustryPanel({ className = "", ...zoomProps }: { className?:
         )
       }
     >
-      {!data ? (
-        loading ? (
-          <SkeletonRows rows={12} />
-        ) : (
-          <div className="flex h-full items-center justify-center text-[11px]">
-            <button className="h-full w-full text-slate-500" onClick={retry}>
-              数据获取失败，点击重试{error ? `(${error})` : ""}
-            </button>
-          </div>
-        )
-      ) : empty ? (
-        <div className="flex h-full items-center justify-center text-[11px] text-slate-600">当前非财报密集披露期</div>
-      ) : (
+      <AsyncContent loading={loading} error={error} empty={empty} emptyMessage="当前非财报密集披露期" onRetry={retry} skeletonRows={12}>
         <div ref={boxRef} className="h-full min-h-0">
           {tree && (
             <svg width={tree.W} height={tree.H} className="block">
@@ -257,7 +244,7 @@ export function FinIndustryPanel({ className = "", ...zoomProps }: { className?:
             </svg>
           )}
         </div>
-      )}
+      </AsyncContent>
     </Panel>
   );
 }

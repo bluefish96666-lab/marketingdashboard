@@ -23,7 +23,8 @@ export interface HubQuote {
 }
 
 // TV 模式降频: 电视弱 CPU 上全站同帧重渲染开销大, 轮询减半
-const POLL_MS = isTv ? 10000 : 5000;
+// 导出供面板(如 IndexPanel 分时)同步轮询周期, 保证报价与分时同帧刷新
+export const POLL_MS = isTv ? 10000 : 5000;
 
 const entries = new Map<string, HubQuote>();
 const refCounts = new Map<string, number>();

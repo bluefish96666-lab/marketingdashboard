@@ -1,52 +1,29 @@
 import { Globe } from "lucide-react";
 import { Panel, type PanelZoomProps } from "./Panel";
-import { Spark } from "./Spark";
+import { QuoteRow } from "./QuoteRow";
 import { usePolling } from "@/hooks/usePolling";
-import { useQuotes, type HubQuote } from "@/lib/market";
+import { useQuotes, POLL_MS } from "@/lib/market";
 import { api, type MinuteData } from "@/lib/api";
-import { INDICES, FOREX, type IndexDef } from "@/config/dashboard";
-import { bgChg, clsChg, fmtPct, fmtPrice, fmtWan, TNUM } from "@/lib/format";
+import { INDICES, FOREX } from "@/config/dashboard";
+import { fmtWan } from "@/lib/format";
 
 const ALL_CODES = [...INDICES.map((i) => i.code), ...FOREX.map((i) => i.code)];
 
-function IndexRow({ def, q, minute }: { def: IndexDef; q?: HubQuote; minute?: MinuteData }) {
-  return (
-    <div className="flex items-center gap-1.5 rounded px-1 py-[1.5px] transition-colors hover:bg-slate-800/40">
-      <span className="w-6 shrink-0 rounded-sm bg-slate-700/50 text-center text-[8px] leading-3 text-slate-400">{def.region}</span>
-      <span className="w-[72px] shrink-0 truncate text-[11px] text-slate-300">{def.label}</span>
-      <span className={`w-[70px] shrink-0 text-right text-[12px] font-bold ${q ? clsChg(q.pct) : "text-slate-600"}`} style={TNUM}>
-        {q ? fmtPrice(q.price) : "—"}
-      </span>
-      <span className={`w-[56px] shrink-0 rounded px-0.5 text-right text-[10px] font-semibold ${q ? bgChg(q.pct) : ""}`} style={TNUM}>
-        {q ? fmtPct(q.pct) : ""}
-      </span>
-      <span className="hidden min-w-0 flex-1 items-center px-1 md:flex">
-        {minute && minute.points.length > 1 && (
-          // A股按交易时段映射; 港/美/汇率交易时段不同, 用连续交易时间轴
-          <Spark points={minute.points} prec={minute.prec} width={120} height={16} fluid session={def.region === "CN" ? "ashare" : "h24"} />
-        )}
-      </span>
-      <span className="hidden w-[52px] shrink-0 text-right text-[9px] text-slate-500 xl:block" style={TNUM}>
-        {q?.amount && !def.code.startsWith("us") ? fmtWan(q.amount) : ""}
-      </span>
-    </div>
-  );
-}
-
 export function IndexPanel({ className = "", ...zoomProps }: { className?: string } & PanelZoomProps) {
-  // 指数报价: 统一报价中心(与 Tape 等所有面板同帧)
+  // 指数报价: 统一报价中心(与 Tape 等所有面板同帧); QuoteRow 内部 useQuote 自行订阅
   const quotes = useQuotes(ALL_CODES);
   const { data: minutes } = usePolling(
     async () => {
-      const codes = ALL_CODES.filter((c) => !c.startsWith("wh"));
-      const batch = await api.batchMinute(codes);
+      // 全部代码(含 wh 汇率 — 服务端已接东财 USDCNH 分钟序列)
+      const batch = await api.batchMinute(ALL_CODES);
       const map: Record<string, MinuteData> = {};
       for (const [code, data] of Object.entries(batch)) {
         if (data) map[code] = data;
       }
       return map;
     },
-    15000
+    // 与报价中心同周期(5s, TV 10s): 报价/分时两波数据同帧刷新, 不再前后脚
+    POLL_MS
   );
 
   const groups = [
@@ -61,9 +38,22 @@ export function IndexPanel({ className = "", ...zoomProps }: { className?: strin
         {groups.map((g) => (
           <div key={g.name}>
             <div className="px-1 pb-0.5 pt-1 text-[9px] font-medium uppercase tracking-widest text-slate-500">{g.name}</div>
-            {g.defs.map((d) => (
-              <IndexRow key={d.code} def={d} q={quotes?.[d.code]} minute={minutes?.[d.code]} />
-            ))}
+            {g.defs.map((d) => {
+              const m = minutes?.[d.code];
+              const q = quotes?.[d.code];
+              return (
+                <QuoteRow
+                  key={d.code}
+                  variant="index"
+                  code={d.code}
+                  name={d.label}
+                  badge={d.region}
+                  // 成交额: 仅非美股有(腾讯口径)
+                  amount={q?.amount && d.region !== "US" ? fmtWan(q.amount) : undefined}
+                  sparkData={m && m.points.length > 1 ? { points: m.points, prec: m.prec, session: d.region === "CN" ? "ashare" : "h24" } : undefined}
+                />
+              );
+            })}
           </div>
         ))}
       </div>

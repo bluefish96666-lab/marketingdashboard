@@ -3,11 +3,10 @@ import { GitCompare } from "lucide-react";
 import { Panel, type PanelZoomProps } from "../Panel";
 import { useFin } from "./FinContext";
 import { useFinBoard, useFinMain } from "./useFinData";
-import { SkeletonRows } from "./SkeletonRows";
 import { TNUM, fmtYi } from "./utils";
-import { clsChg } from "@/lib/format";
+import { clsChg, fmtPct } from "@/lib/format";
 import { useElementSize } from "@/hooks/useElementSize";
-import { TabBar } from "../SharedUI";
+import { AsyncContent, TabBar } from "../SharedUI";
 
 type Mode = "table" | "radar";
 const MODE_TABS: { key: Mode; label: string }[] = [
@@ -105,8 +104,8 @@ export function FinPeerPanel({ className = "", ...zoomProps }: { className?: str
       },
       {
         label: "净利增速",
-        companyVal: `${cmpPy > 0 ? "+" : ""}${cmpPy.toFixed(1)}%`,
-        peerVal: count > 0 ? `${avg(peerPy) > 0 ? "+" : ""}${avg(peerPy).toFixed(1)}%` : "—",
+        companyVal: fmtPct(cmpPy, 1),
+        peerVal: count > 0 ? fmtPct(avg(peerPy), 1) : "—",
         rank: rankStr(peerPy, cmpPy),
         barVal: cmpPy,
         barAvg: avg(peerPy),
@@ -114,8 +113,8 @@ export function FinPeerPanel({ className = "", ...zoomProps }: { className?: str
       },
       {
         label: "营收增速",
-        companyVal: `${cmpRy > 0 ? "+" : ""}${cmpRy.toFixed(1)}%`,
-        peerVal: count > 0 ? `${avg(peerRy) > 0 ? "+" : ""}${avg(peerRy).toFixed(1)}%` : "—",
+        companyVal: fmtPct(cmpRy, 1),
+        peerVal: count > 0 ? fmtPct(avg(peerRy), 1) : "—",
         rank: rankStr(peerRy, cmpRy),
         barVal: cmpRy,
         barAvg: avg(peerRy),
@@ -173,22 +172,9 @@ export function FinPeerPanel({ className = "", ...zoomProps }: { className?: str
         <div className="flex h-full items-center justify-center text-[11px] text-slate-600">
           ← 从榜单选入公司
         </div>
-      ) : !board || !finData ? (
-        loading ? (
-          <SkeletonRows rows={8} />
-        ) : (
-          <div className="flex h-full items-center justify-center text-[11px]">
-            <button className="h-full w-full text-slate-500" onClick={retry}>
-              数据获取失败，点击重试{error ? `(${error})` : ""}
-            </button>
-          </div>
-        )
-      ) : !hasPeer ? (
-        <div className="flex h-full flex-col items-center justify-center gap-1 text-[11px] text-slate-600">
-          <span>未找到该公司行业信息</span>
-          <span className="text-[9px] text-slate-700">该股票可能不在当期统计范围内</span>
-        </div>
-      ) : mode === "table" ? (
+      ) : (
+        <AsyncContent loading={loading} error={error} empty={!hasPeer || !peerData || !finData} emptyMessage="未找到该公司行业信息" onRetry={retry}>
+          {peerData && finData && (mode === "table" ? (
         <div className="flex h-full min-h-0 flex-col">
           {/* 行业头部 */}
           <div className="flex shrink-0 items-center gap-2 border-b border-slate-800/60 px-2 py-1">
@@ -205,7 +191,7 @@ export function FinPeerPanel({ className = "", ...zoomProps }: { className?: str
             )}
           </div>
           {/* 表头 */}
-          <div className="flex shrink-0 items-center gap-2 border-b border-slate-800/40 px-2 py-0.5 text-[8.5px] text-slate-500">
+          <div className="flex shrink-0 items-center gap-2 border-b border-slate-800/60 px-2 py-0.5 text-[9px] text-slate-500">
             <span className="w-[48px] shrink-0">指标</span>
             <span className="min-w-0 flex-1 text-right">{finData.name.length > 6 ? finData.name.slice(0, 6) : finData.name}</span>
             <span className="w-[52px] shrink-0 text-right">行业均值</span>
@@ -214,7 +200,7 @@ export function FinPeerPanel({ className = "", ...zoomProps }: { className?: str
           {/* 行 */}
           <div className="min-h-0 flex-1 overflow-y-auto py-0.5">
             {peerData.comparisons!.map((c, i) => (
-              <div key={c.label} className="flex flex-col border-b border-slate-800/30 px-2 py-1 hover:bg-slate-800/20">
+              <div key={c.label} className="flex flex-col border-b border-slate-800/60 px-2 py-1 hover:bg-slate-800/40">
                 <div className="flex items-center gap-2">
                   <span className="w-[48px] shrink-0 text-[10px] text-slate-400">{c.label}</span>
                   <span className={`min-w-0 flex-1 text-right text-[11px] font-semibold ${c.colorCls ?? "text-slate-200"}`} style={TNUM}>
@@ -238,8 +224,10 @@ export function FinPeerPanel({ className = "", ...zoomProps }: { className?: str
           </div>
         </div>
       ) : radarData ? (
-        <RadarChart axes={radarData} companyName={finData.name} />
-      ) : null}
+        <RadarChart axes={radarData} companyName={finData!.name} />
+      ) : null)}
+        </AsyncContent>
+      )}
     </Panel>
   );
 }

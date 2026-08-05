@@ -6,9 +6,8 @@ import { type FinBoardStock } from "@/lib/api";
 import { fmtPct } from "@/lib/format";
 import { useFin } from "./FinContext";
 import { PeriodTabs } from "./PeriodTabs";
-import { SkeletonRows } from "./SkeletonRows";
 import { TNUM, fmtYi, prefixCode } from "./utils";
-import { TabBar } from "../SharedUI";
+import { AsyncContent, TabBar } from "../SharedUI";
 
 type Tab = "profit" | "growth";
 const TABS: { key: Tab; label: string }[] = [
@@ -49,25 +48,13 @@ export function FinStockRankPanel({ className = "", ...zoomProps }: { className?
         </div>
       }
     >
-      {!data ? (
-        loading ? (
-          <SkeletonRows rows={14} />
-        ) : (
-          <div className="flex h-full items-center justify-center text-[11px]">
-            <button className="h-full w-full text-slate-500" onClick={retry}>
-              数据获取失败，点击重试{error ? `(${error})` : ""}
-            </button>
-          </div>
-        )
-      ) : rows.length === 0 ? (
-        <div className="flex h-full items-center justify-center text-[11px] text-slate-600">当前非财报密集披露期</div>
-      ) : (
+      <AsyncContent loading={loading} error={error} empty={rows.length === 0} emptyMessage="当前非财报密集披露期" onRetry={retry}>
         <div className="h-full overflow-y-auto py-0.5">
           {rows.map((s, i) => (
             <RankRow key={s.code} s={s} rank={i + 1} tab={tab} maxV={maxV} onPick={() => select(prefixCode(s.code), s.name)} />
           ))}
         </div>
-      )}
+      </AsyncContent>
     </Panel>
   );
 }

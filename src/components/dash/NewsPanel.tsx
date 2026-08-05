@@ -6,6 +6,7 @@ import { api, type NewsItem } from "@/lib/api";
 import { fmtTime } from "@/lib/format";
 import { isTv } from "@/lib/tv";
 import { MACRO_KEYWORDS, CHAINS } from "@/config/dashboard";
+import { AsyncContent } from "./SharedUI";
 
 /** 快讯关键词打标 */
 function tagOf(item: NewsItem): { label: string; color: string } | null {
@@ -73,12 +74,9 @@ export function NewsPanel({ className = "", ...zoomProps }: { className?: string
     >
       <div ref={boxRef} className="h-full space-y-1 overflow-y-auto scroll-smooth p-1.5">
         {/* TV 弱 GPU: 滚动层全量光栅化, 60条压到25条 */}
-        {(isTv ? data?.slice(0, 25) : data)?.map((item) => <NewsRow key={item.id} item={item} isNew={newIds.has(item.id)} />)}
-        {!data && (
-          <div className="p-6 text-center text-[11px] text-slate-600">
-            {error ? <span className="text-rose-400/80">快讯源连接失败,自动重试中…<br />{error}</span> : "快讯加载中…"}
-          </div>
-        )}
+        <AsyncContent loading={!data && !error} error={error || null} empty={false} onRetry={() => {}}>
+          {(isTv ? data?.slice(0, 25) : data)?.map((item) => <NewsRow key={item.id} item={item} isNew={newIds.has(item.id)} />)}
+        </AsyncContent>
       </div>
     </Panel>
   );

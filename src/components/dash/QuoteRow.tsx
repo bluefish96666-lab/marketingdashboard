@@ -41,8 +41,8 @@ interface QuoteRowProps {
   boards?: boolean;
   /** 显示主力净额/净占比(东财口径, 30s 轮询) */
   flow?: boolean;
-  /** card = 带边框的卡片样式(产业链); compact = 单行商品行 */
-  variant?: "plain" | "card" | "compact";
+  /** card = 带边框的卡片样式(产业链); compact = 单行商品行; index = 指数四列(徽标|名称+代码|分时/成交额|点位/涨幅) */
+  variant?: "plain" | "card" | "compact" | "index";
   active?: boolean;
   onClick?: () => void;
   onRemove?: () => void;
@@ -57,6 +57,8 @@ interface QuoteRowProps {
   };
   /** 左侧彩色 accent 竖条(商品面板强调色) */
   accent?: string;
+  /** 名称前短徽标(IndexPanel 传地区简写: CN/US/HK/FX) */
+  badge?: string;
   /** 现期对照(基差)行: 品种 | 现货 | 期货 | 基差 | 基差率 — 仅 compact 模式使用 */
   basis?: { spot: number; futures: number; basis: number; basisPct: number };
 }
@@ -67,7 +69,7 @@ interface QuoteRowProps {
  */
 export const QuoteRow = memo(function QuoteRow({
   code, name, price, pct, tag, rank, amount, turnover, spark, boards, flow, variant = "plain", active, onClick, onRemove,
-  unit, sparkData, accent, basis, className,
+  unit, sparkData, accent, badge, basis, className,
 }: QuoteRowProps) {
   // 行宽自适应: 实测宽度决定资金流标签形态(主力净额/净占比 ↔ 净/占)
   // 仅 flow 模式需要; compact 模式无需
@@ -150,7 +152,7 @@ export const QuoteRow = memo(function QuoteRow({
         >
           {/* 名称+单位, 跨2行 */}
           <div className="row-span-2 flex min-w-0 flex-col justify-center gap-1 leading-none">
-            <span className="truncate text-[12px] text-slate-200">{name}</span>
+            <span className="truncate text-[11px] text-slate-200">{name}</span>
             <span className="truncate text-[10px] text-slate-500">{subtitle}</span>
           </div>
           {/* 分时图: 跨2行, 垂直居中 */}
@@ -191,21 +193,81 @@ export const QuoteRow = memo(function QuoteRow({
         {accent && (
           <span aria-hidden className="absolute left-0 top-0 h-full w-[3px] rounded-l" style={{ background: accent, opacity: 0.55 }} />
         )}
+        {badge && (
+          <span className="w-6 shrink-0 rounded-sm bg-slate-700/50 text-center text-[8px] leading-3 text-slate-400">{badge}</span>
+        )}
           <div className="w-[72px] shrink-0 leading-none">
             <div className="truncate text-[11px] text-slate-300">{name}</div>
             {subtitle && <div className="mt-0.5 truncate text-[8px] text-slate-600">{subtitle}</div>}
           </div>
-          <span className={`w-[72px] shrink-0 text-right text-[12px] font-semibold ${pct != null ? clsChg(pct) : "text-slate-400"}`} style={TNUM}>
+          <span className={`w-[72px] shrink-0 text-right text-[11px] font-semibold ${pct != null ? clsChg(pct) : "text-slate-400"}`} style={TNUM}>
             {p != null ? fmtPrice(p) : "—"}
           </span>
           <span className={`w-[52px] shrink-0 rounded px-0.5 text-right text-[10px] font-semibold ${pct != null ? bgChg(pct) : ""}`} style={TNUM}>
             {pct != null ? fmtPct(pct) : ""}
           </span>
           <span className="min-w-0 flex-1">
-            {sp && sp.points.length > 1 && (
-              <Spark points={sp.points} prec={sp.prec} width={120} height={20} fluid session={sparkData?.session || "ashare"} />
+            {sp && sp.points.length > 1 ? (
+              <Spark points={sp.points} prec={sp.prec} width={120} height={20} fluid emptyLabel="—" session={sparkData?.session || "ashare"} />
+            ) : (
+              <span className="text-[10px] text-slate-600">——</span>
             )}
           </span>
+      </Tag>
+    );
+  }
+
+  // ---- index 布局(全球指数): 徽标 | 名称+代码 | mini分时/成交额 | 点位/涨幅 ----
+  if (variant === "index") {
+    return (
+      <Tag
+        ref={(el: HTMLElement | null) => {
+          rootRef.current = el;
+        }}
+        onClick={onClick}
+        className={`group block w-full rounded px-1.5 py-[2px] text-left transition-colors hover:bg-slate-800/40 hover:shadow-[inset_0_0_0_1px_rgba(34,211,238,0.22)] ${
+          active ? "bg-cyan-500/10 ring-1 ring-cyan-500/40" : ""
+        } ${className || ""}`}
+      >
+        <div
+          className="grid items-center gap-x-1.5"
+          style={{
+            gridTemplateColumns: "auto 72px minmax(0,1fr) 70px",
+            gridTemplateRows: "16px 14px",
+          }}
+        >
+          {/* 地区徽标, 跨2行 */}
+          {badge && (
+            <div className="row-span-2 self-center">
+              <span className="w-6 shrink-0 rounded-sm bg-slate-700/50 text-center text-[8px] leading-3 text-slate-400">{badge}</span>
+            </div>
+          )}
+          {/* 指数名称+代码, 跨2行 */}
+          <div className="row-span-2 flex min-w-0 flex-col justify-center gap-1 leading-none">
+            <span className="truncate text-[11px] text-slate-200">{name}</span>
+            <span className="truncate text-[9px] text-slate-500">{subtitle}</span>
+          </div>
+          {/* mini 分时图 */}
+          <div className="flex h-[16px] min-w-0 items-center self-center">
+            {sp && sp.points.length > 1 ? (
+              <Spark points={sp.points} prec={sp.prec} width={120} height={16} fluid emptyLabel="—" session={sparkData?.session || "ashare"} />
+            ) : (
+              <span className="text-[10px] text-slate-600">——</span>
+            )}
+          </div>
+          {/* 指数点位 */}
+          <span className={`self-center text-right text-[12px] font-bold leading-none ${p != null ? clsChg(p) : "text-slate-600"}`} style={TNUM}>
+            {p != null ? fmtPrice(p) : "—"}
+          </span>
+          {/* 成交额 */}
+          <span className="self-center truncate text-right text-[9px] leading-none text-slate-500" style={TNUM}>
+            {amount || "—"}
+          </span>
+          {/* 涨幅 */}
+          <span className={`self-center justify-self-end rounded px-0.5 text-[10px] font-semibold leading-none ${pc != null ? bgChg(pc) : ""}`} style={TNUM}>
+            {pc != null ? fmtPct(pc) : ""}
+          </span>
+        </div>
       </Tag>
     );
   }
@@ -216,63 +278,10 @@ export const QuoteRow = memo(function QuoteRow({
   const hasTurnover = Boolean(turnover);
   const nameW = variant === "card" ? "56px" : "72px";
 
-  // ---- 商品/最小模式(无 flow/amount/turnover): 名称 | spark | 价/幅一列(数据在分时图右侧) ----
-  if (!hasFlow && !hasAmount && !hasTurnover) {
-    return (
-      <Tag
-        ref={(el: HTMLElement | null) => { rootRef.current = el; }}
-        onClick={onClick}
-        className={`group grid w-full grid-cols-[72px_minmax(0,1fr)_72px] grid-rows-[20px_16px] items-center gap-x-1 rounded px-2 py-[4px] text-left transition-colors ${skin} ${accent ? "relative" : ""} ${active ? "bg-cyan-500/10 ring-1 ring-cyan-500/40" : ""}`}
-      >
-        {accent && (
-          <span aria-hidden className="absolute left-0 top-0 h-full w-[3px] rounded-l" style={{ background: accent, opacity: 0.55 }} />
-        )}
-        {rank != null && (
-          <span className={`row-span-2 self-center text-[11px] font-bold leading-none ${rank <= 3 ? "text-amber-400" : "text-slate-600"}`} style={TNUM}>{rank}</span>
-        )}
-        {/* 名称+单位, 跨2行(与原组件同高) */}
-        <div className="row-span-2 flex min-w-0 flex-col justify-center gap-1 leading-none">
-          <span className="truncate text-[12px] text-slate-200">{name}</span>
-          <span className="truncate text-[10px] text-slate-500">{subtitle}</span>
-        </div>
-        {/* 分时图: 跨2行, 垂直居中 */}
-        <div className="row-span-2 flex min-w-0 items-center">
-          {sp && sp.points.length > 1 && (
-            <Spark points={sp.points} prec={sp.prec} width={160} height={20} fluid session={sparkData?.session || "ashare"} />
-          )}
-        </div>
-        {/* 价/幅一列(上下两行), 跨2行右侧 */}
-        <div className="row-span-2 flex flex-col justify-center gap-1 leading-none">
-          <div className="flex items-center justify-end gap-1">
-            <span className="shrink-0 text-[9px] text-slate-600">价</span>
-            <span className={`truncate text-[11px] font-semibold ${pct != null ? clsChg(pct) : "text-slate-400"}`} style={TNUM}>
-              {p != null ? fmtPrice(p) : "—"}
-            </span>
-          </div>
-          <div className="flex items-center justify-end gap-1">
-            <span className="shrink-0 text-[9px] text-slate-600">幅</span>
-            <span className={`truncate rounded px-0.5 text-[10px] font-semibold ${pct != null ? bgChg(pct) : ""}`} style={TNUM}>
-              {pct != null ? fmtPct(pct) : ""}
-            </span>
-          </div>
-        </div>
-        {onRemove && (
-          <button
-            onClick={(e) => { e.stopPropagation(); onRemove(); }}
-            className="row-span-2 self-center text-[10px] leading-none text-slate-600 opacity-0 transition-opacity hover:text-rose-400 group-hover:opacity-100"
-            title="移除"
-          >
-            ×
-          </button>
-        )}
-      </Tag>
-    );
-  }
-
-  // 动态网格: 无 flow 时合并为单列 spark, 无 amount/turnover 时折叠对应列
+  // 动态网格: flow 有/无 对应不同列模板
   let gridCols: string;
   let sparkColSpan: number;
-  const prefix = rank != null ? "auto " : "";
+  const prefix = (rank != null ? "auto " : "") + (badge ? "auto " : "");
   const suffix = onRemove ? " auto" : "";
 
   if (hasFlow) {
@@ -317,16 +326,24 @@ export const QuoteRow = memo(function QuoteRow({
             {rank}
           </div>
         )}
+        {/* 地区徽标(IndexPanel) */}
+        {badge && (
+          <div className="row-span-2 self-center">
+            <span className="w-6 shrink-0 rounded-sm bg-slate-700/50 text-center text-[8px] leading-3 text-slate-400">{badge}</span>
+          </div>
+        )}
         {/* 左格: 名称+代码, 跨2行 */}
         <div className="row-span-2 flex min-w-0 flex-col justify-center gap-1 leading-none">
-          <span className="truncate text-[12px] text-slate-200">{name}</span>
+          <span className="truncate text-[11px] text-slate-200">{name}</span>
           <span className="text-[10px] text-slate-500">{subtitle}</span>
         </div>
 
         {/* 第一行: 分时图(跨 sparkColSpan 列, 恒占 20px 高度) */}
         <div className={`flex h-[20px] min-w-0 items-center self-center`} style={{ gridColumn: `span ${sparkColSpan}` }}>
-          {sp && sp.points.length > 1 && (
-            <Spark points={sp.points} prec={sp.prec} width={160} height={20} fluid session={sparkData?.session || "ashare"} />
+          {sp && sp.points.length > 1 ? (
+            <Spark points={sp.points} prec={sp.prec} width={160} height={20} fluid emptyLabel="—" session={sparkData?.session || "ashare"} />
+          ) : (
+            <span className="text-[10px] text-slate-600">——</span>
           )}
         </div>
         {/* 第一行: 成交额 / 现价(仅 flow 或 amount 模式) */}
@@ -352,53 +369,32 @@ export const QuoteRow = memo(function QuoteRow({
           </div>
         )}
 
-        {/* 第二行: 主力净额 / 净占比(进度条) / 换手率 / 涨跌幅 */}
+        {/* 第二行: 按模式渲染不同列 */}
         {hasFlow ? (
-          <Stat
-            label={compact ? "净" : "主力净额"}
-            value={fl ? fmtYuan(fl.netIn) : "—"}
-            valueCls={`font-semibold ${fl ? clsChg(fl.netIn) : "text-slate-600"}`}
-          />
-        ) : (
-          (hasFlow || hasAmount || hasTurnover) ? <div /> : null
-        )}
-        {hasFlow ? (
-          <div className="flex min-w-0 items-center gap-1 overflow-hidden whitespace-nowrap leading-none">
-            <span className="shrink-0 text-[9px] text-slate-600">{compact ? "占" : "净占比"}</span>
-            <span className="h-1 min-w-0 flex-1 self-center rounded-full bg-slate-800">
-              <span
-                className={`block h-1 rounded-full ${fl && fl.netRatio < 0 ? "bg-emerald-400/80" : "bg-rose-400/80"}`}
-                style={{ width: `${ratioBar}%` }}
-              />
-            </span>
-            <span className={`truncate text-[11px] ${fl ? clsChg(fl.netRatio) : "text-slate-600"}`} style={TNUM}>
-              {fl ? `${fl.netRatio.toFixed(1)}%` : "—"}
-            </span>
-          </div>
-        ) : (
-          (hasFlow || hasAmount || hasTurnover) ? <div /> : null
-        )}
-        {hasTurnover ? <Stat label="换" value={turnover} /> : (
-          (hasFlow || hasAmount || hasTurnover) ? <div /> : null
-        )}
-        {/* 涨跌幅: 商品模式只有 price+pct 两列, 显示在两行; 个股模式在第二行 */}
-        {!hasFlow && !hasAmount && !hasTurnover ? (
-          // 商品模式: price 在第一行, chg% 在第二行; 但第一行 spark 占位了, 需要调整
-          // 这里在第二行渲染 price + chg%
           <>
-            <Stat label="价" value={p != null ? fmtPrice(p) : "—"} />
-            <Stat
-              label="幅"
-              value={pc != null ? fmtPct(pc, 1) : ""}
-              valueCls={`font-semibold ${pc != null ? clsChg(pc) : "text-slate-600"}`}
-            />
+            <Stat label={compact ? "净" : "主力净额"} value={fl ? fmtYuan(fl.netIn) : "—"} valueCls={`font-semibold ${fl ? clsChg(fl.netIn) : "text-slate-600"}`} />
+            <div className="flex min-w-0 items-center gap-1 overflow-hidden whitespace-nowrap leading-none">
+              <span className="shrink-0 text-[9px] text-slate-600">{compact ? "占" : "净占比"}</span>
+              <span className="h-1 min-w-0 flex-1 self-center rounded-full bg-slate-800">
+                <span className={`block h-1 rounded-full ${fl && fl.netRatio < 0 ? "bg-emerald-400/80" : "bg-rose-400/80"}`} style={{ width: `${ratioBar}%` }} />
+              </span>
+              <span className={`truncate text-[11px] ${fl ? clsChg(fl.netRatio) : "text-slate-600"}`} style={TNUM}>{fl ? `${fl.netRatio.toFixed(1)}%` : "—"}</span>
+            </div>
+            {hasTurnover ? <Stat label="换" value={turnover} /> : <div />}
+            <Stat label="幅" value={pc != null ? fmtPct(pc, variant === "card" ? 1 : 2) : ""} valueCls={`font-semibold ${pc != null ? clsChg(pc) : "text-slate-600"}`} />
+          </>
+        ) : hasAmount || hasTurnover ? (
+          <>
+            <div />
+            {hasTurnover ? <Stat label="换" value={turnover} /> : <div />}
+            <Stat label="幅" value={pc != null ? fmtPct(pc, variant === "card" ? 1 : 2) : ""} valueCls={`font-semibold ${pc != null ? clsChg(pc) : "text-slate-600"}`} />
           </>
         ) : (
-          <Stat
-            label="幅"
-            value={pc != null ? fmtPct(pc, variant === "card" ? 1 : 2) : ""}
-            valueCls={`font-semibold ${pc != null ? clsChg(pc) : "text-slate-600"}`}
-          />
+          <>
+            <div />
+            <Stat label="价" value={p != null ? fmtPrice(p) : "—"} />
+            <Stat label="幅" value={pc != null ? fmtPct(pc, 1) : ""} valueCls={`font-semibold ${pc != null ? clsChg(pc) : "text-slate-600"}`} />
+          </>
         )}
       </div>
 

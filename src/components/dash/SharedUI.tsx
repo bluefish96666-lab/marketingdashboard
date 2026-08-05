@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { TNUM } from "@/lib/format";
 
 export interface TabDef<T extends string | number = string> {
   key: T;
@@ -96,7 +97,7 @@ export function AsyncContent({
   if (error && !loading) {
     return (
       <div className="flex h-full items-center justify-center text-[11px]">
-        <button className="h-full w-full text-slate-500" onClick={onRetry}>
+        <button className="h-full w-full text-slate-500 transition-colors hover:text-slate-300" onClick={onRetry}>
           数据获取失败，点击重试{error ? `(${error})` : ""}
         </button>
       </div>
@@ -112,4 +113,59 @@ export function AsyncContent({
   }
 
   return <>{children}</>;
+}
+
+// ---- 通用行组件 ----
+
+/** 密集表格行基底: h-5 + border-b + hover, onClick 传入时渲染为 button */
+export function DataRow({ onClick, children, className = "" }: {
+  onClick?: () => void; children: ReactNode; className?: string;
+}) {
+  const Tag = onClick ? "button" : "div";
+  return (
+    <Tag
+      onClick={onClick}
+      className={`flex h-[20px] w-full items-center gap-1.5 border-b border-slate-800/60 px-2 text-left hover:bg-slate-800/40 ${className}`}
+    >
+      {children}
+    </Tag>
+  );
+}
+
+/** 弹性名称格: truncate + 11px + slate-200 */
+export function RowName({ children }: { children: ReactNode }) {
+  return <span className="min-w-0 flex-1 truncate text-[11px] text-slate-200">{children}</span>;
+}
+
+// ---- 通用徽标 ----
+
+const TONE_MAP: Record<string, string> = {
+  rose: "border-rose-400/60 bg-rose-400/10 text-rose-300",
+  emerald: "border-emerald-400/60 bg-emerald-400/10 text-emerald-300",
+  cyan: "border-cyan-400/60 bg-cyan-400/10 text-cyan-300",
+  amber: "border-amber-400/60 bg-amber-400/10 text-amber-300",
+  slate: "border-slate-500/60 bg-slate-500/10 text-slate-400",
+};
+
+/** 彩色边框徽标: 预喜/预悲/未定/宏观/政策 等 */
+export function ToneChip({ tone, children, dot }: {
+  tone: keyof typeof TONE_MAP; children: ReactNode; dot?: boolean;
+}) {
+  return (
+    <span className={`flex shrink-0 items-center justify-center gap-0.5 rounded border px-0.5 text-[9px] leading-[12px] ${TONE_MAP[tone]}`}>
+      {dot && <span className="inline-block h-[3px] w-[3px] rounded-full bg-amber-400" />}
+      {children}
+    </span>
+  );
+}
+
+/** 固定宽数值格: text-right + 11px + TNUM */
+export function RowCell({ width, value, color = "text-slate-200" }: {
+  width: number; value: ReactNode; color?: string;
+}) {
+  return (
+    <span className={`shrink-0 truncate text-right text-[11px] ${color}`} style={{ ...TNUM, width }}>
+      {value}
+    </span>
+  );
 }

@@ -4,10 +4,9 @@ import { Panel, type PanelZoomProps } from "../Panel";
 import { useFinMain } from "./useFinData";
 import { type FinanceReport } from "@/lib/api";
 import { useFin } from "./FinContext";
-import { SkeletonRows } from "./SkeletonRows";
 import { TNUM, quarterLabel } from "./utils";
 import { useElementSize } from "@/hooks/useElementSize";
-import { TabBar } from "../SharedUI";
+import { AsyncContent, TabBar } from "../SharedUI";
 
 type Tab = "perf" | "quality" | "leverage";
 const TABS: { key: Tab; label: string }[] = [
@@ -327,20 +326,10 @@ export function FinTrendPanel({ className = "", ...zoomProps }: { className?: st
             ← 先在左侧选择公司
           </div>
         </div>
-      ) : !data ? (
-        loading ? (
-          <SkeletonRows rows={8} />
-        ) : (
-          <div className="flex h-full items-center justify-center text-[11px]">
-            <button className="h-full w-full text-slate-500" onClick={retry}>
-              数据获取失败，点击重试{error ? `(${error})` : ""}
-            </button>
-          </div>
-        )
-      ) : data.reports.length === 0 ? (
-        <div className="flex h-full items-center justify-center text-[11px] text-slate-600">暂无财报数据</div>
       ) : (
-        <TrendChart reports={data.reports} tab={tab} />
+        <AsyncContent loading={loading} error={error} empty={!!data && data.reports.length === 0} emptyMessage="暂无财报数据" onRetry={retry}>
+          {data && data.reports.length > 0 && <TrendChart reports={data.reports} tab={tab} />}
+        </AsyncContent>
       )}
     </Panel>
   );

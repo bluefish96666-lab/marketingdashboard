@@ -22,7 +22,11 @@ try {
   }
 } catch (e) { console.error("[env] load error:", e.message); }
 
+// 运行观测(压测/运维): 仅聚合计数, 无敏感信息; /api/stats 读取
+const stats = { reqs: 0, upstream: 0, blocked: 0, started: Date.now() };
+
 function curlText(url, { referer, timeout = 8000, encoding = "gbk" } = {}) {
+  stats.upstream++; // 上游调用计数(fetchText/curlText 是所有上游 fetch 的唯一出口)
   return new Promise((resolve, reject) => {
     // -sS: 静默进度但保留错误信息到 stderr, 失败原因可诊断(28=超时, 35=TLS握手, 6=DNS...)
     const args = ["-sS", "--max-time", String(Math.ceil(timeout / 1000)), "-H", `User-Agent: ${UA}`];
@@ -45,6 +49,7 @@ const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,
 
 /* ---------------- 基础工具 ---------------- */
 async function fetchText(url, { referer, gbk = false, timeout = 8000 } = {}) {
+  stats.upstream++;
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeout);
   try {
@@ -130,7 +135,19 @@ function parseTencentLine(line) {
   };
 }
 
-const QUOTE_CACHE_TTL = 1500;
+// 报价缓存 TTL 与前端报价中心轮询周期(5s)对齐: 每个 code 每 5s 最多 1 次上游, 不再有 1.5s 的多余流量
+const QUOTE_CACHE_TTL = 5000;
+
+// 上游失败退避: 5s → 15s → 45s → 2min, 成功即复位。退避窗口内同 key 不再打上游(负缓存),
+// 多用户场景下上游宕机时, 全站重复轮询折叠为每窗口 1 次, 避免锤死上游
+const FAIL_BACKOFF = [5000, 15000, 45000, 120000];
+const backoffOf = (n) => FAIL_BACKOFF[Math.min(n || 0, FAIL_BACKOFF.length - 1)];
+
+// 块级上游 inflight 去重表(handleQuotes 的 60 码分块 / handleStockFlows 的缺失列表):
+// 缓存过期瞬间的并发 miss 共享同一次上游拉取, 防止多用户同频轮询时每个过期窗口爆发重复请求
+const chunkInflight = new Map();
+const flowInflight = new Map();
+let vixInflight = null; // usVIX 新浪拉取的 inflight 去重(同上)
 
 async function handleQuotes(codes) {
   // 按代码独立缓存(报价中心请求集随面板订阅动态变化, 整串做 key 会每次 miss 直冲上游)
@@ -139,52 +156,101 @@ async function handleQuotes(codes) {
   const missing = [];
   for (const c of codes.split(",").map((s) => s.trim()).filter(Boolean)) {
     const hit = cache.get(`q:${c}`);
-    if (hit && hit.data !== undefined && now - hit.ts < QUOTE_CACHE_TTL) out[c] = hit.data;
-    else missing.push(c);
+    if (hit && hit.data !== undefined && now - hit.ts < QUOTE_CACHE_TTL) {
+      out[c] = hit.data;
+    } else if (hit && hit.data !== undefined && hit.failAt != null && now - hit.failAt < backoffOf(hit.failCount)) {
+      out[c] = hit.data; // 失败退避窗口内降级返回旧数据, 不再打上游
+    } else if (hit && hit.failAt != null && now - hit.failAt < backoffOf(hit.failCount)) {
+      // 退避窗口内且无旧数据: 直接跳过, 不再打上游(负缓存)
+    } else {
+      missing.push(c);
+    }
   }
   if (missing.length) {
     // 按 60 个/块分块并发(报价中心全集可达数百, 单 URL 过长会被上游拒绝)
     const chunks = [];
     for (let i = 0; i < missing.length; i += 60) chunks.push(missing.slice(i, i + 60));
-    const texts = await Promise.all(chunks.map((c) => fetchText(`https://qt.gtimg.cn/q=${encodeURIComponent(c.join(","))}`, { gbk: true })));
     const ts = Date.now();
-    for (const text of texts) {
-      for (const line of text.split(";")) {
-        const q = parseTencentLine(line.trim());
-        if (q) {
-          out[q.symbol] = q;
-          if (q.symbol !== "usVIX") cacheSet(`q:${q.symbol}`, { ts, data: q, inflight: null, ttl: QUOTE_CACHE_TTL }); // usVIX 由新浪覆盖值接管
+    // 块级 inflight 去重: 缓存过期瞬间的并发 miss 共享同一次上游拉取。
+    // 否则多用户同频轮询时, 每个过期窗口会爆发几十次重复请求(单用户场景不暴露)
+    await Promise.all(
+      chunks.map(async (chunk) => {
+        const ckey = `qc:${chunk.join(",")}`;
+        const shared = chunkInflight.get(ckey);
+        if (shared) {
+          const rs = await shared;
+          for (const [code, q] of Object.entries(rs)) out[code] = q; // 等待者把结果并入自己的 out
+          return;
         }
-      }
-    }
+        const p = (async () => {
+          const rs = {};
+          try {
+            const text = await fetchText(`https://qt.gtimg.cn/q=${encodeURIComponent(chunk.join(","))}`, { gbk: true });
+            for (const line of text.split(";")) {
+              const q = parseTencentLine(line.trim());
+              if (q) {
+                rs[q.symbol] = q;
+                if (q.symbol !== "usVIX") cacheSet(`q:${q.symbol}`, { ts, data: q, inflight: null, ttl: QUOTE_CACHE_TTL, failAt: null, failCount: 0 }); // usVIX 由新浪覆盖值接管
+              }
+            }
+          } catch {
+            for (const c of chunk) {
+              const hit = cache.get(`q:${c}`);
+              cacheSet(`q:${c}`, { ts: hit?.ts || 0, data: hit?.data, inflight: null, ttl: QUOTE_CACHE_TTL, failAt: Date.now(), failCount: (hit?.failCount || 0) + 1 });
+            }
+          }
+          return rs;
+        })();
+        chunkInflight.set(ckey, p);
+        try {
+          const rs = await p;
+          for (const [code, q] of Object.entries(rs)) out[code] = q;
+        } finally {
+          chunkInflight.delete(ckey);
+        }
+      })
+    );
   }
-  // usVIX 腾讯数据已停更，从新浪期货获取实时值覆盖(仅缓存过期时重取)
+  // usVIX 腾讯数据已停更，从新浪期货获取实时值覆盖(仅缓存过期时重取;
+  // 带 inflight 去重 + 失败负缓存, 与主循环同理, 防并发 miss 打爆新浪)
   if (codes.includes("usVIX")) {
     const hit = cache.get("q:usVIX");
     if (hit && hit.data !== undefined && now - hit.ts < QUOTE_CACHE_TTL) {
       out.usVIX = hit.data;
+    } else if (hit && hit.data !== undefined && hit.failAt != null && now - hit.failAt < backoffOf(hit.failCount)) {
+      out.usVIX = hit.data; // 退避窗口内降级返回旧数据
+    } else if (vixInflight) {
+      try { out.usVIX = await vixInflight; } catch { /* 等待者随发起者一并失败 */ }
     } else {
-      try {
+      const p = (async () => {
         const vixText = await curlText("https://hq.sinajs.cn/list=hf_VX", { referer: "https://finance.sina.com.cn/futures/", timeout: 4000, encoding: "utf-8" });
         const m = vixText.match(/hf_VX="([^"]*)"/);
-        if (m) {
-          const f = m[1].split(",");
-          const price = parseFloat(f[0]);
-          const prev = parseFloat(f[7]);
-          if (!isNaN(price)) {
-            out.usVIX = {
-              symbol: "usVIX",
-              name: "VIX恐慌指数期货",
-              price,
-              prev,
-              change: +(price - prev).toFixed(4),
-              pct: prev ? +(((price - prev) / prev) * 100).toFixed(3) : 0,
-              time: `${f[12]} ${f[6]}`,
-            };
-            cacheSet("q:usVIX", { ts: Date.now(), data: out.usVIX, inflight: null, ttl: QUOTE_CACHE_TTL });
-          }
-        }
-      } catch { /* keep tencent fallback */ }
+        if (!m) throw new Error("vix empty");
+        const f = m[1].split(",");
+        const price = parseFloat(f[0]);
+        const prev = parseFloat(f[7]);
+        if (isNaN(price)) throw new Error("vix bad");
+        const rec = {
+          symbol: "usVIX",
+          name: "VIX恐慌指数期货",
+          price,
+          prev,
+          change: +(price - prev).toFixed(4),
+          pct: prev ? +(((price - prev) / prev) * 100).toFixed(3) : 0,
+          time: `${f[12]} ${f[6]}`,
+        };
+        cacheSet("q:usVIX", { ts: Date.now(), data: rec, inflight: null, ttl: QUOTE_CACHE_TTL, failAt: null, failCount: 0 });
+        return rec;
+      })();
+      vixInflight = p;
+      try {
+        out.usVIX = await p;
+      } catch {
+        // 失败: 标记退避, 保留旧数据降级(无旧数据时保持腾讯兜底值)
+        cacheSet("q:usVIX", { ts: hit?.ts || 0, data: hit?.data, inflight: null, ttl: QUOTE_CACHE_TTL, failAt: Date.now(), failCount: (hit?.failCount || 0) + 1 });
+      } finally {
+        vixInflight = null;
+      }
     }
   }
   return out;
@@ -192,6 +258,20 @@ async function handleQuotes(codes) {
 
 /* ---------------- 腾讯分钟线(指数/个股 日内走势) ---------------- */
 async function handleMinute(code) {
+  // 外汇(wh*): 腾讯 minute 接口对 wh 代码只回 1 个点; 东财仅有离岸 USDCNH 有盘中分时
+  // (在岸 120.USDCNYC 是每日中间价, 分时恒平), 离岸序列走势与在岸一致, 用作迷你图
+  if (code.startsWith("wh")) {
+    const url =
+      "https://push2his.eastmoney.com/api/qt/stock/kline/get?secid=133.USDCNH&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56&klt=1&fqt=1&beg=0&end=20500101&lmt=240";
+    const json = JSON.parse(await fetchTextAny(url, { referer: "https://quote.eastmoney.com/" }));
+    const pts = (json?.data?.klines || [])
+      .map((s) => {
+        const f = s.split(","); // "2026-08-05 05:01,open,close,high,low,vol" → 0501 / 收盘
+        return { t: f[0].slice(11, 16).replace(":", ""), p: num(f[2]) };
+      })
+      .filter((p) => p.t && p.p > 0);
+    return { code, prec: num(json?.data?.preKPrice), points: pts };
+  }
   // 美股指数(us*)只有 usMinute 接口返回全日序列, minute/query 只给最后一个点
   const url = code.startsWith("us")
     ? `https://web.ifzq.gtimg.cn/appstock/app/usMinute/query?code=${encodeURIComponent(code)}`
@@ -817,20 +897,37 @@ async function handleStockFlows(codesParam) {
     else missing.push(c);
   }
   if (missing.length) {
-    await emEnqueue(async () => {
-      for (let i = 0; i < missing.length; i += 50) {
-        const chunk = missing.slice(i, i + 50);
-        const secids = chunk.map((c) => `${emMarketOf(c.slice(0, 2))}.${c.slice(2)}`).join(",");
-        const url = `https://push2delay.eastmoney.com/api/qt/ulist.np/get?secids=${secids}&fields=f12,f62,f184&np=1&fltt=2&invt=2`;
-        const diff = (await emGet(url))?.data?.diff || [];
-        for (const d of diff) {
-          const c = emSymbol(d.f12);
-          const rec = { code: c, netIn: num(d.f62), netRatio: num(d.f184) };
-          cacheSet(`sf:${c}`, { ts: Date.now(), data: rec, inflight: null, ttl: 30000 });
-          out[c] = rec;
-        }
+    // 缺失列表级 inflight 去重(与 handleQuotes 同理, 防并发 miss 打爆东财)
+    const fkey = `sfi:${missing.join(",")}`;
+    const shared = flowInflight.get(fkey);
+    if (shared) {
+      Object.assign(out, await shared);
+    } else {
+      const p = (async () => {
+        const rs = {};
+        await emEnqueue(async () => {
+          for (let i = 0; i < missing.length; i += 50) {
+            const chunk = missing.slice(i, i + 50);
+            const secids = chunk.map((c) => `${emMarketOf(c.slice(0, 2))}.${c.slice(2)}`).join(",");
+            const url = `https://push2delay.eastmoney.com/api/qt/ulist.np/get?secids=${secids}&fields=f12,f62,f184&np=1&fltt=2&invt=2`;
+            const diff = (await emGet(url))?.data?.diff || [];
+            for (const d of diff) {
+              const c = emSymbol(d.f12);
+              const rec = { code: c, netIn: num(d.f62), netRatio: num(d.f184) };
+              cacheSet(`sf:${c}`, { ts: Date.now(), data: rec, inflight: null, ttl: 30000 });
+              rs[c] = rec;
+            }
+          }
+        });
+        return rs;
+      })();
+      flowInflight.set(fkey, p);
+      try {
+        Object.assign(out, await p);
+      } finally {
+        flowInflight.delete(fkey);
       }
-    });
+    }
   }
   return list.map((c) => out[c]).filter(Boolean);
 }
@@ -1017,11 +1114,13 @@ async function handleTreasuryHistory() {
 const cache = new Map();
 const CACHE_MAX = 2000; // 条目上限, 防止用户输入拼 key 导致无界增长
 
-// 清理过期/失效条目(过期按各条目自身 ttl 判断)
+// 清理过期/失效条目(过期按各条目自身 ttl 判断; 退避窗口内的条目保留, 供降级返回)
 function sweepCache() {
   const now = Date.now();
   for (const [k, v] of cache) {
-    if (!v.inflight && (v.data === undefined || now - v.ts > (v.ttl || 60000))) cache.delete(k);
+    if (v.inflight) continue;
+    const inBackoff = v.failAt != null && now - v.failAt < backoffOf(v.failCount);
+    if (v.data === undefined || (now - v.ts > (v.ttl || 60000) && !inBackoff)) cache.delete(k);
   }
 }
 
@@ -1051,19 +1150,24 @@ async function cached(key, ttl, fn) {
   if (hit) {
     if (hit.data !== undefined && now - hit.ts < ttl) return hit.data;
     if (hit.inflight) return hit.inflight;
+    // 失败退避窗口内: 有旧数据降级返回, 无旧数据直接抛错 — 都不再打上游(负缓存)
+    if (hit.failAt != null && now - hit.failAt < backoffOf(hit.failCount)) {
+      if (hit.data !== undefined) return hit.data;
+      throw new Error("upstream degraded");
+    }
   }
   const inflight = fn()
     .then((data) => {
-      cacheSet(key, { ts: Date.now(), data, inflight: null, ttl });
+      cacheSet(key, { ts: Date.now(), data, inflight: null, ttl, failAt: null, failCount: 0 });
       return data;
     })
     .catch((e) => {
       const c = cache.get(key);
-      cacheSet(key, { ts: c?.ts || 0, data: c?.data, inflight: null, ttl });
+      cacheSet(key, { ts: c?.ts || 0, data: c?.data, inflight: null, ttl, failAt: Date.now(), failCount: (c?.failCount || 0) + 1 });
       if (c?.data !== undefined) return c.data; // 出错回退到旧数据
       throw e;
     });
-  cacheSet(key, { ts: hit?.ts || 0, data: hit?.data, inflight, ttl });
+  cacheSet(key, { ts: hit?.ts || 0, data: hit?.data, inflight, ttl, failAt: hit?.failAt ?? null, failCount: hit?.failCount ?? 0 });
   return inflight;
 }
 
@@ -1656,7 +1760,8 @@ function handleChainParse(body) {
 
 /* ---------------- 主机路由表 ---------------- */
 const routes = {
-  "/api/quotes": async (q) => handleQuotes(q.get("codes") || ""), // 内部按代码独立缓存(TTL 1.5s)
+  "/api/quotes": async (q) => handleQuotes(q.get("codes") || ""), // 内部按代码独立缓存(TTL 5s)
+  "/api/stats": async () => ({ reqs: stats.reqs, upstream: stats.upstream, blocked: stats.blocked, uptimeSec: Math.round((Date.now() - stats.started) / 1000) }),
   "/api/minute": async (q) =>
     cached(`minute:${q.get("code")}`, 5000, () => handleMinute(q.get("code") || "sh000001")),
   // 批量分钟线: 将 N 次单独请求合并为 1 次, 大幅降低冷启动爆发请求数
@@ -1847,7 +1952,9 @@ function makeLimiter(windowMs, max) {
   };
 }
 
-const apiLimiter = makeLimiter(60 * 1000, 600); // 公开 /api: 每 IP 每分钟 600 次(10/s), 容纳多标签页 + 冷启动爆发
+// 公开 /api: 每 IP 每分钟 2400 次(40/s)。单个客户端轮询 ~0.5 req/s, 40/s 覆盖 ~80 个用户共享的
+// 办公室 NAT 出口 IP; 上游安全由 TTL 缓存 + 失败退避保证, 限流只兜恶意突发
+const apiLimiter = makeLimiter(60 * 1000, 2400);
 const protectedLimiter = makeLimiter(60 * 1000, 30); // 私有 key 端点: 每 IP 每分钟 30 次, 防脚本刷配额
 
 // 读取 POST body, 超过 limit 字节即停止累积({ tooBig: true }), 防止无限读入
@@ -1877,10 +1984,12 @@ const server = http.createServer(async (req, res) => {
   try {
     const u = new URL(req.url, "http://localhost");
     if (routes[u.pathname]) {
+      stats.reqs++;
       const cors = corsHeadersFor(req);
       // 按 IP 限流(先于缓存命中判断, 防唯一 key 旋转造成的上游请求放大)
       const allowed = (PROTECTED_ROUTES.has(u.pathname) ? protectedLimiter : apiLimiter)(clientIp(req));
       if (!allowed) {
+        stats.blocked++;
         send(res, 429, { ok: false, error: "too many requests" }, cors);
         return;
       }

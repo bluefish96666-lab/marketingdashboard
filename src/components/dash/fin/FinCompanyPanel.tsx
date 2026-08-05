@@ -4,7 +4,7 @@ import { Panel, type PanelZoomProps } from "../Panel";
 import { useFinMain } from "./useFinData";
 import { clsChg } from "@/lib/format";
 import { useFin } from "./FinContext";
-import { SkeletonRows } from "./SkeletonRows";
+import { AsyncContent } from "../SharedUI";
 import { TNUM, fmtYi, prefixCode, quarterLabel } from "./utils";
 import { useStockSearch } from "@/hooks/useStockSearch";
 
@@ -97,19 +97,9 @@ export function FinCompanyPanel({ className = "", ...zoomProps }: { className?: 
           <div className="flex min-h-0 flex-1 items-center justify-center text-[11px] text-slate-600">
             ← 从榜单或搜索选入公司
           </div>
-        ) : !data ? (
-          loading ? (
-            <SkeletonRows rows={6} />
-          ) : (
-            <div className="flex min-h-0 flex-1 items-center justify-center text-[11px]">
-              <button className="h-full w-full text-slate-500" onClick={retry}>
-                数据获取失败，点击重试{error ? `(${error})` : ""}
-              </button>
-            </div>
-          )
-        ) : !r0 ? (
-          <div className="flex min-h-0 flex-1 items-center justify-center text-[11px] text-slate-600">暂无财报数据</div>
         ) : (
+          <AsyncContent loading={loading} error={error} empty={!r0} emptyMessage="暂无财报数据" onRetry={retry} skeletonRows={6}>
+            {data && r0 && (
           <>
             <div className="flex shrink-0 items-center justify-between px-0.5 text-[9px] text-slate-500">
               <span>
@@ -132,6 +122,8 @@ export function FinCompanyPanel({ className = "", ...zoomProps }: { className?: 
             </div>
           </>
         )}
+          </AsyncContent>
+        )}
       </div>
     </Panel>
   );
@@ -140,13 +132,13 @@ export function FinCompanyPanel({ className = "", ...zoomProps }: { className?: 
 function Card({ label, value, sub, subCls }: { label: string; value: string; sub?: string; subCls?: string }) {
   return (
     <div className="flex h-[32px] min-w-0 flex-col justify-between rounded bg-slate-800/40 px-1.5 py-1">
-      <div className="text-[8.5px] leading-[10px] text-slate-500">{label}</div>
+      <div className="text-[9px] leading-[10px] text-slate-500">{label}</div>
       <div className="flex items-baseline justify-between gap-1">
-        <span className="truncate text-[12px] font-semibold text-slate-200" style={TNUM}>
+        <span className="truncate text-[11px] font-semibold text-slate-200" style={TNUM}>
           {value}
         </span>
         {sub && (
-          <span className={`shrink-0 text-[8.5px] ${subCls ?? "text-slate-500"}`} style={TNUM}>
+          <span className={`shrink-0 text-[9px] ${subCls ?? "text-slate-500"}`} style={TNUM}>
             {sub}
           </span>
         )}

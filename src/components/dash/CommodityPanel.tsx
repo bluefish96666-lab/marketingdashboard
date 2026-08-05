@@ -26,7 +26,7 @@ export function CommodityPanel({ className = "", ...zoomProps }: { className?: s
   return (
     <Panel className={className} {...zoomProps} title="大宗商品" icon={<Diamond size={14} />} accent="#f5c542"
       right={<span className="text-[10px] text-slate-500">10s</span>}>
-      <div className="flex h-full flex-col divide-y divide-slate-800/60">
+      <div className="flex h-full min-h-0 flex-col divide-y divide-slate-800/60 overflow-y-auto p-1">
         {COMMODITIES.map((c) => {
           const m = minutes?.[c.code];
           return (
