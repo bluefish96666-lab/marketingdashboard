@@ -311,7 +311,7 @@ export function FinTrendPanel({ className = "", ...zoomProps }: { className?: st
       icon={<TrendingUp size={14} />}
       accent="#22d3ee"
       right={
-        <TabBar tabs={TABS} active={tab} onChange={setTab} accent="cyan" variant="underline" />
+        <TabBar tabs={TABS} active={tab} onChange={setTab} accent="cyan" />
       }
     >
       {!company.code ? (

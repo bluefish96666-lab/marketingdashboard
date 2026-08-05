@@ -44,7 +44,7 @@ export function FinStockRankPanel({ className = "", ...zoomProps }: { className?
         <div className="flex items-center gap-2 text-[10px]">
           <PeriodTabs />
           <span className="h-3 w-px bg-slate-700" />
-          <TabBar tabs={TABS} active={tab} onChange={setTab} accent="cyan" variant="underline" />
+          <TabBar tabs={TABS} active={tab} onChange={setTab} accent="cyan" />
         </div>
       }
     >

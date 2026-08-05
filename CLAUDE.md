@@ -43,7 +43,7 @@ When the user asks to publish a release ("发版", "release", "publish"):
 - `src/lib/format.ts` — `TNUM` (tabular-nums style), `clsChg` (red/green color), `fmtYi`/`fmtWan`/`fmtYuan`/`fmtPct`/`fmtPrice` — all formatting + coloring in one place
 - `src/hooks/useElementSize.ts` — `useElementSize(threshold?)` returns `{ ref, size }` for SVG auto-sizing (do NOT hand-write ResizeObserver + useState boilerplate)
 - `src/hooks/useStockSearch.ts` — `useStockSearch()` returns debounced search state + keyboard navigation for stock picker inputs
-- `src/components/dash/SharedUI.tsx` — `TabBar<T>` (segmented control, accent + variant props) and `AsyncContent` (loading skeleton / error+retry / empty / content wrapper) (do NOT copy-paste tab buttons or error templates)
+- `src/components/dash/SharedUI.tsx` — `TabBar<T>` (segmented control, accent + size props, pill 高亮) and `AsyncContent` (loading skeleton / error+retry / empty / content wrapper) (do NOT copy-paste tab buttons or error templates)
 
 **Panel layout** (`src/components/dash/DashboardLayout.tsx`): The cockpit is a grid of resizable `Panel` components arranged in rows. `DashboardLayout` reads `PanelRowDef[]` (row height ratios + per-panel width ratios) and renders panels wrapped in `React.memo` so zooming one panel doesn't re-render siblings. Panel zoom state is managed by `usePanelZoom` hook.
 

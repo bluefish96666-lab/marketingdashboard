@@ -51,7 +51,7 @@ function smoothPath(pts: { x: number; y: number }[]): string {
 
 const TOP_N = 15;
 
-function Chart({ allDays, days, mode }: { allDays: OrUsageDay[]; days: OrUsageDay[]; mode: "vendor" | "country" }) {
+function Chart({ allDays, days, mode, agg }: { allDays: OrUsageDay[]; days: OrUsageDay[]; mode: "vendor" | "country"; agg: "day" | "week" }) {
   const boxRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ w: 400, h: 200 });
   useEffect(() => {
@@ -152,9 +152,9 @@ function Chart({ allDays, days, mode }: { allDays: OrUsageDay[]; days: OrUsageDa
         <span className={chart.chg >= 0 ? "text-emerald-400" : "text-red-400"}>
           {chart.chg >= 0 ? "↑" : "↓"} {chart.chgPct > 0.01 || chart.chgPct < -0.01 ? `${chart.chgPct > 0 ? "+" : ""}${chart.chgPct.toFixed(1)}%` : "0%"}
         </span>
-        <span className="text-slate-500">日均 {fmtT(Math.round(chart.avg))}</span>
-        <span className="text-slate-500">日增速 {chart.dailyRate > 0.001 ? `+${chart.dailyRate.toFixed(2)}%` : `${chart.dailyRate.toFixed(2)}%`}</span>
-        <span className="text-slate-500">近7日 {fmtT(Math.round(chart.avg7))}/日</span>
+        <span className="text-slate-500">{agg === "week" ? "周均" : "日均"} {fmtT(Math.round(chart.avg))}</span>
+        <span className="text-slate-500">{agg === "week" ? "周增速" : "日增速"} {chart.dailyRate > 0.001 ? `+${chart.dailyRate.toFixed(2)}%` : `${chart.dailyRate.toFixed(2)}%`}</span>
+        <span className="text-slate-500">近{agg === "week" ? "4周" : "7日"} {fmtT(Math.round(chart.avg7))}/{agg === "week" ? "周" : "日"}</span>
       </div>
       <svg width={chart.W} height={chart.H - 36} className="block flex-1" style={{ overflow: "visible" }}>
         {chart.yTicks.map((t, i) => (
@@ -177,16 +177,45 @@ function Chart({ allDays, days, mode }: { allDays: OrUsageDay[]; days: OrUsageDa
   );
 }
 
+/** 按 7 天桶聚合为周数据(日期取桶内最后一天, 厂商/国家按名合并 token) */
+function aggregateWeekly(days: OrUsageDay[]): OrUsageDay[] {
+  const out: OrUsageDay[] = [];
+  let bucket: OrUsageDay | null = null;
+  let weekStart = 0;
+  for (const d of days) {
+    const t = Date.parse(`${d.date}T00:00:00Z`);
+    if (!bucket || t - weekStart >= 7 * 86400000) {
+      if (bucket) out.push(bucket);
+      weekStart = t;
+      bucket = { date: d.date, total: 0, providers: [], countries: [] };
+    }
+    bucket.date = d.date; // 桶标签取最后一天
+    bucket.total += d.total;
+    for (const key of ["providers", "countries"] as const) {
+      const target = bucket[key];
+      for (const p of d[key]) {
+        const ex = target.find((x) => x.name === p.name);
+        if (ex) { ex.tokens += p.tokens; ex.pct = p.pct; }
+        else target.push({ date: d.date, name: p.name, tokens: p.tokens, pct: p.pct });
+      }
+    }
+  }
+  if (bucket) out.push(bucket);
+  return out;
+}
+
 export function OpenRouterPanel({ className, panelId, isZoomed, onToggleZoom }: PanelZoomProps & { className?: string }) {
   const [range, setRange] = useState<"7d" | "14d" | "30d" | "60d" | "180d" | "1y">("30d");
   const [mode, setMode] = useState<"vendor" | "country">("vendor");
+  const [agg, setAgg] = useState<"day" | "week">("day");
   const { data, loading, error } = useOpenRouterUsage();
 
   const sliced = useMemo(() => {
     if (!data || data.length === 0) return [];
     const n = range === "7d" ? 7 : range === "14d" ? 14 : range === "30d" ? 30 : range === "60d" ? 60 : range === "180d" ? 180 : 365;
-    return data.slice(-n);
-  }, [data, range]);
+    const days = data.slice(-n);
+    return agg === "week" ? aggregateWeekly(days) : days;
+  }, [data, range, agg]);
 
   return (
     <Panel
@@ -200,12 +229,19 @@ export function OpenRouterPanel({ className, panelId, isZoomed, onToggleZoom }: 
       right={
         <div className="flex gap-1">
           <div className="mr-1 flex gap-0.5 rounded border border-slate-700/60 p-0.5 text-[10px]">
+            <button onClick={() => setAgg("day")} className={`rounded px-1.5 py-0.5 transition-colors ${agg === "day" ? "bg-violet-500/20 text-violet-300" : "text-slate-500 hover:text-slate-300"}`}>日</button>
+            <button onClick={() => { setAgg("week"); if (range === "7d" || range === "14d") setRange("30d"); }} className={`rounded px-1.5 py-0.5 transition-colors ${agg === "week" ? "bg-violet-500/20 text-violet-300" : "text-slate-500 hover:text-slate-300"}`}>周</button>
+          </div>
+          <div className="mr-1 flex gap-0.5 rounded border border-slate-700/60 p-0.5 text-[10px]">
             <button onClick={() => setMode("vendor")} className={`rounded px-1.5 py-0.5 transition-colors ${mode === "vendor" ? "bg-violet-500/20 text-violet-300" : "text-slate-500 hover:text-slate-300"}`}>厂商</button>
             <button onClick={() => setMode("country")} className={`rounded px-1.5 py-0.5 transition-colors ${mode === "country" ? "bg-violet-500/20 text-violet-300" : "text-slate-500 hover:text-slate-300"}`}>中美</button>
           </div>
-          {(["7d", "14d", "30d", "60d", "180d", "1y"] as const).map((r) => (
-            <button key={r} onClick={() => setRange(r)} className={`rounded px-1.5 py-0.5 text-[10px] font-medium transition-colors ${range === r ? "bg-violet-500/20 text-violet-300" : "text-slate-500 hover:text-slate-300"}`}>{r}</button>
-          ))}
+          {(["7d", "14d", "30d", "60d", "180d", "1y"] as const).map((r) => {
+            const off = agg === "week" && (r === "7d" || r === "14d");
+            return (
+              <button key={r} disabled={off} onClick={() => setRange(r)} className={`rounded px-1.5 py-0.5 text-[10px] font-medium transition-colors ${range === r ? "bg-violet-500/20 text-violet-300" : off ? "cursor-not-allowed text-slate-700" : "text-slate-500 hover:text-slate-300"}`}>{r}</button>
+            );
+          })}
         </div>
       }
     >
@@ -216,7 +252,7 @@ export function OpenRouterPanel({ className, panelId, isZoomed, onToggleZoom }: 
           <div className="flex h-full items-center justify-center text-[11px] text-red-400">数据异常: {error}</div>
         ) : (
           <div className="min-h-0 flex-1">
-            <Chart allDays={data || []} days={sliced} mode={mode} />
+            <Chart allDays={data || []} days={sliced} mode={mode} agg={agg} />
           </div>
         )}
         <div className="flex items-center justify-between pt-1 text-[9px] text-slate-600">
