@@ -66,6 +66,7 @@ function TrendChart({ reports, tab, mainopHistory }: { reports: FinanceReport[];
       const latest = src[src.length - 1].segments;
       const topNames = latest.slice(0, 5).map((s) => s.name); // 段名按最新期收入取前5, 其余并"其他"
       const topSet = new Set(topNames);
+      const repByDate = new Map(rows.map((r) => [r.date, r])); // 财务主指标按报告期匹配
       const per = src.map((r) => {
         const segs = topNames.map((name) => {
           const s = r.segments.find((x) => x.name === name);
@@ -75,7 +76,8 @@ function TrendChart({ reports, tab, mainopHistory }: { reports: FinanceReport[];
           (a, s) => ({ income: a.income + s.income, profit: a.profit + s.profit }),
           { income: 0, profit: 0 }
         );
-        return { date: r.date, segs, other, yoy: segs.map(() => null as number | null) };
+        // 合计净利(公司整体): 主营构成只统计主营段, 期间费用/减值等亏空不在其中
+        return { date: r.date, segs, other, totalNet: repByDate.get(r.date)?.netProfit ?? null, yoy: segs.map(() => null as number | null) };
       });
       // 各主营同比: 与 4 期前(去年同期)同名收入对比
       for (let i = 4; i < per.length; i++) {
@@ -201,6 +203,7 @@ function TrendChart({ reports, tab, mainopHistory }: { reports: FinanceReport[];
           })),
           { label: "营收同比", cls: "w-4 border-t-2 border-dashed border-sky-400" },
           { label: "净利同比", cls: "w-4 border-t-2 border-rose-400" },
+          { label: "合计净利", cls: "h-[6px] w-[6px] rotate-45 rounded-[1px] bg-cyan-400" },
         ]
       : chart.mode === "quality"
         ? chart.series.map((s) => ({
@@ -218,7 +221,7 @@ function TrendChart({ reports, tab, mainopHistory }: { reports: FinanceReport[];
   const hovLines = hov
     ? chart.mode === "perf"
       ? (() => {
-          const p = hov as { segs: { name: string; income: number; profit: number }[]; other: { income: number; profit: number }; yoy: (number | null)[] };
+          const p = hov as { segs: { name: string; income: number; profit: number }[]; other: { income: number; profit: number }; totalNet: number | null; yoy: (number | null)[] };
           return [
             ...p.segs.map((s, si) => (
               <span key={s.name} className="flex items-center gap-1.5 text-slate-400" style={TNUM}>
@@ -233,6 +236,15 @@ function TrendChart({ reports, tab, mainopHistory }: { reports: FinanceReport[];
               其他 <b className="text-slate-200">{fmtYi(p.other.income)}</b>
               <span className="text-slate-500">利 {fmtYi(p.other.profit)}</span>
             </span>,
+            ...(p.totalNet != null
+              ? [
+                  <span key="total" className="flex items-center gap-1.5 text-slate-400" style={TNUM}>
+                    合计净利
+                    <b className={p.totalNet >= 0 ? "text-cyan-400" : "text-rose-400"}>{fmtYi(p.totalNet)}</b>
+                    {p.totalNet < 0 && <i className="not-italic text-[8px] text-slate-500">主营外亏空</i>}
+                  </span>,
+                ]
+              : []),
           ];
         })()
       : (() => {
@@ -341,6 +353,19 @@ function TrendChart({ reports, tab, mainopHistory }: { reports: FinanceReport[];
                 <g key={r.date}>
                   {stack(revX, [...r.segs.map((s) => ({ name: s.name, v: s.income })), { name: "其他", v: r.other.income }])}
                   {stack(npX, [...r.segs.map((s) => ({ name: s.name, v: s.profit })), { name: "其他", v: r.other.profit }])}
+                  {/* 合计净利菱形标记: 公司整体盈亏位置(主营构成不含期间费用等亏空) */}
+                  {r.totalNet != null && (
+                    <rect
+                      x={npX + bw / 2 - 2.5}
+                      y={chart.Ym(r.totalNet) - 2.5}
+                      width={5}
+                      height={5}
+                      transform={`rotate(45 ${npX + bw / 2} ${chart.Ym(r.totalNet)})`}
+                      fill={r.totalNet >= 0 ? "#22d3ee" : "#fb7185"}
+                      stroke="#0b1120"
+                      strokeWidth={0.5}
+                    />
+                  )}
                 </g>
               );
             })}
