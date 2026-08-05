@@ -192,7 +192,7 @@ async function handleQuotes(codes) {
           return;
         }
         const p = (async () => {
-          const rs = {};
+          const rs = Object.create(null); // 无原型对象, 防 __proto__ 污染
           try {
             const text = await fetchText(`https://qt.gtimg.cn/q=${encodeURIComponent(chunk.join(","))}`, { gbk: true });
             for (const line of text.split(";")) {
@@ -1499,7 +1499,7 @@ async function handleOpenRouterUsage() {
       const rows = body?.data || [];
 
       // 按日期+厂商聚合 token
-      const byDV = {};
+      const byDV = Object.create(null); // 无原型对象, 防上游 slug 为 __proto__ 时污染
       for (const r of rows) {
         const dt = r.date, v = vendorSlug(r.model_permaslug);
         if (cachedDates.has(dt)) continue;
@@ -1763,6 +1763,9 @@ async function handleChemSpot(id, name) {
   let history = {};
   try { history = JSON.parse(fs.readFileSync(SPOT_DATA_FILE, "utf-8") || "{}"); } catch {}
   const today = bjToday();
+  if (name === "__proto__" || name === "constructor" || name === "prototype") {
+    throw Object.assign(new Error("invalid name"), { status: 400 }); // 防原型污染键写盘
+  }
   let arr = history[name];
   if (!arr && Object.keys(history).length < 500) arr = history[name] = [];
   if (arr) {
