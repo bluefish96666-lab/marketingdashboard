@@ -84,24 +84,37 @@ function TrendChart({ reports, tab, mainopHistory }: { reports: FinanceReport[];
           if (prev > 0) per[i].yoy[si] = (s.income / prev - 1) * 100;
         });
       }
-      const totals = per.map((r) => {
-        const sum = (arr: { income: number }[]) => arr.reduce((a, s) => a + s.income, 0);
-        return Math.max(sum(r.segs) + r.other.income, sum(r.segs) + r.other.profit);
+      // Y 范围: 正向合计(上)与负向合计(下) — 亏损主营段向下画柱
+      const ext = per.map((r) => {
+        const sum = (arr: { income: number; profit: number }[], pick: (s: { income: number; profit: number }) => number) =>
+          arr.reduce((a, s) => a + pick(s), 0);
+        const pos = Math.max(sum(r.segs, (s) => Math.max(s.income, 0)) + Math.max(r.other.income, 0), sum(r.segs, (s) => Math.max(s.profit, 0)) + Math.max(r.other.profit, 0));
+        const neg = Math.min(sum(r.segs, (s) => Math.min(s.income, 0)) + Math.min(r.other.income, 0), sum(r.segs, (s) => Math.min(s.profit, 0)) + Math.min(r.other.profit, 0));
+        return { pos, neg };
       });
-      // 右轴: 总营收/净利同比线(与柱零轴对齐)
-      const pcts = rows.flatMap((r) => [r.revenueYoY, r.profitYoY]);
-      const [[mMin, mMax], [pMin, pMax]] = alignZero(0, Math.max(...totals, 1), Math.min(...pcts, 0), Math.max(...pcts, 0) || 1);
+      const mMax = Math.max(...ext.map((e) => e.pos), 1);
+      const mMin = Math.min(...ext.map((e) => e.neg), 0);
+      // 右轴: 总营收/净利同比线, 对数坐标(log(1+同比): 比值变化翻倍/腰斩等距,
+      // +693% 奇异值不再压扁常态; 同比 ≤ -100% 无意义, 过滤)
+      const ly = (pct: number) => Math.log(1 + pct / 100);
+      const pcts = rows.flatMap((r) => [r.revenueYoY, r.profitYoY]).filter((v) => v > -100);
+      const lyMin = Math.min(...pcts.map(ly), 0);
+      const lyMax = Math.max(...pcts.map(ly), 0) || 1;
       const Ym = (v: number) => T + (1 - (v - mMin) / (mMax - mMin)) * plotH;
-      const Yp = (v: number) => T + (1 - (v - pMin) / (pMax - pMin)) * plotH;
+      const Yp = (v: number) => T + (1 - (ly(v) - lyMin) / (lyMax - lyMin)) * plotH;
       const gridFracs = [0.2, 0.4, 0.6, 0.8];
-      const ticks = gridFracs.map((f) => ({
-        y: T + f * plotH,
-        m: mMax - f * (mMax - mMin),
-        p: pMax - f * (pMax - pMin),
-      }));
+      const ticks = gridFracs.map((f) => ({ y: T + f * plotH, m: mMax - f * (mMax - mMin) }));
+      // 右轴对数刻度: 比值 2^k → 0%/+100%/+300%/+700%…
+      const pctTicks: { y: number; label: string }[] = [];
+      for (let k = -2; k <= 6; k++) {
+        const pct = (2 ** k - 1) * 100;
+        const y = Yp(pct);
+        if (y < T - 2 || y > T + plotH + 2) continue;
+        pctTicks.push({ y, label: `${pct > 0 ? "+" : ""}${pct}%` });
+      }
       const line = (key: "revenueYoY" | "profitYoY") =>
         rows.map((r, i) => `${cx(i).toFixed(1)},${Yp(r[key]).toFixed(1)}`).join(" ");
-      return { mode: "perf" as const, W, H, L, R, T, B, n, slot, cx, Ym, Yp, zeroY: Ym(0), ticks, rows: per, segNames: [...topNames, "其他"], line };
+      return { mode: "perf" as const, W, H, L, R, T, B, n, slot, cx, Ym, Yp, zeroY: Ym(0), ticks, pctTicks, rows: per, segNames: [...topNames, "其他"], line };
     }
 
     if (tab === "quality") {
@@ -265,9 +278,6 @@ function TrendChart({ reports, tab, mainopHistory }: { reports: FinanceReport[];
                 <text x={L - 3} y={t.y + 3} fontSize={9} fill={AXIS} textAnchor="end" style={TNUM}>
                   {(t.m / 1e8).toFixed(0)}亿
                 </text>
-                <text x={W - chart.R + 3} y={t.y + 3} fontSize={9} fill={AXIS} style={TNUM}>
-                  {t.p.toFixed(0)}%
-                </text>
               </g>
             ))
           : chart.mode === "leverage"
@@ -310,12 +320,20 @@ function TrendChart({ reports, tab, mainopHistory }: { reports: FinanceReport[];
               const revX = chart.cx(i) - bw - 2;
               const npX = chart.cx(i) + 2;
               const color = (si: number) => SEG_COLORS[Math.min(si, SEG_COLORS.length - 1)];
+              // 堆叠: 正值向上, 负值(亏损段)从零轴向下
               const stack = (x: number, items: { name: string; v: number }[]) => {
-                let acc = 0;
+                let accPos = 0;
+                let accNeg = 0;
                 return items.map((it, si) => {
-                  const y = chart.Ym(acc + it.v);
-                  const h = Math.max(chart.Ym(acc) - y, it.v > 0 ? 1 : 0);
-                  acc += it.v;
+                  if (it.v >= 0) {
+                    const y = chart.Ym(accPos + it.v);
+                    const h = Math.max(chart.Ym(accPos) - y, 1);
+                    accPos += it.v;
+                    return <rect key={`${r.date}-${si}`} x={x} y={y} width={bw} height={h} fill={color(si)} opacity={0.85} />;
+                  }
+                  const y = chart.Ym(accNeg);
+                  const h = Math.max(chart.Ym(accNeg + it.v) - chart.Ym(accNeg), 1);
+                  accNeg += it.v;
                   return <rect key={`${r.date}-${si}`} x={x} y={y} width={bw} height={h} fill={color(si)} opacity={0.85} />;
                 });
               };
@@ -326,9 +344,15 @@ function TrendChart({ reports, tab, mainopHistory }: { reports: FinanceReport[];
                 </g>
               );
             })}
-            {/* 总营收/净利同比线(右轴): 净利同比 rose 实线 / 营收同比 sky 虚线 */}
+            {/* 总营收/净利同比线(右轴, 对数坐标): 净利同比 rose 实线 / 营收同比 sky 虚线 */}
             <polyline points={chart.line("revenueYoY")} fill="none" stroke="#38bdf8" strokeWidth={1.2} strokeDasharray="3 2" strokeLinejoin="round" />
             <polyline points={chart.line("profitYoY")} fill="none" stroke="#fb7185" strokeWidth={1.4} strokeLinejoin="round" />
+            {/* 右轴对数刻度(0%/±100%…, 2 倍比) */}
+            {chart.pctTicks.map((t) => (
+              <text key={t.label} x={W - chart.R + 3} y={t.y + 3} fontSize={9} fill={AXIS} style={TNUM}>
+                {t.label}
+              </text>
+            ))}
           </>
         ) : chart.mode === "quality" ? (
           <>
