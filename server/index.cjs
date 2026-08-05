@@ -2137,12 +2137,34 @@ function corsHeadersFor(req) {
 }
 
 /* ---------------- 按客户端 IP 限流(CF Tunnel 后真实 IP 取 CF-Connecting-IP 头) ---------------- */
+// 仅当连接来自可信代理(Cloudflare 边缘网段或本机环回)时采信代理头, 否则用 socket 地址,
+// 防止绕过 Tunnel 直连时伪造 cf-connecting-ip/x-forwarded-for 刷穿限流
+const CF_EDGE_RANGES = [
+  "173.245.48.0/20", "103.21.244.0/22", "103.22.200.0/22", "103.31.4.0/22",
+  "141.101.64.0/18", "108.162.192.0/18", "190.93.240.0/20", "188.114.96.0/20",
+  "197.234.240.0/22", "198.41.128.0/17", "162.158.0.0/15", "104.16.0.0/13",
+  "104.24.0.0/14", "172.64.0.0/13", "131.0.72.0/22",
+];
+function ipInRanges(ip, ranges) {
+  if (!ip || ip.includes(":")) return false; // 仅支持 IPv4 网段匹配
+  const n = (s) => s.split(".").reduce((a, b) => (a << 8) + +b, 0) >>> 0;
+  const addr = n(ip);
+  return ranges.some((r) => {
+    const [base, bits] = r.split("/");
+    const mask = bits === "0" ? 0 : (~0 << (32 - +bits)) >>> 0;
+    return (addr & mask) === (n(base) & mask);
+  });
+}
 function clientIp(req) {
-  const cf = req.headers["cf-connecting-ip"];
-  if (typeof cf === "string" && cf.trim()) return cf.trim();
-  const xff = req.headers["x-forwarded-for"];
-  if (typeof xff === "string" && xff.trim()) return xff.split(",")[0].trim();
-  return req.socket.remoteAddress || "unknown";
+  const peer = req.socket.remoteAddress || "unknown";
+  const trusted = peer === "127.0.0.1" || peer === "::1" || peer === "::ffff:127.0.0.1" || ipInRanges(peer, CF_EDGE_RANGES);
+  if (trusted) {
+    const cf = req.headers["cf-connecting-ip"];
+    if (typeof cf === "string" && cf.trim()) return cf.trim();
+    const xff = req.headers["x-forwarded-for"];
+    if (typeof xff === "string" && xff.trim()) return xff.split(",")[0].trim();
+  }
+  return peer;
 }
 
 // 滑动窗口计数器: 记录最近 windowMs 内的请求时间戳, 超 max 返回 false。
