@@ -24,6 +24,14 @@ try {
 
 // 运行观测(压测/运维): 仅聚合计数, 无敏感信息; /api/stats 读取
 const stats = { reqs: 0, upstream: 0, blocked: 0, started: Date.now() };
+// 活跃访客窗口: ip -> 最近请求时间戳; /api/stats 暴露 activeIps5m / visitors24h
+const activeIps = new Map(); // ip -> lastSeen(ms), 24h 内访问过的 IP 保留(个人站点量级, 内存有界)
+const activeSweeper = setInterval(() => {
+  const cutoff = Date.now() - 24 * 3600 * 1000;
+  for (const [ip, last] of activeIps) if (last < cutoff) activeIps.delete(ip);
+}, 5 * 60 * 1000);
+activeSweeper.unref();
+function trackActiveIp(ip) { activeIps.set(ip, Date.now()); }
 
 function curlText(url, { referer, timeout = 8000, encoding = "gbk", headers } = {}) {
   stats.upstream++; // 上游调用计数(fetchText/curlText 是所有上游 fetch 的唯一出口)
@@ -1956,7 +1964,21 @@ const routes = {
   "/api/quotes": async (q) => handleQuotes(q.get("codes") || ""), // 内部按代码独立缓存(TTL 5s)
   "/api/aa-models": async () => cached("aa-models", 24 * 3600 * 1000, () => handleAaModels()), // AA 全模型定价, 24h 缓存 + 每日快照落盘
   "/api/spend-index": async () => cached("spend-index", 6 * 3600 * 1000, () => handleSpendIndex()), // traktoken 支出指数(60天 + 事件)
-  "/api/stats": async () => ({ reqs: stats.reqs, upstream: stats.upstream, blocked: stats.blocked, uptimeSec: Math.round((Date.now() - stats.started) / 1000) }),
+  "/api/stats": async () => {
+    const now = Date.now();
+    const cutoff5m = now - 5 * 60 * 1000;
+    const cutoff24h = now - 24 * 3600 * 1000;
+    let active5m = 0, visitors24h = 0;
+    for (const last of activeIps.values()) {
+      if (last >= cutoff5m) active5m++;
+      if (last >= cutoff24h) visitors24h++;
+    }
+    return {
+      reqs: stats.reqs, upstream: stats.upstream, blocked: stats.blocked,
+      uptimeSec: Math.round((now - stats.started) / 1000),
+      activeIps5m: active5m, visitors24h,
+    };
+  },
   "/api/minute": async (q) =>
     cached(`minute:${q.get("code")}`, 5000, () => handleMinute(q.get("code") || "sh000001")),
   // 批量分钟线: 将 N 次单独请求合并为 1 次, 大幅降低冷启动爆发请求数
@@ -2180,6 +2202,8 @@ const server = http.createServer(async (req, res) => {
     const u = new URL(req.url, "http://localhost");
     if (routes[u.pathname]) {
       stats.reqs++;
+      const ip = clientIp(req);
+      trackActiveIp(ip);
       const cors = corsHeadersFor(req);
       // 按 IP 限流(先于缓存命中判断, 防唯一 key 旋转造成的上游请求放大)
       const allowed = (PROTECTED_ROUTES.has(u.pathname) ? protectedLimiter : apiLimiter)(clientIp(req));
