@@ -865,7 +865,15 @@ async function emGet(url) {
   throw lastErr;
 }
 
-const emSymbol = (code6) => `${"689".includes(code6[0]) ? "sh" : code6[0] === "4" || code6[0] === "8" ? "bj" : "sz"}${code6}`;
+// 统一的"6位代码→市场前缀"映射(镜像前端 src/lib/code.ts toMarketCode): 6→sh, 0/3→sz, 4/8/9→bj
+function toMarketCode6(code6) {
+  if (/^6/.test(code6)) return `sh${code6}`;
+  if (/^[03]/.test(code6)) return `sz${code6}`;
+  if (/^[489]/.test(code6)) return `bj${code6}`;
+  return code6;
+}
+
+const emSymbol = (code6) => toMarketCode6(code6);
 
 /** 主力净流入排名(clist, f62 降序) */
 async function handleMoneyFlowEM(n) {
@@ -1201,7 +1209,7 @@ function secuCode(raw) {
   if (!m) return null;
   const prefix = m[1];
   const c = m[2];
-  const ex = prefix ? prefix.toUpperCase() : c[0] === "6" ? "SH" : ["0","2","3"].includes(c[0]) ? "SZ" : c[0] === "8" ? "NQ" : "BJ";
+  const ex = prefix ? prefix.toUpperCase() : toMarketCode6(c).slice(0, 2).toUpperCase();
   return `${c}.${ex}`;
 }
 
@@ -1824,10 +1832,9 @@ async function handleStockSearch(query) {
     for (const d of emData) {
       const code = d.Code;
       if (!code || !/^\d{6}$/.test(code)) continue;
-      // Classify: "NEEQ"→nq, 上交所→sh, 深交所→sz, 北交所→bj
+      // 统一市场前缀映射(镜像前端 toMarketCode); NEEQ 分类视为北交所
       const classify = d.Classify || "";
-      const prefix = classify === "NEEQ" ? "nq" : /^60/.test(code) ? "sh" : /^[023]/.test(code) ? "sz" : "bj";
-      const fullCode = `${prefix}${code}`;
+      const fullCode = classify === "NEEQ" ? `bj${code}` : toMarketCode6(code);
       // 避免与新浪结果重复
       if (!results.some((r) => r.code === fullCode)) {
         results.push({ code: fullCode, name: d.Name || "", pinyin: d.PinYin || "" });
@@ -1859,14 +1866,8 @@ function handleChainParse(body) {
   const stocksFromText = (text) => {
     const results = [];
     const seen = new Set();
-    // 给代码加上市场前缀
-    const prefixed = (code) => {
-      const c = code.replace(/\D/g, "").slice(-6).padStart(6, "0");
-      if (/^6/.test(c)) return `sh${c}`;
-      if (/^[03]/.test(c)) return `sz${c}`;
-      if (/^[489]/.test(c)) return `bj${c}`;
-      return c;
-    };
+    // 给代码加上市场前缀(统一映射)
+    const prefixed = (code) => toMarketCode6(code.replace(/\D/g, "").slice(-6).padStart(6, "0"));
     // 格式1: 中文名称（CODE.SH/SZ/BJ）或 中文名称(CODE)
     const re1 = /([\u4e00-\u9fa5]{2,6})[（(]\s*(?:sh|sz|bj)?(\d{6})[^）)]*[）)]/gi;
     let m;
