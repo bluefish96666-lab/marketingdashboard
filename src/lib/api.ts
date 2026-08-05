@@ -244,6 +244,8 @@ export interface FinanceMain {
   industry: string;
   /** 主营构成(最新报告期, 按产品/行业, 收入 Top 8): 收入/利润占比 + 毛利率 */
   mainop: { name: string; income: number; incomeRatio: number; profit: number; profitRatio: number; margin: number }[];
+  /** 主营构成全历史(按报告期, 每期 Top 6 段) — 供趋势堆叠柱 */
+  mainopHistory: { date: string; segments: { name: string; income: number; profit: number; margin: number }[] }[];
   /** 资产负债表(最新报告期) */
   balance: { totalLiabilities: number; accountsReceivable: number };
   /** 现金流量(最新报告期): 经营净额 / 资本开支 / 自由现金流 */

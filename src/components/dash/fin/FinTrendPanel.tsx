@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { TrendingUp } from "lucide-react";
 import { Panel, type PanelZoomProps } from "../Panel";
 import { useFinMain } from "./useFinData";
-import { type FinanceReport } from "@/lib/api";
+import { type FinanceMain, type FinanceReport } from "@/lib/api";
 import { useFin } from "./FinContext";
 import { TNUM, quarterLabel, fmtYi } from "./utils";
 import { clsChg, fmtPct } from "@/lib/format";
@@ -37,7 +37,10 @@ function alignZero(aMin: number, aMax: number, bMin: number, bMax: number) {
   return [adj(aMin, aMax), adj(bMin, bMax)] as const;
 }
 
-function TrendChart({ reports, tab }: { reports: FinanceReport[]; tab: Tab }) {
+// 主营构成堆叠柱的固定色相(前 5 段 + "其他" 灰)
+const SEG_COLORS = ["#22d3ee", "#fbbf24", "#34d399", "#a78bfa", "#fb7185", "#64748b"];
+
+function TrendChart({ reports, tab, mainopHistory }: { reports: FinanceReport[]; tab: Tab; mainopHistory: FinanceMain["mainopHistory"] }) {
   const { ref: boxRef, size } = useElementSize();
   const [hover, setHover] = useState(-1);
 
@@ -56,25 +59,40 @@ function TrendChart({ reports, tab }: { reports: FinanceReport[]; tab: Tab }) {
     const cx = (i: number) => L + i * slot + slot / 2;
 
     if (tab === "perf") {
-      const money = rows.flatMap((r) => [r.revenue, r.netProfit]);
-      const pcts = rows.flatMap((r) => [r.revenueYoY, r.profitYoY]);
-      const [[mMin, mMax], [pMin, pMax]] = alignZero(
-        Math.min(...money, 0),
-        Math.max(...money, 0) || 1,
-        Math.min(...pcts, 0),
-        Math.max(...pcts, 0) || 1
-      );
-      const Ym = (v: number) => T + (1 - (v - mMin) / (mMax - mMin)) * plotH;
-      const Yp = (v: number) => T + (1 - (v - pMin) / (pMax - pMin)) * plotH;
+      // 业绩: 主营构成堆叠柱(每期两根: 营收构成/利润构成) + 各主营同比
+      const hist = mainopHistory || [];
+      const src = hist.slice(-12);
+      if (!src.length) return null;
+      const latest = src[src.length - 1].segments;
+      const topNames = latest.slice(0, 5).map((s) => s.name); // 段名按最新期收入取前5, 其余并"其他"
+      const topSet = new Set(topNames);
+      const per = src.map((r) => {
+        const segs = topNames.map((name) => {
+          const s = r.segments.find((x) => x.name === name);
+          return { name, income: s?.income ?? 0, profit: s?.profit ?? 0 };
+        });
+        const other = r.segments.filter((s) => !topSet.has(s.name)).reduce(
+          (a, s) => ({ income: a.income + s.income, profit: a.profit + s.profit }),
+          { income: 0, profit: 0 }
+        );
+        return { date: r.date, segs, other, yoy: segs.map(() => null as number | null) };
+      });
+      // 各主营同比: 与 4 期前(去年同期)同名收入对比
+      for (let i = 4; i < per.length; i++) {
+        per[i].segs.forEach((s, si) => {
+          const prev = per[i - 4].segs[si].income;
+          if (prev > 0) per[i].yoy[si] = (s.income / prev - 1) * 100;
+        });
+      }
+      const totals = per.map((r) => {
+        const sum = (arr: { income: number }[]) => arr.reduce((a, s) => a + s.income, 0);
+        return Math.max(sum(r.segs) + r.other.income, sum(r.segs) + r.other.profit);
+      });
+      const yMax = Math.max(...totals, 1);
+      const Ym = (v: number) => T + (1 - v / yMax) * plotH;
       const gridFracs = [0.2, 0.4, 0.6, 0.8];
-      const ticks = gridFracs.map((f) => ({
-        y: T + f * plotH,
-        m: mMax - f * (mMax - mMin),
-        p: pMax - f * (pMax - pMin),
-      }));
-      const line = (key: "revenueYoY" | "profitYoY") =>
-        rows.map((r, i) => `${cx(i).toFixed(1)},${Yp(r[key]).toFixed(1)}`).join(" ");
-      return { mode: "perf" as const, W, H, L, R, T, B, n, slot, cx, Ym, zeroY: Ym(0), ticks, rows, line };
+      const ticks = gridFracs.map((f) => ({ y: T + f * plotH, m: yMax - f * yMax }));
+      return { mode: "perf" as const, W, H, L, R, T, B, n, slot, cx, Ym, zeroY: Ym(0), ticks, rows: per, segNames: [...topNames, "其他"] };
     }
 
     if (tab === "quality") {
@@ -150,15 +168,14 @@ function TrendChart({ reports, tab }: { reports: FinanceReport[]; tab: Tab }) {
   const hovIdx = hover >= 0 ? Math.min(hover, chart.n - 1) : -1;
   const hov = hovIdx >= 0 ? chart.rows[hovIdx] : null;
 
-  // 图例(按模式): 业绩 = 营收/净利柱 + 同比线; 质量/杠杆 = 各自序列
+  // 图例(按模式): 业绩 = 各主营段; 质量/杠杆 = 各自序列
   const legend: { label: string; cls: string; style?: React.CSSProperties }[] =
     chart.mode === "perf"
-      ? [
-          { label: "营收", cls: "h-[7px] w-3 rounded-sm bg-cyan-400/80" },
-          { label: "净利", cls: "h-[7px] w-2 rounded-sm bg-amber-400/90" },
-          { label: "营收同比", cls: "w-4 border-t-2 border-dashed border-sky-400" },
-          { label: "净利同比", cls: "w-4 border-t-2 border-rose-400" },
-        ]
+      ? chart.segNames.map((name, i) => ({
+          label: name,
+          cls: "h-[7px] w-3 rounded-sm",
+          style: { background: SEG_COLORS[i] },
+        }))
       : chart.mode === "quality"
         ? chart.series.map((s) => ({
             label: s.key === "roe" ? "ROE" : s.key === "grossMargin" ? "毛利率" : "净利率",
@@ -171,24 +188,41 @@ function TrendChart({ reports, tab }: { reports: FinanceReport[]; tab: Tab }) {
             { label: "每股OCF", cls: "w-4 border-t-2 border-dashed border-emerald-400" },
           ];
 
-  // 悬停数值行(按模式)
+  // 悬停数值行(按模式): 业绩 = 各主营收入+同比+利润
   const hovLines = hov
     ? chart.mode === "perf"
-      ? [
-          <span key="rev" className="text-slate-400" style={TNUM}>营收 <b className="text-slate-200">{fmtYi(hov.revenue)}</b> <i className={`not-italic ${clsChg(hov.revenueYoY)}`}>{fmtPct(hov.revenueYoY)}</i></span>,
-          <span key="np" className="text-slate-400" style={TNUM}>净利 <b className="text-slate-200">{fmtYi(hov.netProfit)}</b> <i className={`not-italic ${clsChg(hov.profitYoY)}`}>{fmtPct(hov.profitYoY)}</i></span>,
-        ]
-      : chart.mode === "quality"
-        ? [
-            <span key="r" className="text-slate-400" style={TNUM}>ROE <b className="text-slate-200">{hov.roe.toFixed(1)}%</b></span>,
-            <span key="g" className="text-slate-400" style={TNUM}>毛利率 <b className="text-slate-200">{hov.grossMargin.toFixed(1)}%</b></span>,
-            <span key="n" className="text-slate-400" style={TNUM}>净利率 <b className="text-slate-200">{hov.netMargin.toFixed(1)}%</b></span>,
-          ]
-        : [
-            <span key="d" className="text-slate-400" style={TNUM}>资产负债率 <b className="text-slate-200">{hov.debtRatio.toFixed(1)}%</b></span>,
-            <span key="r" className="text-slate-400" style={TNUM}>ROIC <b className="text-slate-200">{hov.roic.toFixed(1)}%</b></span>,
-            <span key="o" className="text-slate-400" style={TNUM}>每股OCF <b className="text-slate-200">{hov.ocfPerShare.toFixed(2)}</b></span>,
-          ]
+      ? (() => {
+          const p = hov as { segs: { name: string; income: number; profit: number }[]; other: { income: number; profit: number }; yoy: (number | null)[] };
+          return [
+            ...p.segs.map((s, si) => (
+              <span key={s.name} className="flex items-center gap-1.5 text-slate-400" style={TNUM}>
+                <span className="inline-block h-[6px] w-2 rounded-sm" style={{ background: SEG_COLORS[si] }} />
+                {s.name} <b className="text-slate-200">{fmtYi(s.income)}</b>
+                {p.yoy[si] != null && <i className={`not-italic ${clsChg(p.yoy[si]!)}`}>{fmtPct(p.yoy[si]!)}</i>}
+                <span className="text-slate-500">利 {fmtYi(s.profit)}</span>
+              </span>
+            )),
+            <span key="other" className="flex items-center gap-1.5 text-slate-400" style={TNUM}>
+              <span className="inline-block h-[6px] w-2 rounded-sm" style={{ background: SEG_COLORS[SEG_COLORS.length - 1] }} />
+              其他 <b className="text-slate-200">{fmtYi(p.other.income)}</b>
+              <span className="text-slate-500">利 {fmtYi(p.other.profit)}</span>
+            </span>,
+          ];
+        })()
+      : (() => {
+          const f = hov as FinanceReport;
+          return chart.mode === "quality"
+            ? [
+                <span key="r" className="text-slate-400" style={TNUM}>ROE <b className="text-slate-200">{f.roe.toFixed(1)}%</b></span>,
+                <span key="g" className="text-slate-400" style={TNUM}>毛利率 <b className="text-slate-200">{f.grossMargin.toFixed(1)}%</b></span>,
+                <span key="n" className="text-slate-400" style={TNUM}>净利率 <b className="text-slate-200">{f.netMargin.toFixed(1)}%</b></span>,
+              ]
+            : [
+                <span key="d" className="text-slate-400" style={TNUM}>资产负债率 <b className="text-slate-200">{f.debtRatio.toFixed(1)}%</b></span>,
+                <span key="r" className="text-slate-400" style={TNUM}>ROIC <b className="text-slate-200">{f.roic.toFixed(1)}%</b></span>,
+                <span key="o" className="text-slate-400" style={TNUM}>每股OCF <b className="text-slate-200">{f.ocfPerShare.toFixed(2)}</b></span>,
+              ];
+        })()
     : null;
 
   return (
@@ -217,9 +251,6 @@ function TrendChart({ reports, tab }: { reports: FinanceReport[]; tab: Tab }) {
                 <line x1={L} y1={t.y} x2={W - chart.R} y2={t.y} stroke={GRID} strokeWidth={1} />
                 <text x={L - 3} y={t.y + 3} fontSize={9} fill={AXIS} textAnchor="end" style={TNUM}>
                   {(t.m / 1e8).toFixed(0)}亿
-                </text>
-                <text x={W - chart.R + 3} y={t.y + 3} fontSize={9} fill={AXIS} style={TNUM}>
-                  {t.p.toFixed(0)}%
                 </text>
               </g>
             ))
@@ -257,26 +288,28 @@ function TrendChart({ reports, tab }: { reports: FinanceReport[]; tab: Tab }) {
         )}
         {chart.mode === "perf" ? (
           <>
-            {/* 分组柱: 营收 cyan 宽条 / 净利 amber 窄条, 柱组宽 ≤60% slot, 组内 gap 2px */}
+            {/* 主营构成堆叠柱: 每期两根(左=营收构成, 右=利润构成), 段色固定 */}
             {chart.rows.map((r, i) => {
-              const revW = chart.slot * 0.36;
-              const npW = chart.slot * 0.2;
-              const revX = chart.cx(i) - revW - 1;
-              const npX = chart.cx(i) + 1;
-              const bars = [
-                { x: revX, w: revW, v: r.revenue, fill: "#22d3ee", op: 0.85 },
-                { x: npX, w: npW, v: r.netProfit, fill: "#fbbf24", op: 0.9 },
-              ];
-              return bars.map((b, bi) => {
-                const y = chart.Ym(b.v);
-                const top = Math.min(y, chart.zeroY);
-                const h = Math.max(Math.abs(chart.zeroY - y), b.v !== 0 ? 1 : 0);
-                return <rect key={`${r.date}-${bi}`} x={b.x} y={top} width={b.w} height={h} fill={b.fill} opacity={b.op} />;
-              });
+              const bw = chart.slot * 0.22;
+              const revX = chart.cx(i) - bw - 2;
+              const npX = chart.cx(i) + 2;
+              const color = (si: number) => SEG_COLORS[Math.min(si, SEG_COLORS.length - 1)];
+              const stack = (x: number, items: { name: string; v: number }[]) => {
+                let acc = 0;
+                return items.map((it, si) => {
+                  const y = chart.Ym(acc + it.v);
+                  const h = Math.max(chart.Ym(acc) - y, it.v > 0 ? 1 : 0);
+                  acc += it.v;
+                  return <rect key={`${r.date}-${si}`} x={x} y={y} width={bw} height={h} fill={color(si)} opacity={0.85} />;
+                });
+              };
+              return (
+                <g key={r.date}>
+                  {stack(revX, [...r.segs.map((s) => ({ name: s.name, v: s.income })), { name: "其他", v: r.other.income }])}
+                  {stack(npX, [...r.segs.map((s) => ({ name: s.name, v: s.profit })), { name: "其他", v: r.other.profit }])}
+                </g>
+              );
             })}
-            {/* 同比折线(右轴): 净利同比 rose 实线 / 营收同比 sky 虚线 */}
-            <polyline points={chart.line("revenueYoY")} fill="none" stroke="#38bdf8" strokeWidth={1.2} strokeDasharray="3 2" strokeLinejoin="round" />
-            <polyline points={chart.line("profitYoY")} fill="none" stroke="#fb7185" strokeWidth={1.4} strokeLinejoin="round" />
           </>
         ) : chart.mode === "quality" ? (
           <>
@@ -362,7 +395,7 @@ function TrendChart({ reports, tab }: { reports: FinanceReport[]; tab: Tab }) {
       {hov && hovLines && (
         <div className="pointer-events-none absolute left-1/2 top-0 z-10 -translate-x-1/2 rounded border border-slate-700/60 bg-[#0b1120]/95 px-2 py-1 text-[9px] leading-4 shadow">
           <div className="font-semibold text-slate-200">{quarterLabel(hov.date)}</div>
-          <div className="flex items-center gap-2">{hovLines}</div>
+          <div className={chart.mode === "perf" ? "flex flex-col gap-0.5" : "flex items-center gap-2"}>{hovLines}</div>
         </div>
       )}
       </div>
@@ -401,7 +434,7 @@ export function FinTrendPanel({ className = "", ...zoomProps }: { className?: st
         </div>
       ) : (
         <AsyncContent loading={loading} error={error} empty={!!data && data.reports.length === 0} emptyMessage="暂无财报数据" onRetry={retry}>
-          {data && data.reports.length > 0 && <TrendChart reports={data.reports} tab={tab} />}
+          {data && data.reports.length > 0 && <TrendChart reports={data.reports} mainopHistory={data.mainopHistory} tab={tab} />}
         </AsyncContent>
       )}
     </Panel>
