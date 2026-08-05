@@ -4,7 +4,8 @@ import { Panel, type PanelZoomProps } from "../Panel";
 import { useFinMain } from "./useFinData";
 import { type FinanceReport } from "@/lib/api";
 import { useFin } from "./FinContext";
-import { TNUM, quarterLabel } from "./utils";
+import { TNUM, quarterLabel, fmtYi } from "./utils";
+import { clsChg, fmtPct } from "@/lib/format";
 import { useElementSize } from "@/hooks/useElementSize";
 import { AsyncContent, TabBar } from "../SharedUI";
 
@@ -38,6 +39,7 @@ function alignZero(aMin: number, aMax: number, bMin: number, bMax: number) {
 
 function TrendChart({ reports, tab }: { reports: FinanceReport[]; tab: Tab }) {
   const { ref: boxRef, size } = useElementSize();
+  const [hover, setHover] = useState(-1);
 
   const chart = useMemo(() => {
     const rows = reports.slice(0, 12).reverse(); // 接口为报告期倒序, 翻转为时间正序
@@ -145,10 +147,69 @@ function TrendChart({ reports, tab }: { reports: FinanceReport[]; tab: Tab }) {
   if (!chart) return <div ref={boxRef} className="h-full min-h-0" />;
   const { W, H, L } = chart;
   const plotBottom = H - chart.B;
+  const hovIdx = hover >= 0 ? Math.min(hover, chart.n - 1) : -1;
+  const hov = hovIdx >= 0 ? chart.rows[hovIdx] : null;
+
+  // 图例(按模式): 业绩 = 营收/净利柱 + 同比线; 质量/杠杆 = 各自序列
+  const legend: { label: string; cls: string; style?: React.CSSProperties }[] =
+    chart.mode === "perf"
+      ? [
+          { label: "营收", cls: "h-[7px] w-3 rounded-sm bg-cyan-400/80" },
+          { label: "净利", cls: "h-[7px] w-2 rounded-sm bg-amber-400/90" },
+          { label: "营收同比", cls: "w-4 border-t-2 border-dashed border-sky-400" },
+          { label: "净利同比", cls: "w-4 border-t-2 border-rose-400" },
+        ]
+      : chart.mode === "quality"
+        ? chart.series.map((s) => ({
+            label: s.key === "roe" ? "ROE" : s.key === "grossMargin" ? "毛利率" : "净利率",
+            cls: "w-4 border-t-2",
+            style: { borderColor: s.color, borderStyle: s.dash ? "dashed" : "solid" },
+          }))
+        : [
+            { label: "资产负债率", cls: "h-[7px] w-3 rounded-sm bg-amber-400/60" },
+            { label: "ROIC", cls: "w-4 border-t-2 border-cyan-400" },
+            { label: "每股OCF", cls: "w-4 border-t-2 border-dashed border-emerald-400" },
+          ];
+
+  // 悬停数值行(按模式)
+  const hovLines = hov
+    ? chart.mode === "perf"
+      ? [
+          <span key="rev" className="text-slate-400" style={TNUM}>营收 <b className="text-slate-200">{fmtYi(hov.revenue)}</b> <i className={`not-italic ${clsChg(hov.revenueYoY)}`}>{fmtPct(hov.revenueYoY)}</i></span>,
+          <span key="np" className="text-slate-400" style={TNUM}>净利 <b className="text-slate-200">{fmtYi(hov.netProfit)}</b> <i className={`not-italic ${clsChg(hov.profitYoY)}`}>{fmtPct(hov.profitYoY)}</i></span>,
+        ]
+      : chart.mode === "quality"
+        ? [
+            <span key="r" className="text-slate-400" style={TNUM}>ROE <b className="text-slate-200">{hov.roe.toFixed(1)}%</b></span>,
+            <span key="g" className="text-slate-400" style={TNUM}>毛利率 <b className="text-slate-200">{hov.grossMargin.toFixed(1)}%</b></span>,
+            <span key="n" className="text-slate-400" style={TNUM}>净利率 <b className="text-slate-200">{hov.netMargin.toFixed(1)}%</b></span>,
+          ]
+        : [
+            <span key="d" className="text-slate-400" style={TNUM}>资产负债率 <b className="text-slate-200">{hov.debtRatio.toFixed(1)}%</b></span>,
+            <span key="r" className="text-slate-400" style={TNUM}>ROIC <b className="text-slate-200">{hov.roic.toFixed(1)}%</b></span>,
+            <span key="o" className="text-slate-400" style={TNUM}>每股OCF <b className="text-slate-200">{hov.ocfPerShare.toFixed(2)}</b></span>,
+          ]
+    : null;
 
   return (
-    <div ref={boxRef} className="h-full min-h-0">
-      <svg width={W} height={H} className="block">
+    <div className="flex h-full min-h-0 flex-col">
+      {/* 图例 */}
+      <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-0.5 px-0.5 pb-0.5 text-[9px] text-slate-500">
+        {legend.map((l) => (
+          <span key={l.label} className="flex items-center gap-1">
+            <span className={l.cls} style={l.style} />
+            {l.label}
+          </span>
+        ))}
+      </div>
+      <div ref={boxRef} className="relative min-h-0 flex-1">
+      <svg width={W} height={H} className="block"
+        onMouseMove={(e) => {
+          const rect = e.currentTarget.getBoundingClientRect();
+          const x = e.clientX - rect.left;
+          setHover(Math.max(0, Math.min(chart.n - 1, Math.floor((x - chart.L) / chart.slot))));
+        }}
+        onMouseLeave={() => setHover(-1)}>
         {/* 网格 + 左右轴刻度 */}
         {chart.mode === "perf"
           ? chart.ticks.map((t, i) => (
@@ -292,7 +353,19 @@ function TrendChart({ reports, tab }: { reports: FinanceReport[]; tab: Tab }) {
         )}
         {/* 轴底线 */}
         <line x1={L} y1={plotBottom} x2={W - chart.R} y2={plotBottom} stroke={GRID} strokeWidth={1} />
+        {/* 悬停十字线 */}
+        {hovIdx >= 0 && (
+          <line x1={chart.cx(hovIdx)} y1={chart.T} x2={chart.cx(hovIdx)} y2={plotBottom} stroke="#475569" strokeWidth={1} strokeDasharray="3 3" />
+        )}
       </svg>
+      {/* 悬停数值 */}
+      {hov && hovLines && (
+        <div className="pointer-events-none absolute left-1/2 top-0 z-10 -translate-x-1/2 rounded border border-slate-700/60 bg-[#0b1120]/95 px-2 py-1 text-[9px] leading-4 shadow">
+          <div className="font-semibold text-slate-200">{quarterLabel(hov.date)}</div>
+          <div className="flex items-center gap-2">{hovLines}</div>
+        </div>
+      )}
+      </div>
     </div>
   );
 }

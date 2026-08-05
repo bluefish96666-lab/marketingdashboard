@@ -1265,6 +1265,7 @@ async function handleFinanceMain(code) {
         incomeRatio: num(r.MBI_RATIO),
         profit: num(r.MAIN_BUSINESS_RPOFIT),
         profitRatio: num(r.MBR_RATIO),
+        margin: num(r.GROSS_RPOFIT_RATIO), // 该业务毛利率
       }));
     const zc = zcJson?.data?.[0] || {};
     const xj = xjJson?.data?.[0] || {};

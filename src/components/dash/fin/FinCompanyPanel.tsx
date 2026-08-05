@@ -144,6 +144,9 @@ export function FinCompanyPanel({ className = "", ...zoomProps }: { className?: 
                         </span>
                         <span className="w-[52px] shrink-0 text-right text-slate-400" style={TNUM}>{fmtYi(m.income)}</span>
                         <span className="w-[40px] shrink-0 text-right text-[9px] text-amber-400/80" style={TNUM}>{(m.profitRatio * 100).toFixed(0)}%</span>
+                        <span className="w-[56px] shrink-0 text-right text-[9px] text-slate-500" style={TNUM}>
+                          毛利 {(m.margin * 100).toFixed(0)}%
+                        </span>
                       </div>
                     ))}
                   </div>
