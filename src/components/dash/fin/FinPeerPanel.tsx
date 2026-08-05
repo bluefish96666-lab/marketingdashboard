@@ -141,7 +141,7 @@ export function FinPeerPanel({ className = "", ...zoomProps }: { className?: str
     return { industry, comparisons, count, inBoard: !!companyInBoard, usePrev };
   }, [board, prevBoard, finData, company.code, company.name]);
 
-  // 雷达图数据: 归一化到 0-1, 公司 vs 行业均值
+  // 雷达图数据: 归一化到 0-1, 公司 vs 行业均值; 附带真实值字符串供顶点标注
   const radarData = useMemo(() => {
     if (!peerData?.comparisons) return null;
     const axes = peerData.comparisons.map((c) => {
@@ -150,6 +150,8 @@ export function FinPeerPanel({ className = "", ...zoomProps }: { className?: str
         label: c.label,
         company: Math.max(c.barVal / max, 0.02),
         peer: Math.max(c.barAvg / max, 0.02),
+        companyStr: c.companyVal,
+        peerStr: c.peerVal,
       };
     });
     return axes;
@@ -233,7 +235,7 @@ export function FinPeerPanel({ className = "", ...zoomProps }: { className?: str
 }
 
 /** 雷达图: SVG 多边形 + 轴标签, 自适应面板大小 */
-function RadarChart({ axes, companyName }: { axes: { label: string; company: number; peer: number }[]; companyName: string }) {
+function RadarChart({ axes, companyName }: { axes: { label: string; company: number; peer: number; companyStr: string; peerStr: string }[]; companyName: string }) {
   const n = axes.length;
   const { ref: boxRef, size } = useElementSize();
 
@@ -245,7 +247,7 @@ function RadarChart({ axes, companyName }: { axes: { label: string; company: num
   const plotH = H - legendH;
   const CX = W / 2;
   const CY = (plotH - padding) / 2 + padding * 0.6;
-  const R = Math.min(CX - padding, CY - padding, (plotH - padding * 2) / 2);
+  const R = Math.min(CX - padding, CY - padding, (plotH - padding * 2) / 2) * 0.85; // 略缩 85%, 给顶点数值/轴标签留空间
   const levels = 5;
   const fontSize = Math.max(9, Math.min(12, R / 8));
 
@@ -262,7 +264,7 @@ function RadarChart({ axes, companyName }: { axes: { label: string; company: num
 
   const companyPts = axes.map((a, i) => pt(i, a.company * R));
   const peerPts = axes.map((a, i) => pt(i, a.peer * R));
-  const labelR = R + Math.max(14, fontSize * 1.6);
+  const labelR = R + Math.max(32, fontSize * 2.6); // 文字与雷达图外环保持距离
 
   return (
     <div ref={boxRef} className="flex h-full min-h-0 flex-col items-center justify-center">
@@ -295,20 +297,24 @@ function RadarChart({ axes, companyName }: { axes: { label: string; company: num
           stroke="#a78bfa"
           strokeWidth={1.5}
         />
+        {/* 轴端点: 文字描述 + 下方数值(公司紫/均值琥珀), 数值不占用雷达图内部 */}
         {axes.map((a, i) => {
           const outer = pt(i, labelR);
+          const nameY = outer.y + fontSize * 0.35;
           return (
-            <text
-              key={i}
-              x={outer.x}
-              y={outer.y + fontSize * 0.35}
-              fontSize={fontSize}
-              fill="#94a3b8"
-              textAnchor="middle"
-              style={TNUM}
-            >
-              {a.label}
-            </text>
+            <g key={i}>
+              <text x={outer.x} y={nameY} fontSize={fontSize} fill="#94a3b8" textAnchor="middle" style={TNUM}>
+                {a.label}
+              </text>
+              <text x={outer.x} y={nameY + fontSize * 1.05} fontSize={fontSize * 0.88} fill="#a78bfa" textAnchor="middle" style={TNUM}>
+                {a.companyStr}
+              </text>
+              {a.peerStr !== "—" && (
+                <text x={outer.x} y={nameY + fontSize * 2.1} fontSize={fontSize * 0.88} fill="#fbbf24" textAnchor="middle" style={TNUM}>
+                  {a.peerStr}
+                </text>
+              )}
+            </g>
           );
         })}
       </svg>
