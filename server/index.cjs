@@ -1231,9 +1231,57 @@ async function handleFinanceMain(code) {
   const org = orgRows[0] || {};
   // 行业: 优先二级行业(与 finance-board 的 BOARD_NAME 对应), 降级一级/三级/证监会行业
   const industry = org.BOARD_NAME_2LEVEL || org.BOARD_NAME_1LEVEL || org.BOARD_NAME_3LEVEL || org.CSRC_INDUSTRY_NAME || "";
+
+  // 主营构成 + 负债/应收 + 现金流(emweb F10 页面接口, 取最新报告期; 失败静默降级为空)
+  const emwebJson = async (url) => {
+    try { return JSON.parse(await fetchTextAny(url, { referer: "https://emweb.securities.eastmoney.com/" })); }
+    catch { return null; }
+  };
+  let mainop = [];
+  let balance = {};
+  let cash = {};
+  const latestDate = finRows[0]?.REPORT_DATE ? String(finRows[0].REPORT_DATE).slice(0, 10) : "";
+  const emCode = secu ? secu.split(".").reverse().join("") : ""; // "600519.SH" -> "SH600519"
+  if (latestDate && emCode) {
+    const [opJson, zcJson, xjJson] = await Promise.all([
+      emwebJson(`https://emweb.securities.eastmoney.com/PC_HSF10/BusinessAnalysis/PageAjax?code=${emCode}`),
+      emwebJson(`https://emweb.securities.eastmoney.com/PC_HSF10/NewFinanceAnalysis/zcfzbAjaxNew?companyType=4&reportDateType=0&reportType=1&dates=${latestDate}&code=${emCode}`),
+      emwebJson(`https://emweb.securities.eastmoney.com/PC_HSF10/NewFinanceAnalysis/xjllbAjaxNew?companyType=4&reportDateType=0&reportType=1&dates=${latestDate}&code=${emCode}`),
+    ]);
+    // 主营构成: 取 zygcfx 自身最新报告期(该接口仅年报口径, 与 datacenter 最新期不同),
+    // 优先按产品(MAINOP_TYPE=2), 降级按行业(1); 取收入 Top 8
+    const opRows = opJson?.zygcfx || [];
+    const opLatest = [...new Set(opRows.map((r) => String(r.REPORT_DATE).slice(0, 10)))].sort().reverse()[0] || "";
+    const opPeriod = opRows.filter((r) => String(r.REPORT_DATE).slice(0, 10) === opLatest);
+    // MAINOP_TYPE 为字符串("1"/"2"), 须数字比较
+    const isType = (r, t) => Number(r.MAINOP_TYPE) === t;
+    const typed = opPeriod.some((r) => isType(r, 2)) ? opPeriod.filter((r) => isType(r, 2)) : opPeriod.filter((r) => isType(r, 1));
+    mainop = typed
+      .sort((a, b) => num(b.MAIN_BUSINESS_INCOME) - num(a.MAIN_BUSINESS_INCOME))
+      .slice(0, 8)
+      .map((r) => ({
+        name: r.ITEM_NAME || "",
+        income: num(r.MAIN_BUSINESS_INCOME),
+        incomeRatio: num(r.MBI_RATIO),
+        profit: num(r.MAIN_BUSINESS_RPOFIT),
+        profitRatio: num(r.MBR_RATIO),
+      }));
+    const zc = zcJson?.data?.[0] || {};
+    const xj = xjJson?.data?.[0] || {};
+    balance = { totalLiabilities: num(zc.TOTAL_LIABILITIES), accountsReceivable: num(zc.ACCOUNTS_RECE) };
+    cash = {
+      operate: num(xj.NETCASH_OPERATE),
+      capex: num(xj.CONSTRUCT_LONG_ASSET), // 购建固定资产、无形资产等支付的现金
+      free: num(xj.NETCASH_OPERATE) - num(xj.CONSTRUCT_LONG_ASSET), // 自由现金流 = 经营 - 资本开支
+    };
+  }
+
   return {
     name: finRows[0]?.SECURITY_NAME_ABBR || "",
     industry,
+    mainop,
+    balance,
+    cash,
     reports: finRows.map((r) => ({
       label: r.REPORT_DATE_NAME || "",
       date: String(r.REPORT_DATE || "").slice(0, 10),

@@ -4,33 +4,53 @@ import { Panel, type PanelZoomProps } from "../Panel";
 import { usePolling } from "@/hooks/usePolling";
 import { api, type FinForecastItem } from "@/lib/api";
 import { TNUM, fmtYi, forecastTone } from "./utils";
+import { QuoteRow } from "../QuoteRow";
+import { ToneChip } from "../SharedUI";
 import { useFin } from "./FinContext";
-import { AsyncContent, DataRow, RowName, ToneChip } from "../SharedUI";
+import { AsyncContent } from "../SharedUI";
 import { clsChg, fmtPct } from "@/lib/format";
 import { prefixCode } from "./utils";
 
-/** 明细行: 固定列 日期 w40 | 名称 flex | chip w34 | 净利区间 w140 右对齐 | 同比 w120 右对齐, 行高 20px */
+/** 明细行: 名称+代码 | 报价 | 分时 | [日期 类型徽标 净利区间 同比] — 统一 QuoteRow */
 function Row({ it }: { it: FinForecastItem }) {
   const { select } = useFin();
   const tone = forecastTone(it.type);
   const mid = (it.yoyLow + it.yoyHigh) / 2;
   const yoyCls = clsChg(mid);
   return (
-    <DataRow onClick={() => select(prefixCode(it.code), it.name)}>
-      <span className="w-[40px] shrink-0 whitespace-nowrap text-[9px] text-slate-500" style={TNUM}>
-        {it.date.slice(5)}
-      </span>
-      <RowName>{it.name}</RowName>
-      <ToneChip tone={tone === "good" ? "rose" : tone === "bad" ? "emerald" : "slate"} dot={it.type === "首亏"}>
-        {it.type}
-      </ToneChip>
-      <span className="w-[140px] shrink-0 truncate text-right text-[11px] text-slate-300" style={TNUM}>
-        {fmtYi(it.profitLow)}~{fmtYi(it.profitHigh)}
-      </span>
-      <span className={`w-[120px] shrink-0 text-right text-[11px] ${yoyCls}`} style={TNUM}>
-        {fmtPct(it.yoyLow, 1)}~{fmtPct(it.yoyHigh, 1)}
-      </span>
-    </DataRow>
+    <QuoteRow
+      variant="plain"
+      spark
+      code={prefixCode(it.code)}
+      name={it.name}
+      unit={it.code}
+      onClick={() => select(prefixCode(it.code), it.name)}
+      // 预计净利区间 + 同比幅度: 与分时图同列下一行, 小字标签前置, 组间两端对齐
+      sparkExtra={
+        <>
+          <span className="flex min-w-0 items-center gap-1">
+            <span className="shrink-0 text-[9px] text-slate-600">净利</span>
+            <span className="truncate text-[11px] text-slate-300" style={TNUM}>{fmtYi(it.profitLow)}~{fmtYi(it.profitHigh)}</span>
+          </span>
+          <span className="flex min-w-0 items-center gap-1">
+            <span className="shrink-0 text-[9px] text-slate-600">同比</span>
+            <span className={`truncate text-[11px] ${yoyCls}`} style={TNUM}>{fmtPct(it.yoyLow, 1)}~{fmtPct(it.yoyHigh, 1)}</span>
+          </span>
+        </>
+      }
+      leadingCols={[
+        {
+          // 日期 + 趋势 pill 同列第一列(上:日期, 下:类型徽标)
+          top: <span className="text-[9px] text-slate-500" style={TNUM}>{it.date.slice(5)}</span>,
+          bottom: (
+            <ToneChip tone={tone === "good" ? "rose" : tone === "bad" ? "emerald" : "slate"} dot={it.type === "首亏"}>
+              {it.type}
+            </ToneChip>
+          ),
+          w: 40,
+        },
+      ]}
+    />
   );
 }
 

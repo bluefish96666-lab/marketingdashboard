@@ -41,9 +41,10 @@ function periodLabel(p: string): string {
 
 const CUR = currentPeriod();
 const PREV = prevPeriod(CUR);
+// 标题栏 pill 文案从简: 当期标"披露", 上一期只留期号
 const PERIOD_OPTIONS = [
-  { value: CUR, label: `${periodLabel(CUR)}·披露中` },
-  { value: PREV, label: `${periodLabel(PREV)}·全市场` },
+  { value: CUR, label: `${periodLabel(CUR)}·披露` },
+  { value: PREV, label: periodLabel(PREV) },
 ];
 
 const FinContext = createContext<FinCtx>({

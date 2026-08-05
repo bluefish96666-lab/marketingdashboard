@@ -242,6 +242,12 @@ export interface FinanceReport {
 export interface FinanceMain {
   name: string;
   industry: string;
+  /** 主营构成(最新报告期, 按产品/行业, 收入 Top 8): 收入/利润及占比 */
+  mainop: { name: string; income: number; incomeRatio: number; profit: number; profitRatio: number }[];
+  /** 资产负债表(最新报告期) */
+  balance: { totalLiabilities: number; accountsReceivable: number };
+  /** 现金流量(最新报告期): 经营净额 / 资本开支 / 自由现金流 */
+  cash: { operate: number; capex: number; free: number };
   reports: FinanceReport[];
 }
 

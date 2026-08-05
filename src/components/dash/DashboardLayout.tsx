@@ -5,7 +5,7 @@ import { isTv } from "@/lib/tv";
 
 export type PanelRowDef = {
   defaultH: number;
-  panels: { id: string; component: ComponentType<{ className?: string } & PanelZoomProps>; defaultW: number; mobileH: string }[];
+  panels: { id: string; component: ComponentType<{ className?: string } & PanelZoomProps>; defaultW: number; mobileH: string; maxZoomW?: number }[];
 };
 
 type PanelCompProps = { className?: string } & PanelZoomProps;

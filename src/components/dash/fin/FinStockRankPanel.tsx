@@ -6,6 +6,7 @@ import { type FinBoardStock } from "@/lib/api";
 import { fmtPct } from "@/lib/format";
 import { useFin } from "./FinContext";
 import { PeriodTabs } from "./PeriodTabs";
+import { QuoteRow } from "../QuoteRow";
 import { TNUM, fmtYi, prefixCode } from "./utils";
 import { AsyncContent, TabBar } from "../SharedUI";
 
@@ -14,7 +15,6 @@ const TABS: { key: Tab; label: string }[] = [
   { key: "profit", label: "净利额" },
   { key: "growth", label: "增速" },
 ];
-const RANK_COLORS = ["#fbbf24", "#fb7185", "#22d3ee"]; // 前三名 amber/rose/cyan
 
 /** 个股盈利榜 TOP20: 净利额 | 增速 双 Tab, 行内相对值底条, 点击载入公司 */
 export function FinStockRankPanel({ className = "", ...zoomProps }: { className?: string } & PanelZoomProps) {
@@ -76,50 +76,56 @@ function RankRow({
   const barColor = tab === "profit" ? "#fb7185" : s.profitYoY >= 0 ? "#fb7185" : "#34d399";
   const loss = s.netProfit <= 0;
   return (
-    <button
-      onClick={onPick}
-      className="relative flex h-[20px] w-full items-center gap-1.5 border-b border-slate-800/60 px-2.5 text-left hover:bg-slate-800/40"
-    >
+    <div className="relative w-full">
       {/* 行内相对值底条(4% 透明度) */}
-      <span
-        className="absolute bottom-0 left-0 top-0"
-        style={{ width: `${(barV / maxV) * 100}%`, background: barColor, opacity: 0.04 }}
+      <span className="absolute bottom-0 left-0 top-0" style={{ width: `${(barV / maxV) * 100}%`, background: barColor, opacity: 0.04 }} />
+      <QuoteRow
+        variant="plain"
+        spark
+        code={prefixCode(s.code)}
+        name={s.name}
+        unit={s.code}
+        rank={rank}
+        onClick={onPick}
+        // 净利额/增速/ROE: 分时图下方一行, 小字标签前置, 组间两端对齐
+        sparkExtra={
+          tab === "profit" ? (
+            <>
+              <span className="flex min-w-0 items-center gap-1">
+                <span className="shrink-0 text-[9px] text-slate-600">净利</span>
+                <span className="truncate text-[11px] font-semibold text-slate-200" style={TNUM}>{fmtYi(s.netProfit)}</span>
+              </span>
+              <span className="flex min-w-0 items-center gap-1">
+                <span className="shrink-0 text-[9px] text-slate-600">增速</span>
+                <span className={`truncate text-[11px] font-semibold ${s.profitYoY >= 0 ? "text-rose-400" : "text-emerald-400"}`} style={TNUM}>{fmtPct(s.profitYoY, 1)}</span>
+              </span>
+              <span className="flex min-w-0 items-center gap-1">
+                <span className="shrink-0 text-[9px] text-slate-600">ROE</span>
+                <span className="truncate text-[11px] text-slate-400" style={TNUM}>{s.roe.toFixed(1)}%</span>
+              </span>
+            </>
+          ) : (
+            <>
+              <span className="flex min-w-0 items-center gap-1">
+                <span className="shrink-0 text-[9px] text-slate-600">增速</span>
+                <span className={`truncate text-[11px] font-semibold ${s.profitYoY >= 0 ? "text-rose-400" : "text-emerald-400"}`} style={TNUM}>{fmtPct(s.profitYoY, 1)}</span>
+              </span>
+              <span className="flex min-w-0 items-center gap-1">
+                <span className="shrink-0 text-[9px] text-slate-600">净利</span>
+                <span className="truncate text-[11px] text-slate-400" style={TNUM}>{fmtYi(s.netProfit)}</span>
+              </span>
+              {loss ? (
+                <span className={`truncate text-[11px] ${s.profitYoY > 0 ? "text-amber-400" : "text-emerald-400"}`}>{s.profitYoY > 0 ? "扭亏" : "亏损"}</span>
+              ) : (
+                <span className="flex min-w-0 items-center gap-1">
+                  <span className="shrink-0 text-[9px] text-slate-600">ROE</span>
+                  <span className="truncate text-[11px] text-slate-400" style={TNUM}>{s.roe.toFixed(1)}%</span>
+                </span>
+              )}
+            </>
+          )
+        }
       />
-      <span
-        className="w-[14px] shrink-0 text-[9px]"
-        style={{ color: rank <= 3 ? RANK_COLORS[rank - 1] : "#64748b", fontVariantNumeric: "tabular-nums" }}
-      >
-        {rank}
-      </span>
-      <span className="min-w-0 flex-1 truncate text-[11px] text-slate-200">{s.name}</span>
-      {tab === "profit" ? (
-        <>
-          <span className="w-[56px] shrink-0 text-right text-[12px] font-semibold text-slate-200" style={TNUM}>
-            {fmtYi(s.netProfit)}
-          </span>
-          <span className={`w-[52px] shrink-0 text-right text-[10px] ${s.profitYoY >= 0 ? "text-rose-400" : "text-emerald-400"}`} style={TNUM}>
-            {fmtPct(s.profitYoY, 1)}
-          </span>
-          <span className="w-[62px] shrink-0 text-right text-[9px] text-slate-500" style={TNUM}>
-            ROE {s.roe.toFixed(1)}%
-          </span>
-        </>
-      ) : (
-        <>
-          <span
-            className={`w-[56px] shrink-0 text-right text-[12px] font-semibold ${s.profitYoY >= 0 ? "text-rose-400" : "text-emerald-400"}`}
-            style={TNUM}
-          >
-            {fmtPct(s.profitYoY, 1)}
-          </span>
-          <span className="w-[52px] shrink-0 text-right text-[10px] text-slate-400" style={TNUM}>
-            {fmtYi(s.netProfit)}
-          </span>
-          <span className="w-[62px] shrink-0 text-right text-[9px] text-slate-500" style={TNUM}>
-            {loss ? (s.profitYoY > 0 ? "扭亏" : "亏损") : `ROE ${s.roe.toFixed(1)}%`}
-          </span>
-        </>
-      )}
-    </button>
+    </div>
   );
 }

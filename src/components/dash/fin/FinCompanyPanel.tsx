@@ -109,16 +109,46 @@ export function FinCompanyPanel({ className = "", ...zoomProps }: { className?: 
                 {data.name.length > 8 ? data.name.slice(0, 8) + "…" : data.name}
               </span>
             </div>
-            <div className="grid min-h-0 flex-1 grid-cols-3 content-start gap-1">
-              <Card label="营收" value={fmtYi(r0.revenue)} sub={`${r0.revenueYoY > 0 ? "+" : ""}${r0.revenueYoY.toFixed(1)}%`} subCls={clsChg(r0.revenueYoY)} />
-              <Card label="净利" value={fmtYi(r0.netProfit)} sub={`${r0.profitYoY > 0 ? "+" : ""}${r0.profitYoY.toFixed(1)}%`} subCls={clsChg(r0.profitYoY)} />
-              <Card label="ROE" value={`${r0.roe.toFixed(1)}%`} />
-              <Card label="EPS" value={r0.eps.toFixed(2)} />
-              <Card label="毛利率" value={`${r0.grossMargin.toFixed(0)}%`} />
-              <Card label="净利率" value={`${r0.netMargin.toFixed(0)}%`} />
-              <Card label="资产负债率" value={`${r0.debtRatio.toFixed(1)}%`} />
-              <Card label="ROIC" value={`${r0.roic.toFixed(1)}%`} />
-              <Card label="每股OCF" value={r0.ocfPerShare.toFixed(2)} />
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              <div className="grid grid-cols-3 content-start gap-1">
+                <Card label="营收" value={fmtYi(r0.revenue)} sub={`${r0.revenueYoY > 0 ? "+" : ""}${r0.revenueYoY.toFixed(1)}%`} subCls={clsChg(r0.revenueYoY)} />
+                <Card label="净利" value={fmtYi(r0.netProfit)} sub={`${r0.profitYoY > 0 ? "+" : ""}${r0.profitYoY.toFixed(1)}%`} subCls={clsChg(r0.profitYoY)} />
+                <Card label="ROE" value={`${r0.roe.toFixed(1)}%`} />
+                <Card label="EPS" value={r0.eps.toFixed(2)} />
+                <Card label="毛利率" value={`${r0.grossMargin.toFixed(0)}%`} />
+                <Card label="净利率" value={`${r0.netMargin.toFixed(0)}%`} />
+                <Card label="资产负债率" value={`${r0.debtRatio.toFixed(1)}%`} />
+                <Card label="ROIC" value={`${r0.roic.toFixed(1)}%`} />
+                <Card label="每股OCF" value={r0.ocfPerShare.toFixed(2)} />
+                <Card label="经营现金流" value={fmtYi(data.cash.operate)} />
+                <Card label="自由现金流" value={fmtYi(data.cash.free)} />
+                <Card label="应收账款" value={fmtYi(data.balance.accountsReceivable)} />
+              </div>
+              {/* 主营构成: 收入/利润贡献双条(cyan=收入占比, amber=利润占比) */}
+              {data.mainop.length > 0 && (
+                <>
+                  <div className="flex items-center gap-2 px-0.5 pb-0.5 pt-1.5 text-[9px] font-medium uppercase tracking-widest text-slate-500">
+                    主营构成
+                    <span className="flex items-center gap-1 text-[8px] normal-case tracking-normal text-slate-600">
+                      <span className="inline-block h-[3px] w-2 rounded bg-cyan-500/60" />收入
+                      <span className="inline-block h-[3px] w-2 rounded bg-amber-500/60" />利润
+                    </span>
+                  </div>
+                  <div className="flex flex-col">
+                    {data.mainop.slice(0, 5).map((m) => (
+                      <div key={m.name} className="flex h-[18px] items-center gap-1.5 px-0.5 text-[10px]">
+                        <span className="w-[72px] shrink-0 truncate text-slate-300">{m.name}</span>
+                        <span className="flex h-[8px] min-w-0 flex-1 items-center gap-[2px]">
+                          <span className="h-[6px] rounded-sm bg-cyan-500/50" style={{ width: `${Math.min(100, m.incomeRatio * 100)}%` }} />
+                          <span className="h-[6px] rounded-sm bg-amber-500/50" style={{ width: `${Math.min(100, m.profitRatio * 100)}%` }} />
+                        </span>
+                        <span className="w-[52px] shrink-0 text-right text-slate-400" style={TNUM}>{fmtYi(m.income)}</span>
+                        <span className="w-[40px] shrink-0 text-right text-[9px] text-amber-400/80" style={TNUM}>{(m.profitRatio * 100).toFixed(0)}%</span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
             </div>
           </>
         )}

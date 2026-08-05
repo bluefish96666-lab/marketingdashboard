@@ -4,6 +4,7 @@ import { useFinBoard } from "./useFinData";
 import { type FinCalendarItem } from "@/lib/api";
 import { useFin } from "./FinContext";
 import { AsyncContent } from "../SharedUI";
+import { QuoteRow } from "../QuoteRow";
 import { CalendarDays, Star } from "lucide-react";
 import { TNUM, prefixCode, quarterLabel } from "./utils";
 import { useElementSize } from "@/hooks/useElementSize";
@@ -225,17 +226,25 @@ export function FinCalendarPanel({ className = "", ...zoomProps }: { className?:
                 {selDate ? `${selDate.slice(5).replace("-", "/")} 无披露安排` : "暂无披露安排"}
               </div>
             ) : (
-              <div className="grid grid-cols-2">
+              <div className="flex flex-col">
                 {activeList.map((it) => (
-                  <button
+                  <QuoteRow
                     key={`${it.date}-${it.code}`}
+                    variant="plain"
+                    spark
+                    code={prefixCode(it.code)}
+                    name={it.name}
+                    unit={it.code}
                     onClick={() => select(prefixCode(it.code), it.name)}
-                    className="flex h-[20px] min-w-0 items-center gap-1.5 border-b border-slate-800/60 px-2 text-left hover:bg-slate-800/40"
-                  >
-                    <span className="min-w-0 flex-1 truncate text-[11px] text-slate-200">{it.name}</span>
-                    {view.heavy.has(it.code) && <Star size={9} className="shrink-0 text-amber-400" />}
-                    <span className="shrink-0 text-[9px] text-slate-500">{quarterLabel(it.period)}</span>
-                  </button>
+                    leadingCols={[
+                      {
+                        // 星标 + 期 第一列(上:重磅★, 下:期)
+                        top: view.heavy.has(it.code) ? <Star size={10} className="text-amber-400" /> : <span />,
+                        bottom: <span className="text-[9px] text-slate-500">{quarterLabel(it.period)}</span>,
+                        w: 40,
+                      },
+                    ]}
+                  />
                 ))}
               </div>
             )}

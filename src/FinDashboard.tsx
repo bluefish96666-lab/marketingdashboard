@@ -21,24 +21,28 @@ const PANEL_ROWS: PanelRowDef[] = [
         id: "finCalendar",
         component: FinCalendarPanel,
         defaultW: 0.22,
+        maxZoomW: 0.3, // 财报四面板放大宽度统一上限
         mobileH: "h-[300px]",
       },
       {
         id: "finForecast",
         component: FinForecastPanel,
         defaultW: 0.28,
+        maxZoomW: 0.3, // 财报四面板放大宽度统一上限
         mobileH: "h-[340px]",
       },
       {
         id: "finIndustry",
         component: FinIndustryPanel,
         defaultW: 0.25,
+        maxZoomW: 0.3, // 财报四面板放大宽度统一上限
         mobileH: "h-[360px]",
       },
       {
         id: "finStockRank",
         component: FinStockRankPanel,
         defaultW: 0.25,
+        maxZoomW: 0.3, // 财报四面板放大宽度统一上限
         mobileH: "h-[400px]",
       },
     ],

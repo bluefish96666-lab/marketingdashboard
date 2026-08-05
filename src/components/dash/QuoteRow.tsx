@@ -61,6 +61,12 @@ interface QuoteRowProps {
   badge?: string;
   /** 现期对照(基差)行: 品种 | 现货 | 期货 | 基差 | 基差率 — 仅 compact 模式使用 */
   basis?: { spot: number; futures: number; basis: number; basisPct: number };
+  /** 附加财务列(财报列表): 每列上下两值, 与价/幅同一网格 — 仅 plain 模式使用 */
+  extraCols?: { top?: ReactNode; bottom?: ReactNode; w: number }[];
+  /** 前置列(财报预告的日期+趋势pill, 渲染在名称之前) — 仅 plain 模式使用 */
+  leadingCols?: { top?: ReactNode; bottom?: ReactNode; w: number }[];
+  /** 分时图同列附加内容(财报预告的净利/同比区间, 小字标签前置) — 仅 plain 模式使用 */
+  sparkExtra?: ReactNode;
 }
 
 /** 统一个股行
@@ -69,7 +75,7 @@ interface QuoteRowProps {
  */
 export const QuoteRow = memo(function QuoteRow({
   code, name, price, pct, tag, rank, amount, turnover, spark, boards, flow, variant = "plain", active, onClick, onRemove,
-  unit, sparkData, accent, badge, basis, className,
+  unit, sparkData, accent, badge, basis, className, extraCols, leadingCols, sparkExtra,
 }: QuoteRowProps) {
   // 行宽自适应: 实测宽度决定资金流标签形态(主力净额/净占比 ↔ 净/占)
   // 仅 flow 模式需要; compact 模式无需
@@ -267,6 +273,80 @@ export const QuoteRow = memo(function QuoteRow({
           <span className={`self-center justify-self-end rounded px-0.5 text-[10px] font-semibold leading-none ${pc != null ? bgChg(pc) : ""}`} style={TNUM}>
             {pc != null ? fmtPct(pc) : ""}
           </span>
+        </div>
+      </Tag>
+    );
+  }
+
+  // ---- 财报行(plain + extraCols): 名称+代码 | 分时 | 价/幅 | 财务列(上下两值) ----
+  if (variant === "plain" && (extraCols?.length || leadingCols?.length || sparkExtra)) {
+    const prefix = (rank != null ? "auto " : "") + (badge ? "auto " : "");
+    const lead = leadingCols ? leadingCols.map((c) => `${c.w}px`).join(" ") + " " : "";
+    const cols = `${prefix}${lead}72px minmax(0,1fr) 60px ${extraCols ? extraCols.map((c) => `${c.w}px`).join(" ") : ""}${onRemove ? " auto" : ""}`;
+    return (
+      <Tag
+        ref={(el: HTMLElement | null) => { rootRef.current = el; }}
+        onClick={onClick}
+        className={`group block w-full rounded px-2 py-[4px] text-left transition-colors hover:bg-slate-800/40 hover:shadow-[inset_0_0_0_1px_rgba(34,211,238,0.22)] ${active ? "bg-cyan-500/10 ring-1 ring-cyan-500/40" : ""} ${className || ""}`}
+      >
+        {accent && (
+          <span aria-hidden className="absolute left-0 top-0 h-full w-[3px] rounded-l" style={{ background: accent, opacity: 0.55 }} />
+        )}
+        <div className="grid items-center gap-x-1" style={{ gridTemplateColumns: cols, gridTemplateRows: "20px 16px" }}>
+          {rank != null && (
+            <div className="row-span-2 self-center text-[11px] font-bold leading-none" style={{ color: rank <= 3 ? ["#fbbf24", "#fb7185", "#22d3ee"][rank - 1] : "#64748b", ...TNUM }}>
+              {rank}
+            </div>
+          )}
+          {badge && (
+            <div className="row-span-2 self-center">
+              <span className="w-6 shrink-0 rounded-sm bg-slate-700/50 text-center text-[8px] leading-3 text-slate-400">{badge}</span>
+            </div>
+          )}
+          {/* 前置列(第一行上值, 第二行下值) */}
+          {leadingCols?.map((c, i) => (
+            <div key={i} className="flex min-w-0 items-center gap-1 overflow-hidden whitespace-nowrap leading-none">
+              {c.top ?? <span />}
+            </div>
+          ))}
+          {/* 名称+代码, 跨2行 */}
+          <div className="row-span-2 flex min-w-0 flex-col justify-center gap-1 leading-none">
+            <span className="truncate text-[11px] text-slate-200">{name}</span>
+            <span className="text-[10px] text-slate-500">{subtitle}</span>
+          </div>
+          {/* 第一行: 分时 + 现价 + 财务列上值 */}
+          <div className="flex h-[20px] min-w-0 items-center self-center">
+            {sp && sp.points.length > 1 ? (
+              <Spark points={sp.points} prec={sp.prec} width={160} height={20} fluid emptyLabel="—" session={sparkData?.session || "ashare"} />
+            ) : (
+              <span className="text-[10px] text-slate-600">——</span>
+            )}
+          </div>
+          <Stat label="价" value={p != null ? fmtPrice(p) : "—"} valueCls={`font-semibold ${p != null ? clsChg(p) : "text-slate-600"}`} />
+          {extraCols?.map((c, i) => (
+            <div key={i} className="flex min-w-0 items-center justify-end gap-1 overflow-hidden whitespace-nowrap leading-none">
+              {c.top ?? <span />}
+            </div>
+          ))}
+          {/* 前置列下值 */}
+          {leadingCols?.map((c, i) => (
+            <div key={i} className="flex min-w-0 items-center gap-1 overflow-hidden whitespace-nowrap leading-none">
+              {c.bottom ?? <span />}
+            </div>
+          ))}
+          {/* 第二行: 分时同列附加(净利/同比区间) + 涨幅 + 财务列下值; 组间两端对齐 */}
+          <div className="flex h-[16px] min-w-0 items-center justify-between gap-1.5 self-center">{sparkExtra}</div>
+          <Stat label="幅" value={pc != null ? fmtPct(pc, 2) : ""} valueCls={`font-semibold ${pc != null ? clsChg(pc) : "text-slate-600"}`} />
+          {extraCols?.map((c, i) => (
+            <div key={i} className="flex min-w-0 items-center justify-end gap-1 overflow-hidden whitespace-nowrap leading-none">
+              {c.bottom ?? <span />}
+            </div>
+          ))}
+          {onRemove && (
+            <div className="row-span-2 self-center">
+              <button onClick={(e) => { e.stopPropagation(); onRemove(); }} className="text-[10px] leading-none text-slate-600 opacity-0 transition-opacity hover:text-rose-400 group-hover:opacity-100" title="移除">×</button>
+            </div>
+          )}
         </div>
       </Tag>
     );

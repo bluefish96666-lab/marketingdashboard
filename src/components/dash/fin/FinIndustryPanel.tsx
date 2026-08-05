@@ -155,8 +155,13 @@ export function FinIndustryPanel({ className = "", ...zoomProps }: { className?:
               {tree.rects.map((r, i) => {
                 // 线框化: 色块 fill 12% + 1px 同色 40% 描边, 消除实色平涂
                 const color = r.yoy >= 0 ? "#fb7185" : "#34d399";
-                const showName = r.w > 56 && r.h > 24;
-                const showVal = r.w > 56 && r.h > 40;
+                // 文字自适应: 按格宽/格高算可容纳字数, 窄格缩字截断不整格留白;
+                // 高窄格(横排放不下)文字竖排
+                const charW = 5.9; // 9.5px 中文字符平均宽
+                const trunc = (s: string, n: number) => (s.length <= n ? s : n >= 3 ? `${s.slice(0, n - 1)}…` : s.slice(0, n));
+                const vertical = r.w < 26 && r.h >= 44 && r.w >= 12;
+                const showName = vertical || (r.w >= 26 && r.h >= 15);
+                const showVal = !vertical && r.w >= 56 && r.h >= 38;
                 return (
                   <g key={r.name} onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(-1)}>
                     <rect
@@ -174,9 +179,22 @@ export function FinIndustryPanel({ className = "", ...zoomProps }: { className?:
                     {hover === i && (
                       <rect x={r.x} y={r.y} width={Math.max(r.w - 1, 0)} height={Math.max(r.h - 1, 0)} rx={2} fill="#ffffff" opacity={0.08} />
                     )}
-                    {showName && (
+                    {showName && !vertical && (
                       <text x={r.x + 4} y={r.y + 12} fontSize={9.5} fill="#e2e8f0" fontWeight={600}>
-                        {r.name.length > 7 ? r.name.slice(0, 7) : r.name}
+                        {trunc(r.name, Math.max(1, Math.floor((r.w - 8) / charW)))}
+                      </text>
+                    )}
+                    {vertical && (
+                      <text
+                        x={r.x + r.w / 2}
+                        y={r.y + r.h / 2}
+                        transform={`rotate(90 ${r.x + r.w / 2} ${r.y + r.h / 2})`}
+                        textAnchor="middle"
+                        fontSize={8.5}
+                        fill="#e2e8f0"
+                        fontWeight={600}
+                      >
+                        {trunc(r.name, Math.max(1, Math.floor((r.h - 8) / charW)))}
                       </text>
                     )}
                     {showVal && (

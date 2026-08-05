@@ -3,6 +3,8 @@ import { useCallback, useMemo, useState } from "react";
 export interface ZoomPanelDef {
   id: string;
   defaultW: number;
+  /** 放大宽度上限(0~1, 默认 0.5): 宽图表面板放大过宽时收紧 */
+  maxZoomW?: number;
 }
 
 export interface ZoomRowDef {
@@ -48,16 +50,18 @@ export function usePanelZoom(rows: ZoomRowDef[]) {
     const w0 = rows[zRow].panels[zIdx].defaultW;
     const h0 = rows[zRow].defaultH;
     const targetArea = 4 * w0 * h0;
+    // 放大宽度上限: 默认 50%, 面板可自定义收紧(宽图表面板)
+    const wCap = rows[zRow].panels[zIdx].maxZoomW ?? 0.5;
 
     let w1: number;
     let h1: number;
     if (w0 >= 0.5) {
-      // 原宽度已达/超过 50%：保持原宽度，仅增加高度（上限 66%）
+      // 原宽度已达/超过上限：保持原宽度，仅增加高度（上限 66%）
       w1 = w0;
       h1 = Math.min(targetArea / w0, 0.66);
     } else {
-      // 中小面板：宽度可扩张至 2 倍但不超过 50%，高度不超过 66%
-      w1 = Math.min(w0 * 2, 0.5);
+      // 中小面板：宽度可扩张至 2 倍但不超过上限，高度不超过 66%
+      w1 = Math.min(w0 * 2, wCap);
       h1 = Math.min(targetArea / w1, 0.66);
     }
 
