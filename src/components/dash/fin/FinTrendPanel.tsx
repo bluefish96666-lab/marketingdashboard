@@ -60,33 +60,40 @@ function TrendChart({ reports, tab, mainopHistory }: { reports: FinanceReport[];
 
     if (tab === "perf") {
       // 业绩: 主营构成堆叠柱(每期两根: 营收构成/利润构成) + 各主营同比
+      // X 轴对齐财务报告期(reports), 主营构成按报告期匹配 — 与质量/杠杆页签同窗口;
+      // 某期无主营构成披露时(上游 zygcfx 滞后), 用财务全量(总营收/归母净利)画斜纹柱兜底
       const hist = mainopHistory || [];
-      const src = hist.slice(-12);
-      if (!src.length) return null;
-      const latest = src[src.length - 1].segments;
-      const topNames = latest.slice(0, 5).map((s) => s.name); // 段名按最新期收入取前5, 其余并"其他"
+      const byDate = new Map(hist.map((h) => [h.date, h]));
+      const latestSegs = (() => {
+        for (let i = hist.length - 1; i >= 0; i--) if (hist[i].segments.length) return hist[i].segments;
+        return [];
+      })();
+      const topNames = latestSegs.slice(0, 5).map((s) => s.name); // 段名按最新有数据期的收入取前5, 其余并"其他"
       const topSet = new Set(topNames);
-      const repByDate = new Map(rows.map((r) => [r.date, r])); // 财务主指标按报告期匹配
-      const per = src.map((r) => {
+      const per = rows.map((r) => {
+        const m = byDate.get(r.date);
         const segs = topNames.map((name) => {
-          const s = r.segments.find((x) => x.name === name);
+          const s = m?.segments.find((x) => x.name === name);
           return { name, income: s?.income ?? 0, profit: s?.profit ?? 0 };
         });
-        const other = r.segments.filter((s) => !topSet.has(s.name)).reduce(
+        const other = (m?.segments ?? []).filter((s) => !topSet.has(s.name)).reduce(
           (a, s) => ({ income: a.income + s.income, profit: a.profit + s.profit }),
           { income: 0, profit: 0 }
         );
-        // 合计净利(公司整体): 主营构成只统计主营段, 期间费用/减值等亏空不在其中;
-        // 同比线同样取匹配报告期的值(主营构成期与财务期粒度可能不同)
-        const rep = repByDate.get(r.date);
+        // 合计净利(公司整体): 主营构成只统计主营段, 期间费用/减值等亏空不在其中
+        // 某期无主营构成 → fallback: 用财报全量(总营收/归母净利)画单段斜纹柱
+        const fallback = !m || m.segments.length === 0;
         return {
           date: r.date,
           segs,
           other,
-          totalNet: rep?.netProfit ?? null,
-          revYoy: rep?.revenueYoY ?? null,
-          netYoy: rep?.profitYoY ?? null,
+          totalNet: r.netProfit ?? null,
+          revYoy: r.revenueYoY ?? null,
+          netYoy: r.profitYoY ?? null,
           yoy: segs.map(() => null as number | null),
+          fallback,
+          fullRev: fallback ? r.revenue ?? 0 : 0,
+          fullNet: fallback ? r.netProfit ?? 0 : 0,
         };
       });
       // 各主营同比: 与 4 期前(去年同期)同名收入对比
@@ -100,8 +107,15 @@ function TrendChart({ reports, tab, mainopHistory }: { reports: FinanceReport[];
       const ext = per.map((r) => {
         const sum = (arr: { income: number; profit: number }[], pick: (s: { income: number; profit: number }) => number) =>
           arr.reduce((a, s) => a + pick(s), 0);
-        const pos = Math.max(sum(r.segs, (s) => Math.max(s.income, 0)) + Math.max(r.other.income, 0), sum(r.segs, (s) => Math.max(s.profit, 0)) + Math.max(r.other.profit, 0));
-        const neg = Math.min(sum(r.segs, (s) => Math.min(s.income, 0)) + Math.min(r.other.income, 0), sum(r.segs, (s) => Math.min(s.profit, 0)) + Math.min(r.other.profit, 0));
+        // 全量兜底期把财务全量计入极值(正负两个方向)
+        const pos = Math.max(
+          sum(r.segs, (s) => Math.max(s.income, 0)) + Math.max(r.other.income, 0) + Math.max(r.fullRev, 0),
+          sum(r.segs, (s) => Math.max(s.profit, 0)) + Math.max(r.other.profit, 0) + Math.max(r.fullNet, 0)
+        );
+        const neg = Math.min(
+          sum(r.segs, (s) => Math.min(s.income, 0)) + Math.min(r.other.income, 0) + Math.min(r.fullRev, 0),
+          sum(r.segs, (s) => Math.min(s.profit, 0)) + Math.min(r.other.profit, 0) + Math.min(r.fullNet, 0)
+        );
         return { pos, neg };
       });
       const mMax = Math.max(...ext.map((e) => e.pos), 1);
@@ -140,7 +154,7 @@ function TrendChart({ reports, tab, mainopHistory }: { reports: FinanceReport[];
         });
         return d;
       };
-      return { mode: "perf" as const, W, H, L, R, T, B, n: pn, slot: pSlot, cx: pcx, Ym, Yp, zeroY: Ym(0), ticks, pctTicks, rows: per, segNames: [...topNames, "其他"], line };
+      return { mode: "perf" as const, W, H, L, R, T, B, n: pn, slot: pSlot, cx: pcx, Ym, Yp, zeroY: Ym(0), ticks, pctTicks, rows: per, segNames: per.some((r) => !r.fallback) ? [...topNames, "其他"] : [...topNames], hasFallback: per.some((r) => r.fallback), line };
     }
 
     if (tab === "quality") {
@@ -225,6 +239,9 @@ function TrendChart({ reports, tab, mainopHistory }: { reports: FinanceReport[];
             cls: "h-[7px] w-3 rounded-sm",
             style: { background: SEG_COLORS[i] },
           })),
+          ...(chart.hasFallback
+            ? [{ label: "全量(未披露主营)", cls: "h-[7px] w-3 rounded-sm", style: { background: "repeating-linear-gradient(45deg, #94a3b8 0 1px, #475569 1px 3px)" } }]
+            : []),
           { label: "营收同比", cls: "w-4 border-t-2 border-dashed border-sky-400" },
           { label: "净利同比", cls: "w-4 border-t-2 border-rose-400" },
           { label: "合计净利", cls: "h-[6px] w-[6px] rotate-45 rounded-[1px] bg-cyan-400" },
@@ -245,21 +262,34 @@ function TrendChart({ reports, tab, mainopHistory }: { reports: FinanceReport[];
   const hovLines = hov
     ? chart.mode === "perf"
       ? (() => {
-          const p = hov as { segs: { name: string; income: number; profit: number }[]; other: { income: number; profit: number }; totalNet: number | null; yoy: (number | null)[] };
+          const p = hov as { segs: { name: string; income: number; profit: number }[]; other: { income: number; profit: number }; totalNet: number | null; yoy: (number | null)[]; fallback?: boolean; fullRev?: number; fullNet?: number };
           return [
-            ...p.segs.map((s, si) => (
+            // 全量兜底期: 无主营段, 只显示财务全量 + 合计净利
+            ...(p.fallback
+              ? [
+                  <span key="full" className="flex items-center gap-1.5 text-slate-400" style={TNUM}>
+                    <span className="inline-block h-[6px] w-2 rounded-sm" style={{ background: "repeating-linear-gradient(45deg, #94a3b8 0 1px, #475569 1px 3px)" }} />
+                    全量营收 <b className="text-slate-200">{fmtYi(p.fullRev ?? 0)}</b>
+                    <span className="text-slate-500">全量净利 {fmtYi(p.fullNet ?? 0)}</span>
+                    <i className="not-italic text-[8px] text-slate-500">未披露主营构成</i>
+                  </span>,
+                ]
+              : []),
+            ...(p.fallback ? [] : p.segs.map((s, si) => (
               <span key={s.name} className="flex items-center gap-1.5 text-slate-400" style={TNUM}>
                 <span className="inline-block h-[6px] w-2 rounded-sm" style={{ background: SEG_COLORS[si] }} />
                 {s.name} <b className="text-slate-200">{fmtYi(s.income)}</b>
                 {p.yoy[si] != null && <i className={`not-italic ${clsChg(p.yoy[si]!)}`}>{fmtPct(p.yoy[si]!)}</i>}
                 <span className="text-slate-500">利 {fmtYi(s.profit)}</span>
               </span>
-            )),
-            <span key="other" className="flex items-center gap-1.5 text-slate-400" style={TNUM}>
-              <span className="inline-block h-[6px] w-2 rounded-sm" style={{ background: SEG_COLORS[SEG_COLORS.length - 1] }} />
-              其他 <b className="text-slate-200">{fmtYi(p.other.income)}</b>
-              <span className="text-slate-500">利 {fmtYi(p.other.profit)}</span>
-            </span>,
+            ))),
+            ...(p.fallback ? [] : [
+              <span key="other" className="flex items-center gap-1.5 text-slate-400" style={TNUM}>
+                <span className="inline-block h-[6px] w-2 rounded-sm" style={{ background: SEG_COLORS[SEG_COLORS.length - 1] }} />
+                其他 <b className="text-slate-200">{fmtYi(p.other.income)}</b>
+                <span className="text-slate-500">利 {fmtYi(p.other.profit)}</span>
+              </span>,
+            ]),
             ...(p.totalNet != null
               ? [
                   <span key="total" className="flex items-center gap-1.5 text-slate-400" style={TNUM}>
@@ -306,6 +336,15 @@ function TrendChart({ reports, tab, mainopHistory }: { reports: FinanceReport[];
           setHover(Math.max(0, Math.min(chart.n - 1, Math.floor((x - chart.L) / chart.slot))));
         }}
         onMouseLeave={() => setHover(-1)}>
+        {/* 全量兜底斜纹图案 */}
+        {chart.mode === "perf" && chart.hasFallback && (
+          <defs>
+            <pattern id="hatch" width="4" height="4" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+              <rect width="4" height="4" fill="#475569" />
+              <line x1="0" y1="0" x2="0" y2="4" stroke="#94a3b8" strokeWidth="1.5" />
+            </pattern>
+          </defs>
+        )}
         {/* 网格 + 左右轴刻度 */}
         {chart.mode === "perf"
           ? chart.ticks.map((t, i) => (
@@ -389,6 +428,13 @@ function TrendChart({ reports, tab, mainopHistory }: { reports: FinanceReport[];
                       stroke="#0b1120"
                       strokeWidth={0.5}
                     />
+                  )}
+                  {/* 全量兜底柱: 该期无主营构成披露, 用财务全量替代(斜纹) */}
+                  {r.fallback && (
+                    <>
+                      <rect x={revX} y={r.fullRev >= 0 ? chart.Ym(r.fullRev) : chart.Ym(0)} width={bw} height={Math.max(Math.abs(chart.Ym(r.fullRev) - chart.Ym(0)), 1)} fill="url(#hatch)" stroke="#94a3b8" strokeWidth={0.4} />
+                      <rect x={npX} y={r.fullNet >= 0 ? chart.Ym(r.fullNet) : chart.Ym(0)} width={bw} height={Math.max(Math.abs(chart.Ym(r.fullNet) - chart.Ym(0)), 1)} fill="url(#hatch)" stroke="#94a3b8" strokeWidth={0.4} />
+                    </>
                   )}
                 </g>
               );
