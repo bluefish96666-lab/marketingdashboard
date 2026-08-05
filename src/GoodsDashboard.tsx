@@ -34,7 +34,7 @@ const IntlPanel = makeTrendPanel("intl");
 
 const PANEL_ROWS: PanelRowDef[] = [
   {
-    defaultH: 0.25,
+    defaultH: 0.23,
     panels: [
       {
         id: "goods-pm",
@@ -54,6 +54,11 @@ const PANEL_ROWS: PanelRowDef[] = [
         defaultW: 1 / 3,
         mobileH: "h-[340px]",
       },
+    ],
+  },
+  {
+    defaultH: 0.23,
+    panels: [
       {
         id: "goods-chem",
         component: ChemPanel,
@@ -75,7 +80,7 @@ const PANEL_ROWS: PanelRowDef[] = [
     ],
   },
   {
-    defaultH: 0.75,
+    defaultH: 0.54,
     panels: [
       {
         id: "goods-spot",

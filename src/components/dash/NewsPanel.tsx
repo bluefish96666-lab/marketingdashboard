@@ -62,7 +62,7 @@ export function NewsPanel({ className = "", ...zoomProps }: { className?: string
     <Panel
       className={className}
       {...zoomProps}
-      title="实时热点新闻 · 7×24 快讯"
+      title="实时热点 · 7×24 快讯"
       icon={<Rss size={14} />}
       accent="#f472b6"
       right={

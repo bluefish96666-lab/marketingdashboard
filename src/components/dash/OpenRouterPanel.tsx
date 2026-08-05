@@ -190,7 +190,7 @@ export function OpenRouterPanel({ className, panelId, isZoomed, onToggleZoom }: 
 
   return (
     <Panel
-      title="公有云大模型 Token 消耗"
+      title="公有云 Token 消耗"
       icon={<Cpu size={14} />}
       accent="#a78bfa"
       className={className}

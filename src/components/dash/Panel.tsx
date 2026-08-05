@@ -78,10 +78,11 @@ export function Panel({
         : {})}
     >
       <header className="flex h-8 shrink-0 items-center gap-2 border-b border-slate-700/40 px-2.5">
-        <span className="inline-block h-3.5 w-1 rounded-sm" style={{ background: accent }} />
-        {icon && <span style={{ color: accent, display: "inline-flex", alignItems: "center" }}>{icon}</span>}
-        <h2 className="text-[13px] font-semibold tracking-wide text-slate-200">{title}</h2>
-        <div className="ml-auto flex items-center gap-2">
+        <span className="inline-block h-3.5 w-1 shrink-0 rounded-sm" style={{ background: accent }} />
+        {icon && <span className="shrink-0" style={{ color: accent, display: "inline-flex", alignItems: "center" }}>{icon}</span>}
+        {/* min-w-0 + truncate: 长标题收缩省略, 不再把右侧控件挤出面板 */}
+        <h2 className="min-w-0 flex-1 truncate text-[12px] font-semibold tracking-wide text-slate-200">{title}</h2>
+        <div className="flex shrink-0 items-center gap-2">
           {right}
           {panelId && onToggleZoom && (
             <button
