@@ -37,8 +37,8 @@ function alignZero(aMin: number, aMax: number, bMin: number, bMax: number) {
   return [adj(aMin, aMax), adj(bMin, bMax)] as const;
 }
 
-// 主营构成堆叠柱的固定色相(前 5 段 + "其他" 灰)
-const SEG_COLORS = ["#22d3ee", "#fbbf24", "#34d399", "#a78bfa", "#fb7185", "#64748b"];
+// 主营构成堆叠柱的段色: 验证过的深色分类调色板(蓝/橙/青/黄/品红 + 其他灰), 相邻 CVD 分离达标
+const SEG_COLORS = ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#64748b"];
 
 function TrendChart({ reports, tab, mainopHistory }: { reports: FinanceReport[]; tab: Tab; mainopHistory: FinanceMain["mainopHistory"] }) {
   const { ref: boxRef, size } = useElementSize();
@@ -88,11 +88,20 @@ function TrendChart({ reports, tab, mainopHistory }: { reports: FinanceReport[];
         const sum = (arr: { income: number }[]) => arr.reduce((a, s) => a + s.income, 0);
         return Math.max(sum(r.segs) + r.other.income, sum(r.segs) + r.other.profit);
       });
-      const yMax = Math.max(...totals, 1);
-      const Ym = (v: number) => T + (1 - v / yMax) * plotH;
+      // 右轴: 总营收/净利同比线(与柱零轴对齐)
+      const pcts = rows.flatMap((r) => [r.revenueYoY, r.profitYoY]);
+      const [[mMin, mMax], [pMin, pMax]] = alignZero(0, Math.max(...totals, 1), Math.min(...pcts, 0), Math.max(...pcts, 0) || 1);
+      const Ym = (v: number) => T + (1 - (v - mMin) / (mMax - mMin)) * plotH;
+      const Yp = (v: number) => T + (1 - (v - pMin) / (pMax - pMin)) * plotH;
       const gridFracs = [0.2, 0.4, 0.6, 0.8];
-      const ticks = gridFracs.map((f) => ({ y: T + f * plotH, m: yMax - f * yMax }));
-      return { mode: "perf" as const, W, H, L, R, T, B, n, slot, cx, Ym, zeroY: Ym(0), ticks, rows: per, segNames: [...topNames, "其他"] };
+      const ticks = gridFracs.map((f) => ({
+        y: T + f * plotH,
+        m: mMax - f * (mMax - mMin),
+        p: pMax - f * (pMax - pMin),
+      }));
+      const line = (key: "revenueYoY" | "profitYoY") =>
+        rows.map((r, i) => `${cx(i).toFixed(1)},${Yp(r[key]).toFixed(1)}`).join(" ");
+      return { mode: "perf" as const, W, H, L, R, T, B, n, slot, cx, Ym, Yp, zeroY: Ym(0), ticks, rows: per, segNames: [...topNames, "其他"], line };
     }
 
     if (tab === "quality") {
@@ -171,11 +180,15 @@ function TrendChart({ reports, tab, mainopHistory }: { reports: FinanceReport[];
   // 图例(按模式): 业绩 = 各主营段; 质量/杠杆 = 各自序列
   const legend: { label: string; cls: string; style?: React.CSSProperties }[] =
     chart.mode === "perf"
-      ? chart.segNames.map((name, i) => ({
-          label: name,
-          cls: "h-[7px] w-3 rounded-sm",
-          style: { background: SEG_COLORS[i] },
-        }))
+      ? [
+          ...chart.segNames.map((name, i) => ({
+            label: name,
+            cls: "h-[7px] w-3 rounded-sm",
+            style: { background: SEG_COLORS[i] },
+          })),
+          { label: "营收同比", cls: "w-4 border-t-2 border-dashed border-sky-400" },
+          { label: "净利同比", cls: "w-4 border-t-2 border-rose-400" },
+        ]
       : chart.mode === "quality"
         ? chart.series.map((s) => ({
             label: s.key === "roe" ? "ROE" : s.key === "grossMargin" ? "毛利率" : "净利率",
@@ -252,6 +265,9 @@ function TrendChart({ reports, tab, mainopHistory }: { reports: FinanceReport[];
                 <text x={L - 3} y={t.y + 3} fontSize={9} fill={AXIS} textAnchor="end" style={TNUM}>
                   {(t.m / 1e8).toFixed(0)}亿
                 </text>
+                <text x={W - chart.R + 3} y={t.y + 3} fontSize={9} fill={AXIS} style={TNUM}>
+                  {t.p.toFixed(0)}%
+                </text>
               </g>
             ))
           : chart.mode === "leverage"
@@ -310,6 +326,9 @@ function TrendChart({ reports, tab, mainopHistory }: { reports: FinanceReport[];
                 </g>
               );
             })}
+            {/* 总营收/净利同比线(右轴): 净利同比 rose 实线 / 营收同比 sky 虚线 */}
+            <polyline points={chart.line("revenueYoY")} fill="none" stroke="#38bdf8" strokeWidth={1.2} strokeDasharray="3 2" strokeLinejoin="round" />
+            <polyline points={chart.line("profitYoY")} fill="none" stroke="#fb7185" strokeWidth={1.4} strokeLinejoin="round" />
           </>
         ) : chart.mode === "quality" ? (
           <>
