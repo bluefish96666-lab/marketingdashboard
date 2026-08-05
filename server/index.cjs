@@ -678,14 +678,14 @@ async function handleFutureMinute(code) {
     const q = parseSinaDomestic(await curlText(`https://hq.sinajs.cn/list=${code}`, { referer }));
     return { code, prec: q[code]?.prev || 0, points: pts };
   }
-  throw new Error("bad code");
+  throw Object.assign(new Error(`bad code: ${code}`), { status: 400 });
 }
 
 /* ---------------- 期货日线K线(新浪 内盘nf_/外盘hf_, 全历史免费) ---------------- */
 async function handleFutureDaily(code, n = 400) {
   const isGlobal = code.startsWith("hf_");
   const symbol = code.replace(/^(nf_|hf_)/, "");
-  if (!symbol || (!code.startsWith("nf_") && !isGlobal)) throw new Error("bad code");
+  if (!symbol || (!code.startsWith("nf_") && !isGlobal)) throw Object.assign(new Error(`bad code: ${code}`), { status: 400 });
   const api = isGlobal
     ? `GlobalFuturesService.getGlobalFuturesDailyKLine?symbol=${encodeURIComponent(symbol)}`
     : `InnerFuturesNewService.getDailyKLine?symbol=${encodeURIComponent(symbol)}`;
@@ -811,7 +811,7 @@ function emEnqueue(fn) {
 
 async function handleStockBoards(code) {
   const m = String(code || "").toLowerCase().match(/^(sh|sz|bj|nq)(\d{6})$/);
-  if (!m) throw new Error("bad code");
+  if (!m) throw Object.assign(new Error(`bad code: ${code}`), { status: 400 });
   const market = m[1] === "sh" ? 1 : 0;
   return emEnqueue(async () => {
     let lastErr = new Error("empty stock-boards");
@@ -2259,7 +2259,7 @@ const server = http.createServer(async (req, res) => {
             send(res, 413, { ok: false, error: "payload too large" }, cors);
             return;
           }
-          try { body = JSON.parse(r.buf.toString()); } catch { body = {}; }
+          try { body = JSON.parse(r.buf.toString()); } catch { send(res, 400, { ok: false, error: "invalid json body" }, cors); return; }
         }
         const data = await routes[u.pathname](u.searchParams, body);
         send(res, 200, { ok: true, data, ts: Date.now() }, cors);
