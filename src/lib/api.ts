@@ -515,9 +515,51 @@ export const api = {
   financeMain: (code: string) => get<FinanceMain>(`/api/finance-main?code=${encodeURIComponent(code)}`),
   financeBoard: (period = "") => get<FinanceBoard>(`/api/finance-board${period ? `?period=${encodeURIComponent(period)}` : ""}`),
   financeForecast: (period = "") => get<FinanceForecast>(`/api/finance-forecast${period ? `?period=${encodeURIComponent(period)}` : ""}`),
+  /** Artificial Analysis 全模型定价(free 层, 24h 服务端缓存 + 每日快照) */
+  aaModels: () => get<AaModelsResp>(`/api/aa-models`),
+  /** traktoken 支出指数(60 天指数 + 降价事件) */
+  spendIndex: () => get<SpendIndexResp>(`/api/spend-index`),
 };
 
 /** OpenRouter 用量轮询(1 小时) */
 export function useOpenRouterUsage() {
   return usePolling(() => api.openRouterUsage(), 3600000);
+}
+
+/* ---------------- 大模型定价(Artificial Analysis + traktoken) ---------------- */
+
+export interface AaModel {
+  slug: string;
+  name: string;
+  vendor: string;
+  release: string;
+  /** 智能指数(AA 口径) */
+  intel: number | null;
+  /** 每百万 token 输入价(USD) */
+  input: number | null;
+  /** 每百万 token 输出价(USD) */
+  output: number | null;
+  cacheHit: number | null;
+  /** 完成实际基准任务的总成本(USD, 性价比指标) */
+  taskCost: number | null;
+}
+
+export interface AaModelsResp {
+  models: AaModel[];
+  history: Record<string, { name: string; vendor: string; points: { t: string; i: number | null; o: number | null; task: number | null }[] }>;
+  source: string;
+}
+
+export interface SpendIndexResp {
+  points: {
+    date: string;
+    ttsi: number | null;
+    pct: number | null;
+    indexPoint: number | null;
+    closed: number | null;
+    open: number | null;
+    premium: number | null;
+  }[];
+  events: { date: string; text: string }[];
+  source: string;
 }

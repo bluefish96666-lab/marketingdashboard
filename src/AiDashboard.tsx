@@ -1,13 +1,21 @@
 import { DashboardHeader } from "@/components/dash/DashboardHeader";
-import { DashboardLayout, type PanelRowDef } from "@/components/dash/DashboardLayout";
+import { AiGrid } from "@/components/dash/AiGrid";
 import { OpenRouterPanel } from "@/components/dash/OpenRouterPanel";
+import { TtsiTrendPanel, EventPanel, ModelPricePanel, ValueScatterPanel } from "@/components/dash/ModelCostPanel";
 import { useFullscreen } from "@/hooks/useFullscreen";
 
-const PANEL_ROWS: PanelRowDef[] = [
+// 2×3 网格: 大模型 Token 消耗跨两行占第一列, 其余 4 面板各占一格
+const CELLS = [
   {
-    defaultH: 1.0,
-    panels: [{ id: "openrouter", component: OpenRouterPanel, defaultW: 1.0, mobileH: "h-[500px]" }],
+    id: "openrouter",
+    component: OpenRouterPanel,
+    area: "lg:col-start-1 lg:row-start-1 lg:row-span-2",
+    mobileH: "h-[500px]",
   },
+  { id: "ttsi-trend", component: TtsiTrendPanel, area: "lg:col-start-2 lg:row-start-1", mobileH: "h-[380px]" },
+  { id: "price-events", component: EventPanel, area: "lg:col-start-3 lg:row-start-1", mobileH: "h-[380px]" },
+  { id: "price-table", component: ModelPricePanel, area: "lg:col-start-2 lg:row-start-2", mobileH: "h-[380px]" },
+  { id: "value-scatter", component: ValueScatterPanel, area: "lg:col-start-3 lg:row-start-2", mobileH: "h-[380px]" },
 ];
 
 export default function AiDashboard() {
@@ -31,7 +39,7 @@ export default function AiDashboard() {
         isFullscreen={isFullscreen}
         onToggleFullscreen={toggle}
       />
-      <DashboardLayout rows={PANEL_ROWS} />
+      <AiGrid cells={CELLS} />
     </div>
   );
 }

@@ -30,6 +30,7 @@ A-shares / HK / US stocks · Commodities · US Treasury yields · Sector heat ·
 - **💰 Money-flow tracking** — Top stocks by main-force net inflow, minute-level cumulative sector flow curves, hot / top-gainer / top-loser lists
 - **⛓️ Industry-chain panorama** — Semiconductors, AI compute, EV, robotics, innovative drugs and more; upstream/midstream/downstream tickers linked to live quotes. Stock lists can be edited manually or fetched automatically from iwencai
 - **🤖 AI cockpit** — OpenRouter daily rankings API tracking token-consumption trends of 50+ global LLM providers (7d–1y ranges), stacked-area share charts by provider/country/region, 60+ day long-range history
+- **💹 LLM price-competition watch** — Four panels on a 2×3 grid: TTSI spend-index trend (weighted / closed-source / open-source price lines on a 0-based axis, multi-month full history from a local `ttsi.csv` CC BY 4.0 archive merged with the daily RSS tail), model price table (~400 models, sortable by intelligence / input / output / task cost), value scatter (intelligence index × task cost on a log axis, vendor colors), and a price-cut / share-shift event feed from TrakToken daily annotations
 - **🪟 Earnings window (/fin)** — Earnings-season macro view: disclosure calendar (14-day rhythm bars + today's list), earnings forecasts (beat/miss stats bar + profit-range details), industry profit ranking (scale × momentum dual encoding), stock profit ranking (by amount / growth), plus per-company 12-quarter trends (revenue/profit bars + ROE/gross/net margin lines)
 - **🏷️ Commodity prices page (/goods)** — Main-contract futures daily trends across 6 groups (precious / base / ferrous / energy-chem / agri / international energy) with 30d–365d ranges, plus Sunsirs spot quotes (accumulated daily) and spot–futures basis tables
 - **📰 7×24 news flash** — Scrolling global financial news with auto-highlighted macro keywords and industry-chain mentions
@@ -50,6 +51,8 @@ flowchart LR
         C3[CNBC / Binance] --> D
         C4[iwencai] --> D
         C5[OpenRouter rankings] --> D
+        C6[Artificial Analysis API] --> D
+        C7[TrakToken TTSI RSS] --> D
     end
     subgraph This project
         D["Node data proxy<br/>in-memory TTL cache"] -->|"/api/*"| E["React 19 frontend<br/>polling refresh"]
@@ -58,8 +61,9 @@ flowchart LR
 ```
 
 - The frontend prefers the bundled Node proxy; when it is unavailable, some endpoints (Tencent / Wallstreetcn) gracefully fall back to direct browser connections
-- **Unified client quote hub**: all panel prices / changes come from a single client-side quote hub (`src/lib/market.ts`) that batch-fetches every 5s and distributes one snapshot — the same ticker renders the same frame everywhere; server-side quotes are cached per code (1.5s) and watch-set changes only fetch the new codes
-- Per-endpoint server cache TTLs (1.5s for quotes up to 24h for sector membership), bounded capacity (LRU + periodic sweep), no database, no external storage
+- **Unified client quote hub**: all panel prices / changes come from a single client-side quote hub (`src/lib/market.ts`) that batch-fetches every 5s and distributes one snapshot — the same ticker renders the same frame everywhere; server-side quotes are cached per code (5s, aligned with the client poll loop) and watch-set changes only fetch the new codes
+- Per-endpoint server cache TTLs (5s for quotes up to 24h for sector membership), bounded capacity (LRU + periodic sweep), no database, no external storage
+- **Upstream-friendly under many concurrent users**: per-code TTL caches + in-flight dedup share one upstream fetch across concurrent cache misses, failure backoff (5s→2min negative caching) keeps a downed upstream from being hammered, browser-direct fallbacks are throttled per code, and `/api/stats` exposes request / upstream-fetch / 429 counters
 - Spot prices are collected by the server every 4 hours into local history files — history grows day by day without the frontend being online
 - Single-process production: one port serves both the API and the built frontend
 
@@ -84,8 +88,12 @@ npm run dev
 
 ```bash
 npm run build   # builds to dist/
-# Optional: configure an OpenRouter API key (AI cockpit panel)
-# echo 'OPENROUTER_API_KEY=sk-or-v1-xxxx' > server/.env
+# Optional: configure API keys (AI panels)
+#   echo 'OPENROUTER_API_KEY=sk-or-v1-xxxx' > server/.env          # AI cockpit usage panel
+#   echo 'ARTIFICIAL_ANALYSIS_API_KEY=aa_xxxx' >> server/.env      # LLM price panels
+# Optional: full TTSI history — download ttsi.csv from traktoken.com and
+# place it at server/data/ttsi.csv (CC BY 4.0). Without it the trend
+# panel falls back to the 60-day RSS tail automatically.
 npm start       # single process, visit http://localhost:3000
 ```
 
@@ -170,23 +178,28 @@ During development the frontend talks to the local proxy via `/api`:
 | `/api/finance-forecast?period=...` | Earnings forecasts (profit range / YoY / type + beat–miss stats) |
 | `/api/chain-parse` | Industry-chain text parsing (auto-assigns upstream / midstream / downstream by paragraph headings) |
 | `/api/openrouter-usage` | OpenRouter daily rankings (provider token consumption, persisted local cache) |
+| `/api/aa-models` | Artificial Analysis full model pricing (~600 models: intelligence index, input/output per 1M tokens, task cost; 24h cache + daily snapshot accumulates in `server/data/model-prices.json`) |
+| `/api/spend-index` | TrakToken TTSI spend index (full history from local `ttsi.csv` merged with the daily RSS tail, plus price-cut / share-shift events) |
+| `/api/stats` | Runtime observability: request / upstream-fetch / 429 counters, uptime |
 | `/api/stock-search?q=...` | Stock search (name / pinyin initials → code, Sina suggestion proxy) |
 | `/api/health` | Health check |
 
-> Note: `/api/mystery-select` and `/api/openrouter-usage` consume server-side private API keys and only accept same-origin page requests (403 cross-origin). All APIs only reflect CORS Origin to same-origin pages and are rate-limited per client IP (240 req/min public, 20 req/min private; 429 when exceeded; real client IP taken from `CF-Connecting-IP` behind Cloudflare Tunnel). POST bodies are capped at 256KB, and unmatched `/api/` routes return a 404 JSON.
+> Note: `/api/mystery-select` and `/api/openrouter-usage` consume server-side private API keys and only accept same-origin page requests (403 cross-origin); `/api/aa-models` needs `ARTIFICIAL_ANALYSIS_API_KEY` in `server/.env` but the endpoint itself stays public (24h cached). All APIs only reflect CORS Origin to same-origin pages and are rate-limited per client IP (2400 req/min public, 30 req/min private; 429 when exceeded; real client IP taken from `CF-Connecting-IP` behind Cloudflare Tunnel). POST bodies are capped at 256KB, and unmatched `/api/` routes return a 404 JSON.
 
 ## 🗂️ Project structure
 
 ```
 ├── server/
 │   ├── dev.cjs        # Dev entry: starts Vite and the data proxy together
-│   └── index.cjs      # Data proxy + production static file serving
+│   ├── index.cjs      # Data proxy + production static file serving
+│   └── data/          # Runtime-accumulated data (gitignored): spot-history.json,
+│                      #   model-prices.json, ttsi.csv (optional full TTSI history)
 ├── macos/              # macOS desktop app (Swift + WKWebView)
 │   ├── MarketCockpit.xcodeproj
 │   └── MarketCockpit/
 ├── src/
 │   ├── App.tsx        # Cockpit layout & routing (/ market cockpit, /ai AI cockpit, /goods commodity prices, /fin earnings window)
-│   ├── AiDashboard.tsx    # AI cockpit page
+│   ├── AiDashboard.tsx    # AI cockpit page (2×3 grid: OpenRouter usage spanning two rows + 4 LLM price panels)
 │   ├── FinDashboard.tsx   # Earnings window page (panels in components/dash/fin/)
 │   ├── GoodsDashboard.tsx # Commodity prices page (6-group trend panels + spot/basis panel)
 │   ├── components/
@@ -217,7 +230,7 @@ During development the frontend talks to the local proxy via `/api`:
 
 - **Frontend**: React 19 · Vite 7 · TypeScript · Tailwind CSS · lucide-react icons (charts are hand-written SVG)
 - **Backend**: Node.js native `http` (no framework) · `curl` / `fetch`
-- **Data sources**: Tencent, Sina, Eastmoney, Wallstreetcn, CNBC, Binance, Sunsirs and other public market-data endpoints
+- **Data sources**: Tencent, Sina, Eastmoney, Wallstreetcn, CNBC, Binance, Sunsirs, OpenRouter, Artificial Analysis, TrakToken and other public market-data endpoints
 
 ## ⚠️ Disclaimer
 

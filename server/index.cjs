@@ -25,12 +25,13 @@ try {
 // 运行观测(压测/运维): 仅聚合计数, 无敏感信息; /api/stats 读取
 const stats = { reqs: 0, upstream: 0, blocked: 0, started: Date.now() };
 
-function curlText(url, { referer, timeout = 8000, encoding = "gbk" } = {}) {
+function curlText(url, { referer, timeout = 8000, encoding = "gbk", headers } = {}) {
   stats.upstream++; // 上游调用计数(fetchText/curlText 是所有上游 fetch 的唯一出口)
   return new Promise((resolve, reject) => {
     // -sS: 静默进度但保留错误信息到 stderr, 失败原因可诊断(28=超时, 35=TLS握手, 6=DNS...)
     const args = ["-sS", "--max-time", String(Math.ceil(timeout / 1000)), "-H", `User-Agent: ${UA}`];
     if (referer) args.push("-H", `Referer: ${referer}`);
+    for (const [k, v] of Object.entries(headers || {})) args.push("-H", `${k}: ${v}`);
     args.push(url);
     execFile("curl", args, { maxBuffer: 4 * 1024 * 1024, encoding: "buffer" }, (err, stdout, stderr) => {
       if (err) {
@@ -48,14 +49,14 @@ const DIST = path.join(__dirname, "..", "dist");
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36";
 
 /* ---------------- 基础工具 ---------------- */
-async function fetchText(url, { referer, gbk = false, timeout = 8000 } = {}) {
+async function fetchText(url, { referer, gbk = false, timeout = 8000, headers } = {}) {
   stats.upstream++;
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeout);
   try {
-    const headers = { "User-Agent": UA, Accept: "*/*" };
-    if (referer) headers["Referer"] = referer;
-    const resp = await fetch(url, { headers, signal: ctrl.signal });
+    const h = { "User-Agent": UA, Accept: "*/*", ...headers };
+    if (referer) h["Referer"] = referer;
+    const resp = await fetch(url, { headers: h, signal: ctrl.signal });
     const buf = Buffer.from(await resp.arrayBuffer());
     return gbk ? iconv.decode(buf, "gbk") : buf.toString("utf-8");
   } finally {
@@ -1527,6 +1528,121 @@ async function handleSpotTable() {
   return { date, rows, history };
 }
 
+/* ---------------- Artificial Analysis 模型定价(free 层, ~600 模型) ---------------- */
+const AA_API_KEY = process.env.ARTIFICIAL_ANALYSIS_API_KEY || "";
+const MODEL_PRICES_FILE = path.join(__dirname, "data", "model-prices.json");
+
+async function handleAaModels() {
+  if (!AA_API_KEY) { const e = new Error("未配置 ARTIFICIAL_ANALYSIS_API_KEY(server/.env)"); e.status = 500; throw e; }
+  // free 层 100 次/天: 3 页 × 200, 每次上游刷新约 3 次调用, 24h 缓存足够
+  const models = [];
+  let page = 1;
+  let hasMore = true;
+  while (hasMore && page <= 4) {
+    const j = JSON.parse(
+      await fetchText(`https://artificialanalysis.ai/api/v2/language/models/free?page=${page}&page_size=200`, {
+        referer: "https://artificialanalysis.ai/",
+        headers: { "x-api-key": AA_API_KEY },
+      })
+    );
+    for (const d of j.data || []) {
+      const intelCost = d.artificial_analysis_intelligence_index_cost;
+      models.push({
+        slug: d.slug,
+        name: d.name,
+        vendor: d.model_creator?.name || "",
+        release: d.release_date || "",
+        intel: d.evaluations?.artificial_analysis_intelligence_index ?? null,
+        input: d.pricing?.price_1m_input_tokens ?? null,
+        output: d.pricing?.price_1m_output_tokens ?? null,
+        cacheHit: d.pricing?.price_1m_cache_hit_tokens ?? null,
+        taskCost: intelCost?.cost_per_task?.total_cost ?? null,
+      });
+    }
+    hasMore = j.pagination?.has_more === true;
+    page++;
+  }
+  // 每日快照积累(与 spot-history 同模式): 供价格趋势线使用, 按日去重
+  let history = {};
+  try { history = JSON.parse(fs.readFileSync(MODEL_PRICES_FILE, "utf-8") || "{}"); } catch {}
+  const today = bjToday();
+  for (const m of models) {
+    if (m.input == null && m.output == null) continue;
+    const arr = history[m.slug] || (history[m.slug] = { name: m.name, vendor: m.vendor, points: [] });
+    const last = arr.points[arr.points.length - 1];
+    if (last && last.t === today) last.i = m.input, last.o = m.output, last.task = m.taskCost;
+    else arr.points.push({ t: today, i: m.input, o: m.output, task: m.taskCost });
+    if (arr.points.length > 730) arr.points.splice(0, arr.points.length - 730);
+  }
+  try {
+    fs.mkdirSync(path.dirname(MODEL_PRICES_FILE), { recursive: true });
+    await fs.promises.writeFile(MODEL_PRICES_FILE, JSON.stringify(history));
+  } catch (e) { console.error("[aa] write history error:", e?.message || e); }
+  return { models, history, source: "Artificial Analysis free API" };
+}
+
+/* ---------------- traktoken 支出指数(全量 CSV + RSS 补尾 + 降价事件) ---------------- */
+const TTSI_CSV_FILE = path.join(__dirname, "data", "ttsi.csv");
+
+/** 解析 ttsi.csv(CC BY 4.0, 列: date,ttsi,ma7,spend_price_usd,ma7,f... 见文件头注释) */
+function parseTtsiCsv(text) {
+  const points = [];
+  for (const line of text.split("\n")) {
+    if (!line || line.startsWith("#")) continue;
+    const f = line.split(",");
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(f[0] || "")) continue;
+    points.push({
+      date: f[0],
+      ttsi: num(f[3]),     // spend_price_usd 全市场用量加权价
+      indexPoint: num(f[1]), // ttsi 指数点位
+      closed: num(f[6]),   // spend_price_f_usd 闭源前沿价
+      open: num(f[8]),     // spend_price_o_usd 开源权重价
+      premium: num(f[9]),  // frontier_premium 前沿溢价
+      pct: null,
+    });
+  }
+  return points;
+}
+
+async function handleSpendIndex() {
+  // 全量历史: 本地 ttsi.csv 优先, RSS 提供事件流 + 补齐 CSV 之后的新日期
+  let csvPoints = [];
+  try {
+    csvPoints = parseTtsiCsv(fs.readFileSync(TTSI_CSV_FILE, "utf-8"));
+  } catch (e) { console.error("[ttsi] csv read error:", e?.message || e); }
+  const csvDates = new Set(csvPoints.map((p) => p.date));
+
+  const text = await fetchText("https://www.traktoken.com/spend-index/feed.xml", { referer: "https://www.traktoken.com/" });
+  const rssPoints = [];
+  const events = [];
+  for (const m of text.matchAll(/<item>([\s\S]*?)<\/item>/g)) {
+    const it = m[1];
+    const strip = (tag) => (it.match(new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`)) || [,""])[1].replace(/<[^>]+>/g, "").replace(/&amp;/g, "&").trim();
+    const title = strip("title");
+    const desc = strip("description");
+    const dm = title.match(/^(\d{4}-\d{2}-\d{2})/);
+    if (!dm) continue;
+    const ttsi = title.match(/\$([\d.]+)\/M/);
+    const pct = title.match(/([+-][\d.]+)%/);
+    rssPoints.push({
+      date: dm[1],
+      ttsi: ttsi ? parseFloat(ttsi[1]) : null,
+      pct: pct ? parseFloat(pct[1]) : null,
+      indexPoint: num(desc.match(/指数点位\s*([\d.]+)/)?.[1]),
+      closed: num(desc.match(/闭源前沿\s*\$([\d.]+)\/M/)?.[1]),
+      open: num(desc.match(/开源权重\s*\$([\d.]+)\/M/)?.[1]),
+      premium: num(desc.match(/前沿溢价\s*([\d.]+)\s*倍/)?.[1]),
+    });
+    // 事件标注: 标题第 3 段(降幅/份额变动), 如 "GPT-5.6 Luna (max) 降价 80%"
+    const parts = title.split("·").map((s) => s.trim());
+    if (parts.length >= 3 && !parts[2].startsWith("TTSI")) events.push({ date: dm[1], text: parts[2] });
+  }
+  events.reverse(); // RSS 最新在前, 翻转为时间升序
+
+  const merged = [...csvPoints, ...rssPoints.filter((p) => !csvDates.has(p.date))].sort((a, b) => (a.date < b.date ? -1 : 1));
+  return { points: merged, events, source: "TrakToken TTSI 全量(CC BY 4.0)" };
+}
+
 /* ---------------- 生意社化工现货(报价中心 plist 页, 中位数为代表价) ---------------- */
 async function handleChemSpot(id, name) {
   if (!/^\d{1,10}$/.test(id)) { const e = new Error("bad id"); e.status = 400; throw e; }
@@ -1761,6 +1877,8 @@ function handleChainParse(body) {
 /* ---------------- 主机路由表 ---------------- */
 const routes = {
   "/api/quotes": async (q) => handleQuotes(q.get("codes") || ""), // 内部按代码独立缓存(TTL 5s)
+  "/api/aa-models": async () => cached("aa-models", 24 * 3600 * 1000, () => handleAaModels()), // AA 全模型定价, 24h 缓存 + 每日快照落盘
+  "/api/spend-index": async () => cached("spend-index", 6 * 3600 * 1000, () => handleSpendIndex()), // traktoken 支出指数(60天 + 事件)
   "/api/stats": async () => ({ reqs: stats.reqs, upstream: stats.upstream, blocked: stats.blocked, uptimeSec: Math.round((Date.now() - stats.started) / 1000) }),
   "/api/minute": async (q) =>
     cached(`minute:${q.get("code")}`, 5000, () => handleMinute(q.get("code") || "sh000001")),

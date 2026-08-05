@@ -30,6 +30,7 @@
 - **💰 资金流向追踪** — 个股主力净流入 TOP 榜、板块资金分钟级累计曲线、热门股 / 涨幅 / 跌幅榜单
 - **⛓️ 产业链全景** — 半导体、AI 算力、新能源车、机器人、创新药等产业链，上中下游标的分层展示并联动行情。支持手动编辑或从问财自动获取股票列表
 - **🤖 AI 观察** — OpenRouter 日度榜单 API，追踪全球 50+ 大模型厂商 Token 消耗量趋势（支持 7d~1y 时间范围），按厂商/国家/地区堆叠面积图展示份额变化，支持 60 天以上超长历史回溯
+- **💹 大模型价格竞争观察** — 2×3 网格四个面板：TTSI 支出指数趋势（全市场加权 / 闭源前沿 / 开源权重三线，纵轴从 0 起，本地 `ttsi.csv`（CC BY 4.0）全量历史与 RSS 日更尾部合并）、大模型价格表（约 400 个模型，智能/输入/输出/任务成本可排序）、性价比散点（智能指数 × 任务成本对数轴，厂商配色）、降价/份额变动事件流（TrakToken 每日标注）
 - **🪟 财报窗口（/fin）** — 财报季宏观视角：财报披露日历（14 天柱状节奏 + 今日清单）、业绩预告（预喜/预悲统计条 + 净利区间明细）、行业盈利榜（规模 × 景气度双编码）、个股盈利榜（净利额/增速切换），以及单公司近 12 期财报趋势（营收净利柱线 + ROE/毛利率/净利率）
 - **🏷️ 商品价格页（/goods）** — 贵金属 / 基本金属 / 黑色 / 能化 / 农产品 / 国际能源 6 大分组期货主力日线趋势（新浪全历史 K 线，30d~365d 区间切换），生意社现货日度报价（历史逐日积累）与现期基差对照表
 - **📰 7×24 快讯聚合** — 全球财经快讯滚动播报，宏观关键词与产业链关联新闻自动高亮
@@ -49,6 +50,8 @@ flowchart LR
         C3[CNBC / Binance] --> D
         C4[同花顺问财] --> D
         C5[OpenRouter 榜单] --> D
+        C6[Artificial Analysis API] --> D
+        C7[TrakToken TTSI RSS] --> D
     end
     subgraph 本项目
         D["Node 数据代理<br/>内存 TTL 缓存"] -->|"/api/*"| E["React 19 前端<br/>轮询刷新"]
@@ -57,8 +60,9 @@ flowchart LR
 ```
 
 - 前端优先请求本站 Node 代理；代理不可用时，部分接口（腾讯系 / 见闻）自动降级为浏览器直连
-- **前端统一报价中心**：所有面板的价格 / 涨跌幅由单一客户端报价中心（`src/lib/market.ts`）按 5s 批量拉取并分发同一快照，同一只股票全站同帧；服务端报价按代码独立缓存（1.5s），集合变化只补新码
-- 服务端按接口粒度设置缓存 TTL（行情 1.5s ~ 板块归属 24h），缓存容量有界（LRU + 定时清扫），无数据库、无外部存储
+- **前端统一报价中心**：所有面板的价格 / 涨跌幅由单一客户端报价中心（`src/lib/market.ts`）按 5s 批量拉取并分发同一快照，同一只股票全站同帧；服务端报价按代码独立缓存（5s，与客户端轮询周期对齐），集合变化只补新码
+- 服务端按接口粒度设置缓存 TTL（行情 5s ~ 板块归属 24h），缓存容量有界（LRU + 定时清扫），无数据库、无外部存储
+- **多用户并发友好**：按代码 TTL 缓存 + inflight 去重（并发缓存失效共享同一次上游拉取）、上游失败退避（5s→2min 负缓存，宕机时不再被反复锤打）、浏览器直连兜底按 code 节流、`/api/stats` 暴露请求数/上游调用数/429 计数
 - 现货价格由服务端每 4 小时定时采集并写入本地历史文件，无需前端在线，历史随天数自然生长
 - 生产环境单进程运行：同一端口同时提供 API 与前端静态文件
 
@@ -83,8 +87,11 @@ npm run dev
 
 ```bash
 npm run build   # 构建到 dist/
-# 可选：配置 OpenRouter API Key（AI 观察面板）
-# echo 'OPENROUTER_API_KEY=sk-or-v1-xxxx' > server/.env
+# 可选：配置 API Key（AI 相关面板）
+#   echo 'OPENROUTER_API_KEY=sk-or-v1-xxxx' > server/.env          # AI 观察用量面板
+#   echo 'ARTIFICIAL_ANALYSIS_API_KEY=aa_xxxx' >> server/.env      # 大模型价格面板
+# 可选：TTSI 全量历史 — 从 traktoken.com 下载 ttsi.csv 放到
+# server/data/ttsi.csv（CC BY 4.0）；没有时趋势面板自动降级为 60 天 RSS 尾部
 npm start       # 单进程启动，访问 http://localhost:3000
 ```
 
@@ -157,20 +164,25 @@ docker run -p 3000:3000 market-cockpit
 | `/api/finance-forecast?period=...` | 业绩预告（净利区间/同比/类型 + 预喜预悲统计） |
 | `/api/chain-parse` | 产业链文本解析（按段落标题自动分配上中下游） |
 | `/api/openrouter-usage` | OpenRouter 日度榜单（厂商 Token 消耗量，本地缓存持久化积累） |
+| `/api/aa-models` | Artificial Analysis 全模型定价（约 600 个模型：智能指数/每百万输入输出价/任务成本；24h 缓存 + 每日快照积累到 `server/data/model-prices.json`） |
+| `/api/spend-index` | TrakToken TTSI 支出指数（本地 `ttsi.csv` 全量历史 + RSS 日更尾部合并，含降价/份额变动事件） |
+| `/api/stats` | 运行观测：请求数 / 上游调用数 / 429 计数、运行时长 |
 | `/api/stock-search?q=...` | 股票搜索（名称/拼音首字母→代码，新浪建议代理） |
 | `/api/health` | 健康检查 |
 
-> 注：`/api/mystery-select` 与 `/api/openrouter-usage` 消耗服务端私有 API Key，仅接受同源页面请求（跨源 403）；全站 API 仅向同源页面反射 CORS Origin（跨源浏览器读取不授权），并按客户端 IP 限流（公开端点 240 次/分、私有端点 20 次/分，超限 429；经 Cloudflare Tunnel 部署时真实 IP 取 `CF-Connecting-IP`）；POST 请求体上限 256KB；`/api/` 未命中路由返回 404 JSON。
+> 注：`/api/mystery-select` 与 `/api/openrouter-usage` 消耗服务端私有 API Key，仅接受同源页面请求（跨源 403）；`/api/aa-models` 需要 `server/.env` 配置 `ARTIFICIAL_ANALYSIS_API_KEY`，端点本身保持公开（24h 缓存）。全站 API 仅向同源页面反射 CORS Origin（跨源浏览器读取不授权），并按客户端 IP 限流（公开端点 2400 次/分、私有端点 30 次/分，超限 429；经 Cloudflare Tunnel 部署时真实 IP 取 `CF-Connecting-IP`）；POST 请求体上限 256KB；`/api/` 未命中路由返回 404 JSON。
 
 ## 🗂️ 项目结构
 
 ```
 ├── server/
 │   ├── dev.cjs        # 开发入口：同时启动 Vite 与数据代理
-│   └── index.cjs      # 数据代理 + 生产静态文件服务
+│   ├── index.cjs      # 数据代理 + 生产静态文件服务
+│   └── data/          # 运行时积累数据（gitignore）：spot-history.json、
+│                      #   model-prices.json、ttsi.csv（可选 TTSI 全量历史）
 ├── src/
 │   ├── App.tsx        # 大屏布局与路由（/ 市场驾驶舱、/ai AI观察、/goods 商品价格、/fin 财报窗口）
-│   ├── AiDashboard.tsx    # AI 观察页
+│   ├── AiDashboard.tsx    # AI 观察页（2×3 网格：Token 消耗跨两行一列 + 4 个大模型价格面板）
 │   ├── FinDashboard.tsx   # 财报窗口页（面板见 components/dash/fin/）
 │   ├── GoodsDashboard.tsx # 商品价格页（6 分组趋势面板 + 现货/基差面板）
 │   ├── components/
@@ -187,7 +199,7 @@ docker run -p 3000:3000 market-cockpit
 
 - **前端**：React 19 · Vite 7 · TypeScript · Tailwind CSS · lucide-react 图标（图表为手写 SVG）
 - **后端**：Node.js 原生 `http`（无框架）· `curl` / `fetch`
-- **数据源**：腾讯 · 新浪 · 东方财富 · 华尔街见闻 · CNBC · Binance · 生意社 等公开行情接口
+- **数据源**：腾讯 · 新浪 · 东方财富 · 华尔街见闻 · CNBC · Binance · 生意社 · OpenRouter · Artificial Analysis · TrakToken 等公开行情接口
 
 ## ⚠️ 免责声明
 
