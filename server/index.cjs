@@ -653,7 +653,10 @@ async function handleFutureMinute(code) {
         return { t: `${String(d.getHours()).padStart(2, "0")}${String(d.getMinutes()).padStart(2, "0")}`, p: num(k[4]) };
       });
       return { code, prec: num(ticker.prevClosePrice), points: pts };
-    } catch { return { code, prec: 0, points: [] }; }
+    } catch (e) {
+      // 上游故障抛错(走 cached 负缓存退避), 不返回空数据冒充成功
+      throw Object.assign(new Error(`binance btc minute: ${e?.message || e}`), { status: 502 });
+    }
   }
   if (code.startsWith("hf_")) {
     const symbol = code.slice(3);
@@ -1993,7 +1996,7 @@ const routes = {
     const map = {};
     // 逐个走缓存(每个 code 各自 5s TTL), 但共享一次 HTTP 往返
     await Promise.all(codes.map(async (c) => {
-      try { map[c] = await cached(`minute:${c}`, 5000, () => handleMinute(c)); } catch { map[c] = null; }
+      try { map[c] = await cached(`minute:${c}`, 5000, () => handleMinute(c)); } catch (e) { map[c] = null; console.error("[batch-minute]", c, e?.message || e); }
     }));
     return map;
   },
@@ -2024,7 +2027,7 @@ const routes = {
     if (codes.length > 20) codes.length = 20;
     const map = {};
     await Promise.all(codes.map(async (c) => {
-      try { map[c] = await cached(`fmin:${c}`, 60000, () => handleFutureMinute(c)); } catch { map[c] = null; }
+      try { map[c] = await cached(`fmin:${c}`, 60000, () => handleFutureMinute(c)); } catch (e) { map[c] = null; console.error("[batch-fmin]", c, e?.message || e); }
     }));
     return map;
   },
@@ -2265,7 +2268,7 @@ const server = http.createServer(async (req, res) => {
         send(res, 200, { ok: true, data, ts: Date.now() }, cors);
       } catch (e) {
         // 内部细节只记日志; err.status 由可预期的业务错误(如队列满)携带, 其 message 可安全回显
-        console.error("[api]", u.pathname, "error:", e?.message || e);
+        console.error("[api]", u.pathname, e?.stack || e?.message || e);
         send(res, e?.status || 502, { ok: false, error: e?.status ? e.message : "upstream error" }, cors);
       }
       return;
