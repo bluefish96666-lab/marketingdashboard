@@ -76,8 +76,18 @@ function TrendChart({ reports, tab, mainopHistory }: { reports: FinanceReport[];
           (a, s) => ({ income: a.income + s.income, profit: a.profit + s.profit }),
           { income: 0, profit: 0 }
         );
-        // 合计净利(公司整体): 主营构成只统计主营段, 期间费用/减值等亏空不在其中
-        return { date: r.date, segs, other, totalNet: repByDate.get(r.date)?.netProfit ?? null, yoy: segs.map(() => null as number | null) };
+        // 合计净利(公司整体): 主营构成只统计主营段, 期间费用/减值等亏空不在其中;
+        // 同比线同样取匹配报告期的值(主营构成期与财务期粒度可能不同)
+        const rep = repByDate.get(r.date);
+        return {
+          date: r.date,
+          segs,
+          other,
+          totalNet: rep?.netProfit ?? null,
+          revYoy: rep?.revenueYoY ?? null,
+          netYoy: rep?.profitYoY ?? null,
+          yoy: segs.map(() => null as number | null),
+        };
       });
       // 各主营同比: 与 4 期前(去年同期)同名收入对比
       for (let i = 4; i < per.length; i++) {
@@ -96,10 +106,14 @@ function TrendChart({ reports, tab, mainopHistory }: { reports: FinanceReport[];
       });
       const mMax = Math.max(...ext.map((e) => e.pos), 1);
       const mMin = Math.min(...ext.map((e) => e.neg), 0);
+      // 业绩页签 X 轴统一为主营构成报告期(柱/标记/同比线同坐标)
+      const pn = per.length;
+      const pSlot = plotW / pn;
+      const pcx = (i: number) => L + i * pSlot + pSlot / 2;
       // 右轴: 总营收/净利同比线, 对数坐标(log(1+同比): 比值变化翻倍/腰斩等距,
       // +693% 奇异值不再压扁常态; 同比 ≤ -100% 无意义, 过滤)
       const ly = (pct: number) => Math.log(1 + pct / 100);
-      const pcts = rows.flatMap((r) => [r.revenueYoY, r.profitYoY]).filter((v) => v > -100);
+      const pcts = per.flatMap((r) => [r.revYoy, r.netYoy]).filter((v): v is number => v != null && v > -100);
       const lyMin = Math.min(...pcts.map(ly), 0);
       const lyMax = Math.max(...pcts.map(ly), 0) || 1;
       const Ym = (v: number) => T + (1 - (v - mMin) / (mMax - mMin)) * plotH;
@@ -114,9 +128,19 @@ function TrendChart({ reports, tab, mainopHistory }: { reports: FinanceReport[];
         if (y < T - 2 || y > T + plotH + 2) continue;
         pctTicks.push({ y, label: `${pct > 0 ? "+" : ""}${pct}%` });
       }
-      const line = (key: "revenueYoY" | "profitYoY") =>
-        rows.map((r, i) => `${cx(i).toFixed(1)},${Yp(r[key]).toFixed(1)}`).join(" ");
-      return { mode: "perf" as const, W, H, L, R, T, B, n, slot, cx, Ym, Yp, zeroY: Ym(0), ticks, pctTicks, rows: per, segNames: [...topNames, "其他"], line };
+      // 同比线: 与柱同坐标, 无匹配期/无效值断线
+      const line = (key: "revYoy" | "netYoy") => {
+        let d = "";
+        let started = false;
+        per.forEach((r, i) => {
+          const v = r[key];
+          if (v == null || v <= -100) { started = false; return; }
+          d += `${started ? "L" : "M"}${pcx(i).toFixed(1)},${Yp(v).toFixed(1)}`;
+          started = true;
+        });
+        return d;
+      };
+      return { mode: "perf" as const, W, H, L, R, T, B, n: pn, slot: pSlot, cx: pcx, Ym, Yp, zeroY: Ym(0), ticks, pctTicks, rows: per, segNames: [...topNames, "其他"], line };
     }
 
     if (tab === "quality") {
@@ -369,9 +393,9 @@ function TrendChart({ reports, tab, mainopHistory }: { reports: FinanceReport[];
                 </g>
               );
             })}
-            {/* 总营收/净利同比线(右轴, 对数坐标): 净利同比 rose 实线 / 营收同比 sky 虚线 */}
-            <polyline points={chart.line("revenueYoY")} fill="none" stroke="#38bdf8" strokeWidth={1.2} strokeDasharray="3 2" strokeLinejoin="round" />
-            <polyline points={chart.line("profitYoY")} fill="none" stroke="#fb7185" strokeWidth={1.4} strokeLinejoin="round" />
+            {/* 总营收/净利同比线(右轴, 对数坐标, 与柱同报告期): 净利同比 rose 实线 / 营收同比 sky 虚线 */}
+            <path d={chart.line("revYoy")} fill="none" stroke="#38bdf8" strokeWidth={1.2} strokeDasharray="3 2" strokeLinejoin="round" />
+            <path d={chart.line("netYoy")} fill="none" stroke="#fb7185" strokeWidth={1.4} strokeLinejoin="round" />
             {/* 右轴对数刻度(0%/±100%…, 2 倍比) */}
             {chart.pctTicks.map((t) => (
               <text key={t.label} x={W - chart.R + 3} y={t.y + 3} fontSize={9} fill={AXIS} style={TNUM}>
