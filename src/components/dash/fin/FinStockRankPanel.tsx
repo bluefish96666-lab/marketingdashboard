@@ -77,8 +77,8 @@ function RankRow({
   const loss = s.netProfit <= 0;
   return (
     <div className="relative w-full">
-      {/* 行内相对值底条(4% 透明度) */}
-      <span className="absolute bottom-0 left-0 top-0" style={{ width: `${(barV / maxV) * 100}%`, background: barColor, opacity: 0.04 }} />
+      {/* 行内相对值底条(4% 透明度, 不拦截点击) */}
+      <span className="pointer-events-none absolute bottom-0 left-0 top-0" style={{ width: `${(barV / maxV) * 100}%`, background: barColor, opacity: 0.04 }} />
       <QuoteRow
         variant="plain"
         spark
