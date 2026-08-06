@@ -12,7 +12,8 @@ const inputs = {
   priceHist: { 2022: 60, 2023: 30, 2024: 5, 2025: 1.5 },
   costHist: { 2022: 25, 2023: 3, 2024: 1, 2025: 0.3 },
   gridAnchors: MODEL.gridAnchors,
-  cloudRevHist: { 2022: 166, 2023: 193, 2024: 225, 2025: 305 },
+  cloudRevHist: { 2022: 146, 2023: 172, 2024: 205, 2025: 260 },
+  modelCoHist: { 2022: 0, 2023: 2, 2024: 6, 2025: 18, 2026: 80, 2027: 140, 2028: 200, 2029: 260, 2030: 320, 2031: 370, 2032: 410, 2033: 440, 2034: 460, 2035: 470 },
 };
 
 test("历史段 actual=true 且透传锚点值(2022-2026, 2026为当年估算)", () => {
@@ -51,15 +52,18 @@ test("预测段 price/cost 单调下降且 price 下降慢于 cost(毛利扩张)
   assert.ok(rLast > r1, `毛利剪刀差应扩大: ${r1.toFixed(1)} -> ${rLast.toFixed(1)}`);
 });
 
-test("复合 ROI: 早期为负(资本出清期), 后期转正", () => {
+test("复合 ROI: 2025 前为负(投入期), 2026 拐点, 2027 转正(市场观点)", () => {
   const s = computeSeries(inputs);
   const roi2025 = s.find((p) => p.year === 2025).roiPct;
-  const roi2035 = s.find((p) => p.year === 2035).roiPct;
-  assert.ok(roi2025 < 0, `2025 ROI 应为负: ${roi2025}`);
-  assert.ok(roi2035 > 0, `2035 ROI 应转正: ${roi2035}`);
-  // 单调性: ROI 应随年份上升(累计收入追赶资本开支)
+  const roi2026 = s.find((p) => p.year === 2026).roiPct;
+  const roi2027 = s.find((p) => p.year === 2027).roiPct;
+  assert.ok(roi2025 < 0, `2025 ROI 应为负(投入期): ${roi2025}`);
+  assert.ok(roi2026 > roi2025, "2026 ROI 应高于 2025(拐点)");
+  assert.ok(roi2027 > 0, `2027 ROI 应转正(市场观点): ${roi2027}`);
+  // 单调性: 2025(投入低谷)后 ROI 应随年份上升
   const rois = s.map((p) => p.roiPct);
-  for (let i = 1; i < rois.length; i++) assert.ok(rois[i] >= rois[i - 1], `ROI ${s[i].year} 应≥前一年`);
+  const from2025 = rois.indexOf(rois.find((r, i) => s[i].year === 2025));
+  for (let i = from2025 + 1; i < rois.length; i++) assert.ok(rois[i] >= rois[i - 1], `ROI ${s[i].year} 应≥前一年`);
 });
 
 test("电网就绪度: U型 — AI热潮期回落(瓶颈), 出清后回升(修复)", () => {

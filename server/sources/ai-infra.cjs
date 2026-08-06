@@ -17,10 +17,10 @@ module.exports = function createAiInfra(ctx) {
     // Token 单位经济学
     costDecline: -0.42,     // 生产成本年降(摩尔式)
     priceDecline: -0.35,    // 售价年降(慢于成本 → 毛利扩张)
-    // 云 AI 收入预测增速([0]=2026当年估算, [1..9]=2027-2035, 2029 后衰减)
-    revenueGrowth: [0.25, 0.25, 0.25, 0.25, 0.20, 0.16, 0.13, 0.11, 0.09, 0.08],
+    // 云 AI 收入预测增速([0]=2026当年估算, [1..9]=2027-2035): 对齐市场共识 30%→衰减
+    revenueGrowth: [0.30, 0.30, 0.28, 0.25, 0.20, 0.16, 0.13, 0.11, 0.09, 0.08],
     // AI 收入占比(云收入 × 此比例 = AI 收入): 2022 15% → 2035 70%
-    aiShare: [0.15, 0.20, 0.28, 0.35, 0.42, 0.50, 0.56, 0.60, 0.64, 0.66, 0.68, 0.69, 0.70, 0.70],
+    aiShare: [0.15, 0.20, 0.28, 0.35, 0.42, 0.50, 0.56, 0.60, 0.64, 0.66, 0.68, 0.69, 0.70, 0.70], // 保留(纯AI口径参考), 当前ROI用云整体收入
   };
   const START_YEAR = 2022;
   const FORECAST_START = 2027; // 2026 为当年估算(实际已过半), 2027 起预测
@@ -37,7 +37,6 @@ module.exports = function createAiInfra(ctx) {
     const cloudRevenue = {};
     for (const y of years) {
       const idx = y - FORECAST_START + 1; // 2027→1, 2035→9 (数组[0]为2026当年估算)
-      const shareIdx = y - START_YEAR; // aiShare 14 个, 全覆盖
       const isForecast = y >= FORECAST_START;
       capex[y] = y === FORECAST_START - 1
         ? Math.round((capex[y - 1] || capexHist[y - 1]) * (1 + MODEL.capexGrowth[0])) // 2026 当年估算
@@ -59,14 +58,15 @@ module.exports = function createAiInfra(ctx) {
         : isForecast
           ? +(cost[y - 1] * (1 + MODEL.costDecline)).toFixed(3)
           : (costHist[y] ?? null);
-      // AI 收入 = 云收入 × AI 渗透率
+      // AI 收入 = 云业务收入 + 独立模型公司收入(市场ROI口径: AI基建总变现 vs 云巨头 CapEx)
       const cloudRev = y === FORECAST_START - 1
         ? (cloudRevHist[y - 1] || 0) * (1 + MODEL.revenueGrowth[0])
         : isForecast
           ? (cloudRevenue[y - 1] * (1 + MODEL.revenueGrowth[idx]))
           : (cloudRevHist[y] ?? 0);
       cloudRevenue[y] = cloudRev;
-      revenue[y] = Math.round(cloudRev * MODEL.aiShare[shareIdx]);
+      const modelCo = (inputs.modelCoHist || {})[y] ?? 0;
+      revenue[y] = Math.round(cloudRev + modelCo);
       actual[y] = !isForecast;
       // 电网就绪度 = 容量增速 ÷ 需求增速(供需比, 0-100)
       // 需求增速 = 容量增速 × (1 + capexGrowth/0.2): AI热潮期需求爆发→回落, 出清期需求降温→回升(U型)
@@ -119,7 +119,7 @@ module.exports = function createAiInfra(ctx) {
     const priceHist = tokenOk?.priceSeries || {};
     const costHist = tokenOk?.costSeries || {};
 
-    const series = computeSeries({ capexHist, depHist, priceHist, costHist, gridAnchors: MODEL.gridAnchors, cloudRevHist: computeRevenueHist(secOk) });
+    const series = computeSeries({ capexHist, depHist, priceHist, costHist, gridAnchors: MODEL.gridAnchors, cloudRevHist: computeRevenueHist(secOk), modelCoHist: computeModelCoHist() });
     return {
       generatedAt: new Date().toISOString(),
       model: MODEL,
@@ -134,7 +134,7 @@ module.exports = function createAiInfra(ctx) {
         "grid: LBNL 年度锚点 + 模型外推(合成指数, 非官方)",
         "costPerM: 厂商不披露, 公开研究估算",
         "pricePerM: 2022-2024 定价史锚点, 2025+ OpenRouter 实时加权均价",
-        "roiPct: 累计(云AI收入-资本开支-折旧)/累计资本开支, 云收入为近似口径",
+        "roiPct: 累计(云收入+模型公司收入-资本开支)/累计资本开支; 模型公司收入为估算(OpenAI/Anthropic等)",
       ],
     };
   }
@@ -153,12 +153,17 @@ module.exports = function createAiInfra(ctx) {
     return handleFredPpi();
   }
 
-  // 云收入近似(四家云业务收入, 十亿美元): AWS+Azure+GCP
+  // 云收入近似(四家云业务收入, 十亿美元): AWS+Azure+GCP — 保守真实锚点
   function computeRevenueHist(secOk) {
     const base = {
-      2022: 166, 2023: 193, 2024: 225, 2025: 305,
+      2022: 146, 2023: 172, 2024: 205, 2025: 260,
     };
     return base;
+  }
+
+  // 独立模型公司收入(OpenAI/Anthropic/xAI/Mistral 等, 十亿美元) — AI 基建变现另一半
+  function computeModelCoHist() {
+    return { 2022: 0, 2023: 2, 2024: 6, 2025: 18, 2026: 80, 2027: 140, 2028: 200, 2029: 260, 2030: 320, 2031: 370, 2032: 410, 2033: 440, 2034: 460, 2035: 470 };
   }
 
   return { computeSeries, handleAiInfra, MODEL };
