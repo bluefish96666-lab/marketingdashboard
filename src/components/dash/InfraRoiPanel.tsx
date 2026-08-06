@@ -8,10 +8,9 @@ import { seriesPath } from "./infra-chart-math";
 
 const fmtM = (v: number) => (v >= 1e3 ? `${(v / 1e3).toFixed(1)}k` : v >= 100 ? `${Math.round(v)}` : v >= 1 ? `${v.toFixed(1)}` : v.toFixed(3));
 
-/** 单图多轴剪刀差: 左轴(log) 成本vs售价 + 右轴 ROI(默认) + CapEx/电网开关 */
+/** 单图多轴剪刀差: 左轴(log) 成本vs售价 + 右轴 ROI + CapEx/电网(常显) */
 export const InfraRoiPanel = memo(function InfraRoiPanel({ className, panelId, isZoomed, onToggleZoom }: PanelZoomProps & { className?: string }) {
   const { data, error, loading, retry } = useRetryPolling(() => api.aiInfra(), POLL.AA_MODELS);
-  const [extra, setExtra] = useState<{ capexB: boolean; grid: boolean }>({ capexB: false, grid: false });
   const svgRef = useRef<SVGSVGElement>(null);
   const [size, setSize] = useState({ w: 400, h: 240 });
   const [hover, setHover] = useState<number | null>(null);
@@ -55,14 +54,14 @@ export const InfraRoiPanel = memo(function InfraRoiPanel({ className, panelId, i
     const costPath = seriesPath(pts, "costPerM", X, lY);
     const pricePath = seriesPath(pts, "pricePerM", X, lY);
     const roiPath = seriesPath(pts, "roiPct", X, rY);
-    const capexPath = extra.capexB ? seriesPath(pts, "capexB", X, rY) : null;
-    const gridPath = extra.grid ? seriesPath(pts, "grid", X, rY) : null;
+    const capexPath = true ? seriesPath(pts, "capexB", X, rY) : null;
+    const gridPath = true ? seriesPath(pts, "grid", X, rY) : null;
 
     const xLabels: { label: string; x: number }[] = [];
     for (let i = 0; i < n; i += Math.max(1, Math.floor(n / 8))) xLabels.push({ label: String(pts[i].year), x: X(i) });
 
     return { pts, PL, PR, PT, PB, X, lY, rY, lTicks, rTicks, costPath, pricePath, roiPath, capexPath, gridPath, xLabels, leftLo, leftHi, rightLo, rightHi };
-  }, [data, size, extra]);
+  }, [data, size]);
 
   if (loading) return (
     <Panel title="AI 基础设施资本出清与复合 ROI" icon={<Activity size={14} />} accent="#fbbf24" className={className} panelId={panelId} isZoomed={isZoomed} onToggleZoom={onToggleZoom}>
@@ -78,8 +77,6 @@ export const InfraRoiPanel = memo(function InfraRoiPanel({ className, panelId, i
     </Panel>
   );
 
-  const src = data?.sources;
-  const srcBadge = src ? (src.sec.ok ? "SEC" : "SEC✗") + "·" + (src.token.ok ? "OR" : "OR✗") + "·" + (src.ppi.ok ? "FRED" : "FRED✗") : "";
   const last = chart ? chart.pts[chart.pts.length - 1] : null;
 
   return (
@@ -91,19 +88,6 @@ export const InfraRoiPanel = memo(function InfraRoiPanel({ className, panelId, i
       panelId={panelId}
       isZoomed={isZoomed}
       onToggleZoom={onToggleZoom}
-      right={
-        <div className="flex items-center gap-2 text-[10px]">
-          <span className="text-slate-500">{srcBadge}</span>
-          <label className="flex cursor-pointer items-center gap-0.5 text-slate-400">
-            <input type="checkbox" checked={extra.capexB} onChange={(e) => setExtra((s) => ({ ...s, capexB: e.target.checked }))} className="accent-amber-400" />
-            <span className="text-[9px]">CapEx</span>
-          </label>
-          <label className="flex cursor-pointer items-center gap-0.5 text-slate-400">
-            <input type="checkbox" checked={extra.grid} onChange={(e) => setExtra((s) => ({ ...s, grid: e.target.checked }))} className="accent-emerald-400" />
-            <span className="text-[9px]">电网</span>
-          </label>
-        </div>
-      }
     >
       <div className="flex h-full flex-col p-2 pt-1">
         {/* 图例 + 剪刀差状态 */}
@@ -111,9 +95,9 @@ export const InfraRoiPanel = memo(function InfraRoiPanel({ className, panelId, i
           <span className="flex items-center gap-1"><span className="inline-block h-[3px] w-3.5 rounded bg-[#38bdf8]" />售价 <span className="text-slate-600">($/M)</span></span>
           <span className="flex items-center gap-1"><span className="inline-block h-[3px] w-3.5 rounded bg-[#fb7185]" />生产成本 <span className="text-slate-600">($/M)</span></span>
           <span className="flex items-center gap-1"><span className="inline-block h-[3px] w-3.5 rounded bg-[#a78bfa]" />复合ROI <span className="text-slate-600">(右轴%)</span></span>
-          {extra.capexB && <span className="flex items-center gap-1"><span className="inline-block h-[3px] w-3.5 rounded bg-[#fbbf24]" />CapEx <span className="text-slate-600">(右轴$B)</span></span>}
-          {extra.grid && <span className="flex items-center gap-1"><span className="inline-block h-[3px] w-3.5 rounded bg-[#34d399]" />电网 <span className="text-slate-600">(右轴)</span></span>}
-          <span className="ml-auto text-slate-600">历史 2022-2025 · 预测 2026-2035</span>
+          <span className="flex items-center gap-1"><span className="inline-block h-[3px] w-3.5 rounded bg-[#fbbf24]" />CapEx <span className="text-slate-600">(右轴$B)</span></span>
+          <span className="flex items-center gap-1"><span className="inline-block h-[3px] w-3.5 rounded bg-[#34d399]" />电网 <span className="text-slate-600">(右轴)</span></span>
+          <span className="ml-auto text-slate-600">历史 2022-2026 · 预测 2027-2035</span>
         </div>
         {/* 主图 */}
         <div ref={observe} className="relative min-h-0 flex-1">
@@ -173,8 +157,8 @@ export const InfraRoiPanel = memo(function InfraRoiPanel({ className, panelId, i
                 <div className="flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-[#38bdf8]" /><span className="w-14 text-slate-400">售价</span><span className="ml-auto font-mono text-slate-200">${chart.pts[hover].pricePerM}/M</span></div>
                 <div className="flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-[#fb7185]" /><span className="w-14 text-slate-400">成本</span><span className="ml-auto font-mono text-slate-200">${chart.pts[hover].costPerM}/M</span></div>
                 <div className="flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-[#a78bfa]" /><span className="w-14 text-slate-400">ROI</span><span className={`ml-auto font-mono ${chart.pts[hover].roiPct >= 0 ? "text-emerald-400" : "text-red-400"}`}>{chart.pts[hover].roiPct}%</span></div>
-                {extra.capexB && <div className="flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-[#fbbf24]" /><span className="w-14 text-slate-400">CapEx</span><span className="ml-auto font-mono text-slate-200">${chart.pts[hover].capexB}B</span></div>}
-                {extra.grid && <div className="flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-[#34d399]" /><span className="w-14 text-slate-400">电网</span><span className="ml-auto font-mono text-slate-200">{chart.pts[hover].grid}</span></div>}
+                <div className="flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-[#fbbf24]" /><span className="w-14 text-slate-400">CapEx</span><span className="ml-auto font-mono text-slate-200">${chart.pts[hover].capexB}B</span></div>
+                <div className="flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-[#34d399]" /><span className="w-14 text-slate-400">电网</span><span className="ml-auto font-mono text-slate-200">{chart.pts[hover].grid}</span></div>
               </div>
             </div>
           )}

@@ -12,18 +12,18 @@ module.exports = function createAiInfra(ctx) {
     gridAnchors: { 2022: 82, 2023: 74, 2024: 68, 2025: 61 },
     gridCapCagr: 0.06,      // 并网容量年增
     gridDemandK: 1.55,      // 数据中心需求放大系数(需求增速 = capCagr × K)
-    // 云巨头 CapEx 预测增速(2026-2035: 高增长→见顶→出清负增长)
+    // 云巨头 CapEx 预测增速([0]=2026当年估算(年中), [1..9]=2027-2035: 高增长→见顶→出清负增长)
     capexGrowth: [0.20, 0.18, 0.16, 0.10, 0.05, 0.00, -0.05, -0.08, -0.06, -0.03],
     // Token 单位经济学
     costDecline: -0.42,     // 生产成本年降(摩尔式)
     priceDecline: -0.35,    // 售价年降(慢于成本 → 毛利扩张)
-    // 云 AI 收入预测增速(2026 起, 2029 后衰减)
+    // 云 AI 收入预测增速([0]=2026当年估算, [1..9]=2027-2035, 2029 后衰减)
     revenueGrowth: [0.25, 0.25, 0.25, 0.25, 0.20, 0.16, 0.13, 0.11, 0.09, 0.08],
     // AI 收入占比(云收入 × 此比例 = AI 收入): 2022 15% → 2035 70%
     aiShare: [0.15, 0.20, 0.28, 0.35, 0.42, 0.50, 0.56, 0.60, 0.64, 0.66, 0.68, 0.69, 0.70, 0.70],
   };
   const START_YEAR = 2022;
-  const FORECAST_START = 2026;
+  const FORECAST_START = 2027; // 2026 为当年估算(实际已过半), 2027 起预测
   const END_YEAR = 2035;
 
   /** 核心纯函数: 历史 + 预测 → 年度序列 */
@@ -36,28 +36,40 @@ module.exports = function createAiInfra(ctx) {
     const capex = {}, dep = {}, price = {}, cost = {}, grid = {}, revenue = {}, actual = {};
     const cloudRevenue = {};
     for (const y of years) {
-      const idx = y - FORECAST_START; // 预测年 0-based (capexGrowth/revenueGrowth 各 10 个)
+      const idx = y - FORECAST_START + 1; // 2027→1, 2035→9 (数组[0]为2026当年估算)
       const shareIdx = y - START_YEAR; // aiShare 14 个, 全覆盖
       const isForecast = y >= FORECAST_START;
-      capex[y] = isForecast
-        ? Math.round(capex[y - 1] * (1 + MODEL.capexGrowth[idx]))
-        : (capexHist[y] ?? 0);
-      dep[y] = isForecast
-        ? Math.round(dep[y - 1] * 1.15)
-        : (depHist[y] ?? 0);
-      price[y] = isForecast
+      capex[y] = y === FORECAST_START - 1
+        ? Math.round((capex[y - 1] || capexHist[y - 1]) * (1 + MODEL.capexGrowth[0])) // 2026 当年估算
+        : isForecast
+          ? Math.round(capex[y - 1] * (1 + MODEL.capexGrowth[idx]))
+          : (capexHist[y] ?? 0);
+      dep[y] = y === FORECAST_START - 1
+        ? Math.round((dep[y - 1] || depHist[y - 1]) * 1.15)
+        : isForecast
+          ? Math.round(dep[y - 1] * 1.15)
+          : (depHist[y] ?? 0);
+      price[y] = y === FORECAST_START - 1
         ? +(price[y - 1] * (1 + MODEL.priceDecline)).toFixed(2)
-        : (priceHist[y] ?? null);
-      cost[y] = isForecast
+        : isForecast
+          ? +(price[y - 1] * (1 + MODEL.priceDecline)).toFixed(2)
+          : (priceHist[y] ?? null);
+      cost[y] = y === FORECAST_START - 1
         ? +(cost[y - 1] * (1 + MODEL.costDecline)).toFixed(3)
-        : (costHist[y] ?? null);
+        : isForecast
+          ? +(cost[y - 1] * (1 + MODEL.costDecline)).toFixed(3)
+          : (costHist[y] ?? null);
       // AI 收入 = 云收入 × AI 渗透率
-      const cloudRev = isForecast ? (cloudRevenue[y - 1] * (1 + MODEL.revenueGrowth[idx])) : (cloudRevHist[y] ?? 0);
+      const cloudRev = y === FORECAST_START - 1
+        ? (cloudRevHist[y - 1] || 0) * (1 + MODEL.revenueGrowth[0])
+        : isForecast
+          ? (cloudRevenue[y - 1] * (1 + MODEL.revenueGrowth[idx]))
+          : (cloudRevHist[y] ?? 0);
       cloudRevenue[y] = cloudRev;
       revenue[y] = Math.round(cloudRev * MODEL.aiShare[shareIdx]);
       actual[y] = !isForecast;
       // 电网就绪度: 需求增速 = 容量增速 × K; 就绪度 = 100 × (容量/需求)
-      if (isForecast) {
+      if (isForecast || y === FORECAST_START - 1) {
         const capRatio = 1 + MODEL.gridCapCagr;
         const demRatio = 1 + MODEL.gridCapCagr * MODEL.gridDemandK;
         grid[y] = Math.max(5, Math.min(100, +((grid[y - 1] / 100) * (capRatio / demRatio) * 100).toFixed(1)));
