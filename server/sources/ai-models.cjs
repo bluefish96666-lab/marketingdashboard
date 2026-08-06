@@ -10,33 +10,45 @@ module.exports = function createAiModels(ctx) {
   /* ---------------- Artificial Analysis 模型定价(free 层, ~600 模型) ---------------- */
   async function handleAaModels() {
     if (!AA_API_KEY) { const e = new Error("未配置 ARTIFICIAL_ANALYSIS_API_KEY(server/.env)"); e.status = 500; throw e; }
-    // free 层 100 次/天: 3 页 × 200, 每次上游刷新约 3 次调用, 24h 缓存足够
-    const models = [];
-    let page = 1;
-    let hasMore = true;
-    while (hasMore && page <= 4) {
-      const j = JSON.parse(
-        await fetchText(`https://artificialanalysis.ai/api/v2/language/models/free?page=${page}&page_size=200`, {
-          referer: "https://artificialanalysis.ai/",
-          headers: { "x-api-key": AA_API_KEY },
-        })
-      );
-      for (const d of j.data || []) {
-        const intelCost = d.artificial_analysis_intelligence_index_cost;
-        models.push({
-          slug: d.slug,
-          name: d.name,
-          vendor: d.model_creator?.name || "",
-          release: d.release_date || "",
-          intel: d.evaluations?.artificial_analysis_intelligence_index ?? null,
-          input: d.pricing?.price_1m_input_tokens ?? null,
-          output: d.pricing?.price_1m_output_tokens ?? null,
-          cacheHit: d.pricing?.price_1m_cache_hit_tokens ?? null,
-          taskCost: intelCost?.cost_per_task?.total_cost ?? null,
-        });
+    let models = [];
+    try {
+      // free 层 100 次/天: 3 页 × 200, 每次上游刷新约 3 次调用, 24h 缓存足够
+      let page = 1;
+      let hasMore = true;
+      while (hasMore && page <= 4) {
+        const j = JSON.parse(
+          await fetchText(`https://artificialanalysis.ai/api/v2/language/models/free?page=${page}&page_size=200`, {
+            referer: "https://artificialanalysis.ai/",
+            headers: { "x-api-key": AA_API_KEY },
+          })
+        );
+        for (const d of j.data || []) {
+          const intelCost = d.artificial_analysis_intelligence_index_cost;
+          models.push({
+            slug: d.slug,
+            name: d.name,
+            vendor: d.model_creator?.name || "",
+            release: d.release_date || "",
+            intel: d.evaluations?.artificial_analysis_intelligence_index ?? null,
+            input: d.pricing?.price_1m_input_tokens ?? null,
+            output: d.pricing?.price_1m_output_tokens ?? null,
+            cacheHit: d.pricing?.price_1m_cache_hit_tokens ?? null,
+            taskCost: intelCost?.cost_per_task?.total_cost ?? null,
+          });
+        }
+        hasMore = j.pagination?.has_more === true;
+        page++;
       }
-      hasMore = j.pagination?.has_more === true;
-      page++;
+    } catch (e) {
+      // 上游失败(429/网络): 用落盘历史兜底, 保证面板不空
+      console.error("[aa-models] upstream fail, fallback to history:", e?.message || e);
+      const hist = readHistory(MODEL_PRICES_FILE) || {};
+      models = Object.entries(hist).map(([slug, h]) => {
+        const last = h?.points?.[h.points.length - 1] || {};
+        return { slug, name: h?.name || slug, vendor: h?.vendor || "", release: "", intel: null, input: last.i ?? null, output: last.o ?? null, cacheHit: null, taskCost: last.task ?? null };
+      }).filter((m) => m.input != null || m.output != null);
+      if (!models.length) throw e; // 历史也没有 → 抛原错
+      return { models, history: hist, source: "local snapshot (AA upstream unavailable)" };
     }
     // 每日快照积累(与 spot-history 同模式): 供价格趋势线使用, 按日去重
     let history = readHistory(MODEL_PRICES_FILE);
