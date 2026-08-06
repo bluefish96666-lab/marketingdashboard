@@ -11,6 +11,7 @@ const { execFile } = require("child_process");
 const crypto = require("crypto");
 const { num, changeOf, pctOf, fmtHHMM, toMarketCode6 } = require("./lib/format.cjs");
 const { parseCsvParam, chunked, safeRecord } = require("./lib/netutil.cjs");
+const { bjToday, readHistory, writeHistory } = require("./lib/persist.cjs");
 
 // 加载 .env
 try {
@@ -1503,9 +1504,6 @@ async function handleOpenRouterUsage() {
 /* ---------------- 生意社现期对照表(现货价/期货价/基差) + 现货历史积累 ---------------- */
 const SPOT_DATA_FILE = path.join(__dirname, "data", "spot-history.json");
 
-// 现货积累按北京时间取日期(商品交易日历)
-const bjToday = () => new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10);
-
 // 生意社华为云 HW_CHECK 质询绕过: 质询页 JS 内嵌 cookie 值, 提取后带 cookie 重试
 async function fetchSunsir(url, { timeout = 12000 } = {}) {
   const once = (cookie) => {
@@ -1564,8 +1562,7 @@ async function handleSpotTable() {
   const rows = parseSfTable(html);
   if (!rows.length) throw new Error("sunsir sf table parse empty");
   // 现货价按日积累(与 openrouter-usage 同模式), 供现货趋势线使用
-  let history = {};
-  try { history = JSON.parse(fs.readFileSync(SPOT_DATA_FILE, "utf-8") || "{}"); } catch {}
+  let history = readHistory(SPOT_DATA_FILE);
   const today = bjToday();
   for (const r of rows) {
     if (!r.spot) continue;
@@ -1574,10 +1571,7 @@ async function handleSpotTable() {
     else arr.push({ t: today, p: r.spot });
     if (arr.length > 400) arr.splice(0, arr.length - 400);
   }
-  try {
-    fs.mkdirSync(path.dirname(SPOT_DATA_FILE), { recursive: true });
-    await fs.promises.writeFile(SPOT_DATA_FILE, JSON.stringify(history)); // 异步写
-  } catch (e) { console.error("[spot] write history error:", e?.message || e); }
+  await writeHistory(SPOT_DATA_FILE, history, "spot");
   return { date, rows, history };
 }
 
@@ -1616,8 +1610,7 @@ async function handleAaModels() {
     page++;
   }
   // 每日快照积累(与 spot-history 同模式): 供价格趋势线使用, 按日去重
-  let history = {};
-  try { history = JSON.parse(fs.readFileSync(MODEL_PRICES_FILE, "utf-8") || "{}"); } catch {}
+  let history = readHistory(MODEL_PRICES_FILE);
   const today = bjToday();
   for (const m of models) {
     if (m.input == null && m.output == null) continue;
@@ -1627,10 +1620,7 @@ async function handleAaModels() {
     else arr.points.push({ t: today, i: m.input, o: m.output, task: m.taskCost });
     if (arr.points.length > 730) arr.points.splice(0, arr.points.length - 730);
   }
-  try {
-    fs.mkdirSync(path.dirname(MODEL_PRICES_FILE), { recursive: true });
-    await fs.promises.writeFile(MODEL_PRICES_FILE, JSON.stringify(history));
-  } catch (e) { console.error("[aa] write history error:", e?.message || e); }
+  await writeHistory(MODEL_PRICES_FILE, history, "aa");
   return { models, history, source: "Artificial Analysis free API" };
 }
 
@@ -1720,8 +1710,7 @@ async function handleChemSpot(id, name) {
   const price = pool.length % 2 ? pool[mid] : +((pool[mid - 1] + pool[mid]) / 2).toFixed(2);
   const dm = html.match(/>(20\d{2}-\d{2}-\d{2})</);
   // 历史积累(与现货表同一文件); 条目总数有界, 防止恶意 name 缓慢填满磁盘
-  let history = {};
-  try { history = JSON.parse(fs.readFileSync(SPOT_DATA_FILE, "utf-8") || "{}"); } catch {}
+  let history = readHistory(SPOT_DATA_FILE);
   const today = bjToday();
   if (name === "__proto__" || name === "constructor" || name === "prototype") {
     throw Object.assign(new Error("invalid name"), { status: 400 }); // 防原型污染键写盘
@@ -1732,10 +1721,7 @@ async function handleChemSpot(id, name) {
     if (arr.length && arr[arr.length - 1].t === today) arr[arr.length - 1].p = price;
     else arr.push({ t: today, p: price });
     if (arr.length > 400) arr.splice(0, arr.length - 400);
-    try {
-      fs.mkdirSync(path.dirname(SPOT_DATA_FILE), { recursive: true });
-      await fs.promises.writeFile(SPOT_DATA_FILE, JSON.stringify(history));
-    } catch (e) { console.error("[chem-spot] write history error:", e?.message || e); }
+    await writeHistory(SPOT_DATA_FILE, history, "chem-spot");
   }
   return { id, name, price, quotes: all.length, date: dm ? dm[1] : today, history: arr || [] };
 }
