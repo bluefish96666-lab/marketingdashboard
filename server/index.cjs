@@ -147,7 +147,7 @@ const QUOTE_CACHE_TTL = 5000;
 // 上游失败退避: 5s → 15s → 45s → 2min, 成功即复位。退避窗口内同 key 不再打上游(负缓存),
 // 多用户场景下上游宕机时, 全站重复轮询折叠为每窗口 1 次, 避免锤死上游
 const FAIL_BACKOFF = [5000, 15000, 45000, 120000];
-const backoffOf = (n) => FAIL_BACKOFF[Math.min(n || 0, FAIL_BACKOFF.length - 1)];
+const quoteBackoff = (n) => FAIL_BACKOFF[Math.min(n || 0, FAIL_BACKOFF.length - 1)];
 
 // 块级上游 inflight 去重表(handleQuotes 的 60 码分块 / handleStockFlows 的缺失列表):
 // 缓存过期瞬间的并发 miss 共享同一次上游拉取, 防止多用户同频轮询时每个过期窗口爆发重复请求
@@ -164,9 +164,9 @@ async function handleQuotes(codes) {
     const hit = cache.get(`q:${c}`);
     if (hit && hit.data !== undefined && now - hit.ts < QUOTE_CACHE_TTL) {
       out[c] = hit.data;
-    } else if (hit && hit.data !== undefined && hit.failAt != null && now - hit.failAt < backoffOf(hit.failCount)) {
+    } else if (hit && hit.data !== undefined && hit.failAt != null && now - hit.failAt < quoteBackoff(hit.failCount)) {
       out[c] = hit.data; // 失败退避窗口内降级返回旧数据, 不再打上游
-    } else if (hit && hit.failAt != null && now - hit.failAt < backoffOf(hit.failCount)) {
+    } else if (hit && hit.failAt != null && now - hit.failAt < quoteBackoff(hit.failCount)) {
       // 退避窗口内且无旧数据: 直接跳过, 不再打上游(负缓存)
     } else {
       missing.push(c);
@@ -222,7 +222,7 @@ async function handleQuotes(codes) {
     const hit = cache.get("q:usVIX");
     if (hit && hit.data !== undefined && now - hit.ts < QUOTE_CACHE_TTL) {
       out.usVIX = hit.data;
-    } else if (hit && hit.data !== undefined && hit.failAt != null && now - hit.failAt < backoffOf(hit.failCount)) {
+    } else if (hit && hit.data !== undefined && hit.failAt != null && now - hit.failAt < quoteBackoff(hit.failCount)) {
       out.usVIX = hit.data; // 退避窗口内降级返回旧数据
     } else if (vixInflight) {
       try { out.usVIX = await vixInflight; } catch { /* 等待者随发起者一并失败 */ }
@@ -1116,38 +1116,8 @@ async function handleTreasuryHistory() {
 }
 
 /* ---------------- TTL 缓存 + 并发合并(防上游限流) ---------------- */
-const cache = new Map();
-const CACHE_MAX = 2000; // 条目上限, 防止用户输入拼 key 导致无界增长
-
-// 清理过期/失效条目(过期按各条目自身 ttl 判断; 退避窗口内的条目保留, 供降级返回)
-function sweepCache() {
-  const now = Date.now();
-  for (const [k, v] of cache) {
-    if (v.inflight) continue;
-    const inBackoff = v.failAt != null && now - v.failAt < backoffOf(v.failCount);
-    if (v.data === undefined || (now - v.ts > (v.ttl || 60000) && !inBackoff)) cache.delete(k);
-  }
-}
-
-// 写缓存: 超限先清过期项, 仍超则按 Map 插入序淘汰最旧条目
-function cacheSet(key, entry) {
-  if (cache.has(key)) cache.delete(key); // 重插以刷新插入序
-  cache.set(key, entry);
-  if (cache.size <= CACHE_MAX) return;
-  sweepCache();
-  while (cache.size > CACHE_MAX) {
-    let oldest;
-    for (const [k, v] of cache) {
-      if (!v.inflight) { oldest = k; break; }
-    }
-    if (oldest === undefined) break; // 全部在途, 不再淘汰
-    cache.delete(oldest);
-  }
-}
-
-// 定时 sweep, unref 避免阻止进程退出
-const cacheSweeper = setInterval(sweepCache, 60000);
-cacheSweeper.unref();
+const { createCache } = require("./lib/cache.cjs");
+const { cache, set: cacheSet, sweep: sweepCache, backoffOf } = createCache();
 
 async function cached(key, ttl, fn) {
   const now = Date.now();
