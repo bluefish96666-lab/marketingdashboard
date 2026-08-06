@@ -8,6 +8,7 @@ import { PeriodTabs } from "./PeriodTabs";
 import { TNUM, fmtYi } from "./utils";
 import { useElementSize } from "@/hooks/useElementSize";
 import { AsyncContent, TabBar } from "../SharedUI";
+import { GRID, AXIS, FLAT, SERIES, UP, DOWN } from "@/lib/colors";
 
 const NAME_W = 64; // 行业名列宽
 const LABEL_W = 92; // 条右端双值预留
@@ -126,7 +127,7 @@ export function FinIndustryPanel({ className = "", ...zoomProps }: { className?:
       {...zoomProps}
       title="行业盈利榜"
       icon={<Building2 size={14} />}
-      accent="#34d399"
+      accent={SERIES[3]}
       right={
         !empty && (
           <div className="flex items-center gap-2 text-[10px]">
@@ -154,7 +155,7 @@ export function FinIndustryPanel({ className = "", ...zoomProps }: { className?:
             <svg width={tree.W} height={tree.H} className="block">
               {tree.rects.map((r, i) => {
                 // 线框化: 色块 fill 12% + 1px 同色 40% 描边, 消除实色平涂
-                const color = r.yoy >= 0 ? "#fb7185" : "#34d399";
+                const color = r.yoy >= 0 ? UP : DOWN;
                 // 文字自适应: 按格宽/格高算可容纳字数, 窄格缩字截断不整格留白;
                 // 高窄格(横排放不下)文字竖排
                 const charW = 5.9; // 9.5px 中文字符平均宽
@@ -198,7 +199,7 @@ export function FinIndustryPanel({ className = "", ...zoomProps }: { className?:
                       </text>
                     )}
                     {showVal && (
-                      <text x={r.x + 4} y={r.y + 23} fontSize={8.5} fill="#94a3b8" style={TNUM}>
+                      <text x={r.x + 4} y={r.y + 23} fontSize={8.5} fill={FLAT} style={TNUM}>
                         {fmtYi(r.v)}
                         <tspan fill={color} dx={3}>
                           {r.yoy > 0 ? "+" : ""}
@@ -216,8 +217,8 @@ export function FinIndustryPanel({ className = "", ...zoomProps }: { className?:
               {/* 底部金额刻度 + 网格线 */}
               {chart.ticks.map((v) => (
                 <g key={v}>
-                  <line x1={chart.X(v)} y1={4} x2={chart.X(v)} y2={chart.H - AXIS_H} stroke="#1e293b" strokeWidth={1} />
-                  <text x={chart.X(v)} y={chart.H - 5} fontSize={8} fill="#475569" textAnchor="middle" style={TNUM}>
+                  <line x1={chart.X(v)} y1={4} x2={chart.X(v)} y2={chart.H - AXIS_H} stroke={GRID} strokeWidth={1} />
+                  <text x={chart.X(v)} y={chart.H - 5} fontSize={8} fill={AXIS} textAnchor="middle" style={TNUM}>
                     {(v / 1e8).toLocaleString("zh-CN", { maximumFractionDigits: 0 })}亿
                   </text>
                 </g>
@@ -225,13 +226,13 @@ export function FinIndustryPanel({ className = "", ...zoomProps }: { className?:
               {chart.list.map((d, i) => {
                 const y = i * chart.rowH;
                 const up = d.yoy >= 0;
-                const color = up ? "#fb7185" : "#34d399";
+                const color = up ? UP : DOWN;
                 const bw = Math.max(chart.X(d.netProfit) - NAME_W, 2);
                 const bh = Math.min(9, chart.rowH - 5);
                 return (
                   <g key={d.name} onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(-1)}>
-                    {hover === i && <rect x={0} y={y} width={chart.W} height={chart.rowH} fill="#1e293b" opacity={0.5} />}
-                    <text x={4} y={y + chart.rowH / 2 + 3} fontSize={9} fill="#94a3b8">
+                    {hover === i && <rect x={0} y={y} width={chart.W} height={chart.rowH} fill={GRID} opacity={0.5} />}
+                    <text x={4} y={y + chart.rowH / 2 + 3} fontSize={9} fill={FLAT}>
                       {d.name.length > 6 ? d.name.slice(0, 6) : d.name}
                     </text>
                     {/* 条: fill 25% + 1px 同色 60% 描边; 负同比行 40% 透明 + 虚线描边 */}

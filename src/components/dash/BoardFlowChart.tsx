@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import type { BoardFlow } from "@/lib/api";
 import { TNUM } from "@/lib/format";
 import { useElementSize } from "@/hooks/useElementSize";
+import { GRID, ZERO, AXIS, CROSSHAIR, FLAT } from "@/lib/colors";
 
 /** 流入红色系 / 流出绿色系(按排名渐变) */
 const REDS = ["#fb7185", "#f43f5e", "#fca5a5", "#fb923c", "#fdba74", "#e11d48", "#fecdd3", "#fda4af", "#fcd34d", "#fbbf24"];
@@ -85,14 +86,14 @@ export function BoardFlowChart({ flows, progress = 1, labelMode = "end" }: { flo
             {/* 网格与零轴 */}
             {chart.ticks.map((t, i) => (
               <g key={i}>
-                <line x1={34} y1={t.y} x2={chart.W - chart.labelW - 6} y2={t.y} stroke="#1e293b" strokeWidth={1} />
-                <text x={4} y={t.y + 3} fontSize={9} fill="#64748b" style={TNUM}>{(t.v / 1e8).toFixed(0)}亿</text>
+                <line x1={34} y1={t.y} x2={chart.W - chart.labelW - 6} y2={t.y} stroke={GRID} strokeWidth={1} />
+                <text x={4} y={t.y + 3} fontSize={9} fill={CROSSHAIR} style={TNUM}>{(t.v / 1e8).toFixed(0)}亿</text>
               </g>
             ))}
-            <line x1={34} y1={chart.Y(0)} x2={chart.W - chart.labelW - 6} y2={chart.Y(0)} stroke="#334155" strokeWidth={1} />
+            <line x1={34} y1={chart.Y(0)} x2={chart.W - chart.labelW - 6} y2={chart.Y(0)} stroke={ZERO} strokeWidth={1} />
             {/* 时间刻度 */}
             {X_TICKS.map(([i, t, anchor]) => (
-              <text key={t} x={chart.X(i)} y={chart.chartH - 8} fontSize={8} fill="#475569" textAnchor={anchor}>{t}</text>
+              <text key={t} x={chart.X(i)} y={chart.chartH - 8} fontSize={8} fill={AXIS} textAnchor={anchor}>{t}</text>
             ))}
             {/* 板块曲线 */}
             {chart.lines.map((l) => (
@@ -116,7 +117,7 @@ export function BoardFlowChart({ flows, progress = 1, labelMode = "end" }: { flo
                   y1={8}
                   x2={chart.X(chart.idx)}
                   y2={chart.chartH - 18}
-                  stroke="#94a3b8"
+                  stroke={FLAT}
                   strokeWidth={1}
                   strokeDasharray="3 3"
                 />

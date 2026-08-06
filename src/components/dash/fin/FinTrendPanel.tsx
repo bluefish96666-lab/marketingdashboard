@@ -8,7 +8,8 @@ import { TNUM, quarterLabel, fmtYi } from "./utils";
 import { clsChg, fmtPct } from "@/lib/format";
 import { useElementSize } from "@/hooks/useElementSize";
 import { AsyncContent, TabBar } from "../SharedUI";
-import { computeChart, GRID, ZERO, TICK, AXIS, SEG_COLORS, type ChartTab } from "./chart-math";
+import { computeChart, GRID, ZERO, AXIS, CROSSHAIR, SEG_COLORS, type ChartTab } from "./chart-math";
+import { CHART_BG, SERIES, TOOLTIP_BG } from "@/lib/colors";
 
 const TABS: { key: ChartTab; label: string }[] = [
   { key: "perf", label: "业绩" },
@@ -147,7 +148,7 @@ function TrendChart({ reports, tab, mainopHistory }: { reports: FinanceReport[];
           ? chart.ticks.map((t, i) => (
               <g key={i}>
                 <line x1={L} y1={t.y} x2={W - chart.R} y2={t.y} stroke={GRID} strokeWidth={1} />
-                <text x={L - 3} y={t.y + 3} fontSize={9} fill={AXIS} textAnchor="end" style={TNUM}>
+                <text x={L - 3} y={t.y + 3} fontSize={9} fill={CROSSHAIR} textAnchor="end" style={TNUM}>
                   {(t.m / 1e8).toFixed(0)}亿
                 </text>
               </g>
@@ -156,10 +157,10 @@ function TrendChart({ reports, tab, mainopHistory }: { reports: FinanceReport[];
           ? chart.ticks.map((t, i) => (
               <g key={i}>
                 <line x1={L} y1={t.y} x2={W - chart.R} y2={t.y} stroke={GRID} strokeWidth={1} />
-                <text x={L - 3} y={t.y + 3} fontSize={9} fill={AXIS} textAnchor="end" style={TNUM}>
+                <text x={L - 3} y={t.y + 3} fontSize={9} fill={CROSSHAIR} textAnchor="end" style={TNUM}>
                   {t.l.toFixed(0)}%
                 </text>
-                <text x={W - chart.R + 3} y={t.y + 3} fontSize={9} fill={AXIS} style={TNUM}>
+                <text x={W - chart.R + 3} y={t.y + 3} fontSize={9} fill={CROSSHAIR} style={TNUM}>
                   {t.r.toFixed(1)}
                 </text>
               </g>
@@ -167,7 +168,7 @@ function TrendChart({ reports, tab, mainopHistory }: { reports: FinanceReport[];
           : chart.ticks.map((t, i) => (
               <g key={i}>
                 <line x1={L} y1={t.y} x2={W - chart.R} y2={t.y} stroke={GRID} strokeWidth={1} />
-                <text x={L - 3} y={t.y + 3} fontSize={9} fill={AXIS} textAnchor="end" style={TNUM}>
+                <text x={L - 3} y={t.y + 3} fontSize={9} fill={CROSSHAIR} textAnchor="end" style={TNUM}>
                   {t.v.toFixed(0)}%
                 </text>
               </g>
@@ -179,7 +180,7 @@ function TrendChart({ reports, tab, mainopHistory }: { reports: FinanceReport[];
         {/* X 刻度: 隔期标注 */}
         {chart.rows.map((r, i) =>
           i % 2 === 0 ? (
-            <text key={r.date} x={chart.cx(i)} y={H - 4} fontSize={9} fill={TICK} textAnchor="middle" style={TNUM}>
+            <text key={r.date} x={chart.cx(i)} y={H - 4} fontSize={9} fill={AXIS} textAnchor="middle" style={TNUM}>
               {quarterLabel(r.date)}
             </text>
           ) : null
@@ -221,8 +222,8 @@ function TrendChart({ reports, tab, mainopHistory }: { reports: FinanceReport[];
                       width={5}
                       height={5}
                       transform={`rotate(45 ${npX + bw / 2} ${chart.Ym(r.totalNet)})`}
-                      fill={r.totalNet >= 0 ? "#22d3ee" : "#fb7185"}
-                      stroke="#0b1120"
+                      fill={r.totalNet >= 0 ? SERIES[0] : SERIES[1]}
+                      stroke={CHART_BG}
                       strokeWidth={0.5}
                     />
                   )}
@@ -237,11 +238,11 @@ function TrendChart({ reports, tab, mainopHistory }: { reports: FinanceReport[];
               );
             })}
             {/* 总营收/净利同比线(右轴, 对数坐标, 与柱同报告期): 净利同比 rose 实线 / 营收同比 sky 虚线 */}
-            <path d={chart.line("revYoy")} fill="none" stroke="#38bdf8" strokeWidth={1.2} strokeDasharray="3 2" strokeLinejoin="round" />
-            <path d={chart.line("netYoy")} fill="none" stroke="#fb7185" strokeWidth={1.4} strokeLinejoin="round" />
+            <path d={chart.line("revYoy")} fill="none" stroke={SERIES[2]} strokeWidth={1.2} strokeDasharray="3 2" strokeLinejoin="round" />
+            <path d={chart.line("netYoy")} fill="none" stroke={SERIES[1]} strokeWidth={1.4} strokeLinejoin="round" />
             {/* 右轴对数刻度(0%/±100%…, 2 倍比) */}
             {chart.pctTicks.map((t) => (
-              <text key={t.label} x={W - chart.R + 3} y={t.y + 3} fontSize={9} fill={AXIS} style={TNUM}>
+              <text key={t.label} x={W - chart.R + 3} y={t.y + 3} fontSize={9} fill={CROSSHAIR} style={TNUM}>
                 {t.label}
               </text>
             ))}
@@ -292,15 +293,15 @@ function TrendChart({ reports, tab, mainopHistory }: { reports: FinanceReport[];
                   width={b.w}
                   height={h}
                   rx={1}
-                  fill="#fbbf24"
+                  fill={SERIES[4]}
                   opacity={0.55}
                 />
               );
             })}
             {/* ROIC 线: cyan 实线, 左轴% */}
-            <polyline points={chart.roicLine} fill="none" stroke="#22d3ee" strokeWidth={1.4} strokeLinejoin="round" />
+            <polyline points={chart.roicLine} fill="none" stroke={SERIES[0]} strokeWidth={1.4} strokeLinejoin="round" />
             {/* 每股OCF 线: emerald 虚线, 右轴元 */}
-            <polyline points={chart.ocfLine} fill="none" stroke="#34d399" strokeWidth={1.2} strokeDasharray="3 2" strokeLinejoin="round" />
+            <polyline points={chart.ocfLine} fill="none" stroke={SERIES[3]} strokeWidth={1.2} strokeDasharray="3 2" strokeLinejoin="round" />
             {/* 右端点标签 */}
             {(() => {
               const last = chart.rows[chart.n - 1];
@@ -308,10 +309,10 @@ function TrendChart({ reports, tab, mainopHistory }: { reports: FinanceReport[];
               const ocfY = chart.Yl(last.ocfPerShare);
               return (
                 <>
-                  <text x={W - chart.R + 4} y={roicY + 3} fontSize={9} fill="#22d3ee" style={TNUM}>
+                  <text x={W - chart.R + 4} y={roicY + 3} fontSize={9} fill={SERIES[0]} style={TNUM}>
                     ROIC {last.roic.toFixed(1)}%
                   </text>
-                  <text x={W - chart.R + 4} y={ocfY + 3} fontSize={9} fill="#34d399" style={TNUM}>
+                  <text x={W - chart.R + 4} y={ocfY + 3} fontSize={9} fill={SERIES[3]} style={TNUM}>
                     OCF {last.ocfPerShare.toFixed(2)}
                   </text>
                 </>
@@ -323,12 +324,12 @@ function TrendChart({ reports, tab, mainopHistory }: { reports: FinanceReport[];
         <line x1={L} y1={plotBottom} x2={W - chart.R} y2={plotBottom} stroke={GRID} strokeWidth={1} />
         {/* 悬停十字线 */}
         {hovIdx >= 0 && (
-          <line x1={chart.cx(hovIdx)} y1={chart.T} x2={chart.cx(hovIdx)} y2={plotBottom} stroke="#475569" strokeWidth={1} strokeDasharray="3 3" />
+          <line x1={chart.cx(hovIdx)} y1={chart.T} x2={chart.cx(hovIdx)} y2={plotBottom} stroke={AXIS} strokeWidth={1} strokeDasharray="3 3" />
         )}
       </svg>
       {/* 悬停数值 */}
       {hov && hovLines && (
-        <div className="pointer-events-none absolute left-1/2 top-0 z-10 -translate-x-1/2 rounded border border-slate-700/60 bg-[#0b1120]/95 px-2 py-1 text-[9px] leading-4 shadow">
+        <div className="pointer-events-none absolute left-1/2 top-0 z-10 -translate-x-1/2 rounded border border-slate-700/60 px-2 py-1 text-[9px] leading-4 shadow" style={{ background: TOOLTIP_BG + "F2" }}>
           <div className="font-semibold text-slate-200">{quarterLabel(hov.date)}</div>
           <div className={chart.mode === "perf" ? "flex flex-col gap-0.5" : "flex items-center gap-2"}>{hovLines}</div>
         </div>
@@ -350,7 +351,7 @@ export function FinTrendPanel({ className = "", ...zoomProps }: { className?: st
       {...zoomProps}
       title="公司趋势"
       icon={<TrendingUp size={14} />}
-      accent="#22d3ee"
+      accent={SERIES[0]}
       right={
         <TabBar tabs={TABS} active={tab} onChange={setTab} accent="cyan" />
       }

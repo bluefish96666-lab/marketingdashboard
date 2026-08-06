@@ -9,6 +9,7 @@ import { PeriodTabs } from "./PeriodTabs";
 import { QuoteRow } from "../QuoteRow";
 import { TNUM, fmtYi, prefixCode } from "./utils";
 import { AsyncContent, TabBar } from "../SharedUI";
+import { SERIES, UP, DOWN } from "@/lib/colors";
 
 type Tab = "profit" | "growth";
 const TABS: { key: Tab; label: string }[] = [
@@ -39,7 +40,7 @@ export function FinStockRankPanel({ className = "", ...zoomProps }: { className?
       {...zoomProps}
       title="个股盈利榜"
       icon={<BarChart3 size={14} />}
-      accent="#fb7185"
+      accent={SERIES[1]}
       right={
         <div className="flex items-center gap-2 text-[10px]">
           <PeriodTabs />
@@ -73,7 +74,7 @@ function RankRow({
   onPick: () => void;
 }) {
   const barV = tab === "profit" ? Math.max(s.netProfit, 0) : Math.max(s.profitYoY, 0);
-  const barColor = tab === "profit" ? "#fb7185" : s.profitYoY >= 0 ? "#fb7185" : "#34d399";
+  const barColor = tab === "profit" ? UP : s.profitYoY >= 0 ? UP : DOWN;
   const loss = s.netProfit <= 0;
   return (
     <div className="relative w-full">

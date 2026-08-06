@@ -6,6 +6,7 @@ import { useQuote } from "@/lib/market";
 import { usePolling } from "@/hooks/usePolling";
 import { isTv } from "@/lib/tv";
 import { TNUM, clsChg, bgChg, fmtPrice, fmtPct, fmtYuan } from "@/lib/format";
+import { RANK_GOLD, RANK_SILVER, RANK_BRONZE, CROSSHAIR } from "@/lib/colors";
 import type { QuoteRowProps } from "./QuoteRowTypes";
 
 const COMPACT_WIDTH = 400;
@@ -157,7 +158,7 @@ function FinanceRow({ Tag, rootRef, onClick, className, active, accent, rank, ba
       )}
       <div className="grid items-center gap-x-1" style={{ gridTemplateColumns: cols, gridTemplateRows: "20px 16px" }}>
         {rank != null && (
-          <div className="row-span-2 self-center text-[11px] font-bold leading-none" style={{ color: rank <= 3 ? ["#fbbf24", "#fb7185", "#22d3ee"][rank - 1] : "#64748b", ...TNUM }}>
+          <div className="row-span-2 self-center text-[11px] font-bold leading-none" style={{ color: rank <= 3 ? [RANK_GOLD, RANK_SILVER, RANK_BRONZE][rank - 1] : CROSSHAIR, ...TNUM }}>
             {rank}
           </div>
         )}

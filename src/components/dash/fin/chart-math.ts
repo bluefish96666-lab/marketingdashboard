@@ -1,13 +1,10 @@
 // 财报趋势图计算 — 纯函数, 与渲染分离(可单测)
 import type { FinanceMain, FinanceReport } from "@/lib/api";
+import { GRID, ZERO, AXIS, CROSSHAIR, SEG_COLORS, SERIES } from "@/lib/colors";
+// 图表骨架色/堆叠段色统一取 colors.ts(按颜色值映射: 旧 TICK=AXIS, 旧 AXIS=CROSSHAIR)
+export { GRID, ZERO, AXIS, CROSSHAIR, SEG_COLORS };
 
 export type ChartTab = "perf" | "quality" | "leverage";
-
-const GRID = "#1e293b";
-const ZERO = "#334155";
-const TICK = "#475569";
-const AXIS = "#64748b";
-export { GRID, ZERO, TICK, AXIS };
 
 /** 扩展双侧值域使零轴同帧(柱转负/线穿零同一水平线可读) */
 function alignZero(aMin: number, aMax: number, bMin: number, bMax: number) {
@@ -24,10 +21,6 @@ function alignZero(aMin: number, aMax: number, bMin: number, bMax: number) {
   };
   return [adj(aMin, aMax), adj(bMin, bMax)] as const;
 }
-
-// 主营构成堆叠柱的段色: 验证过的深色分类调色板(蓝/橙/青/黄/品红 + 其他灰), 相邻 CVD 分离达标
-const SEG_COLORS = ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#64748b"];
-export { SEG_COLORS };
 
 export type ChartLayout =
   | {
@@ -198,9 +191,9 @@ export function computeChart(
     const Y = (v: number) => T + (1 - (v - min) / (max - min)) * plotH;
     const ticks = [0.2, 0.4, 0.6, 0.8].map((f) => ({ y: T + f * plotH, v: max - f * (max - min) }));
     const series = [
-      { key: "roe" as const, name: "ROE", color: "#22d3ee", dash: undefined as string | undefined },
-      { key: "grossMargin" as const, name: "毛利", color: "#fbbf24", dash: undefined as string | undefined },
-      { key: "netMargin" as const, name: "净利", color: "#fb7185", dash: "3 2" },
+      { key: "roe" as const, name: "ROE", color: SERIES[0], dash: undefined as string | undefined },
+      { key: "grossMargin" as const, name: "毛利", color: SERIES[4], dash: undefined as string | undefined },
+      { key: "netMargin" as const, name: "净利", color: SERIES[1], dash: "3 2" },
     ].map((s) => ({
       ...s,
       pts: rows.map((r, i) => `${cx(i).toFixed(1)},${Y(r[s.key]).toFixed(1)}`).join(" "),

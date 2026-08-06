@@ -7,10 +7,10 @@ import { useElementSize } from "@/hooks/useElementSize";
 import { api, type AaModel, type SpendIndexResp } from "@/lib/api";
 import { TNUM } from "@/lib/format";
 import { POLL } from "@/lib/intervals";
+import { GRID, AXIS, CROSSHAIR, SERIES, CHART_BG, TOOLTIP_BG } from "@/lib/colors";
 
 // 厂商分类色板(已验证: 深色 #070b12 表面, CVD ΔE≥8; 按模型数取前 8, 其余归"其他")
 const VENDOR_COLORS = ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#008300", "#9085e9", "#e66767"];
-const OTHER_COLOR = "#64748b";
 
 const fmtUsd = (v: number | null) =>
   v == null ? "—" : v >= 1000 ? `$${(v / 1000).toFixed(1)}k` : v >= 100 ? `$${v.toFixed(0)}` : v >= 10 ? `$${v.toFixed(1)}` : `$${v.toFixed(2)}`;
@@ -80,27 +80,27 @@ function TtsiChart({ points }: { points: SpendIndexResp["points"] }) {
           </defs>
           {ticks.map((t) => (
             <g key={t}>
-              <line x1={PAD.l} x2={W - PAD.r} y1={y(t)} y2={y(t)} stroke="#1e293b" strokeWidth={1} />
-              <text x={PAD.l - 4} y={y(t) + 3} textAnchor="end" fontSize={9} fill="#475569">{`$${t.toFixed(0)}`}</text>
+              <line x1={PAD.l} x2={W - PAD.r} y1={y(t)} y2={y(t)} stroke={GRID} strokeWidth={1} />
+              <text x={PAD.l - 4} y={y(t) + 3} textAnchor="end" fontSize={9} fill={AXIS}>{`$${t.toFixed(0)}`}</text>
             </g>
           ))}
-          <text x={PAD.l} y={H - 4} fontSize={9} fill="#475569">{points[0].date}</text>
-          <text x={W - PAD.r} y={H - 4} textAnchor="end" fontSize={9} fill="#475569">{points[n - 1].date}</text>
+          <text x={PAD.l} y={H - 4} fontSize={9} fill={AXIS}>{points[0].date}</text>
+          <text x={W - PAD.r} y={H - 4} textAnchor="end" fontSize={9} fill={AXIS}>{points[n - 1].date}</text>
           {path && <path d={area} fill="url(#ttsi-grad)" stroke="none" />}
           {TREND_SERIES.map((s) => (
             <path key={s.key} d={buildPath(s.key)} fill="none" stroke={s.color} strokeWidth={s.width} strokeLinejoin="round" />
           ))}
           {hp && hover != null && hp.ttsi != null && (
             <g>
-              <line x1={x(hover)} x2={x(hover)} y1={PAD.t} y2={H - PAD.b} stroke="#475569" strokeWidth={1} strokeDasharray="3 3" />
-              <circle cx={x(hover)} cy={y(hp.ttsi)} r={3} fill="#9085e9" stroke="#0b1120" strokeWidth={1.5} />
+              <line x1={x(hover)} x2={x(hover)} y1={PAD.t} y2={H - PAD.b} stroke={AXIS} strokeWidth={1} strokeDasharray="3 3" />
+              <circle cx={x(hover)} cy={y(hp.ttsi)} r={3} fill="#9085e9" stroke={CHART_BG} strokeWidth={1.5} />
             </g>
           )}
         </svg>
         {hp && hover != null && (
           <div
-            className="pointer-events-none absolute top-1 z-10 rounded border border-slate-700/60 bg-[#0b1120]/95 px-2 py-1 text-[9px] leading-4 shadow"
-            style={{ left: Math.min(x(hover) + 8, W - 130) }}
+            className="pointer-events-none absolute top-1 z-10 rounded border border-slate-700/60 px-2 py-1 text-[9px] leading-4 shadow"
+            style={{ left: Math.min(x(hover) + 8, W - 130), background: TOOLTIP_BG + "F2" }}
           >
             <div className="font-semibold text-slate-200">{hp.date}</div>
             <div style={TNUM}><span className="text-violet-300">加权</span> {fmtUsd(hp.ttsi)}{hp.pct != null && <span className={hp.pct >= 0 ? "text-rose-400" : "text-emerald-400"}> {hp.pct >= 0 ? "+" : ""}{hp.pct}%</span>}</div>
@@ -141,7 +141,7 @@ export const TtsiTrendPanel = memo(function TtsiTrendPanel({ className = "", ...
       {...zoomProps}
       title="LLM 价格趋势"
       icon={<TrendingUp size={14} />}
-      accent="#a78bfa"
+      accent={SERIES[5]}
       right={
         <div className="flex items-center gap-1">
           {RANGES.map((r) => (
@@ -182,7 +182,7 @@ export const EventPanel = memo(function EventPanel({ className = "", ...zoomProp
   const { data: si, loading, error, retry } = useRetryPolling(() => api.spendIndex(), POLL.AA_MODELS);
   const events = si?.events ?? [];
   return (
-    <Panel className={className} {...zoomProps} title="模型降价事件" icon={<Bell size={14} />} accent="#34d399"
+    <Panel className={className} {...zoomProps} title="模型降价事件" icon={<Bell size={14} />} accent={SERIES[3]}
       right={<span className="text-[9px] text-slate-500">{events.length} 条</span>}>
       <div className="flex h-full flex-col p-2 pt-1">
         <AsyncContent loading={loading} error={error} empty={false} onRetry={retry}>
@@ -230,7 +230,7 @@ function PriceTable({ models }: { models: AaModel[] }) {
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
       <table className="w-full text-[10px]">
-        <thead className="sticky top-0 z-10 bg-[#0b1120]">
+        <thead className="sticky top-0 z-10" style={{ background: CHART_BG }}>
           <tr>
             <th className="px-1 py-1 text-left text-[9px] font-medium text-slate-500">模型</th>
             {head("intel", "智能")}
@@ -261,7 +261,7 @@ function PriceTable({ models }: { models: AaModel[] }) {
 export const ModelPricePanel = memo(function ModelPricePanel({ className = "", ...zoomProps }: { className?: string } & PanelZoomProps) {
   const { data: aa, loading, error, retry } = useRetryPolling(() => api.aaModels(), POLL.AA_MODELS);
   return (
-    <Panel className={className} {...zoomProps} title="大模型价格表" icon={<Table2 size={14} />} accent="#38bdf8"
+    <Panel className={className} {...zoomProps} title="大模型价格表" icon={<Table2 size={14} />} accent={SERIES[2]}
       right={<span className="text-[9px] text-slate-500">{aa ? aa.models.filter((m) => m.output != null || m.input != null).length : "—"} 个</span>}>
       <div className="flex h-full flex-col p-2 pt-1">
         <AsyncContent loading={loading} error={error} empty={false} onRetry={retry}>
@@ -291,7 +291,7 @@ function ValueScatter({ models, vendors }: { models: AaModel[]; vendors: string[
   const y = (v: number) => PAD.t + (1 - (Math.log10(v) - yMinLog) / (yMaxLog - yMinLog || 1)) * (H - PAD.t - PAD.b);
   const colorOf = (m: AaModel) => {
     const i = vendors.indexOf(m.vendor);
-    return i >= 0 ? VENDOR_COLORS[i] : OTHER_COLOR;
+    return i >= 0 ? VENDOR_COLORS[i] : CROSSHAIR;
   };
   const yTicks: number[] = [];
   for (let k = Math.ceil(yMinLog); k <= Math.floor(yMaxLog); k++) yTicks.push(10 ** k);
@@ -315,14 +315,14 @@ function ValueScatter({ models, vendors }: { models: AaModel[]; vendors: string[
         <svg width={W} height={H} className="block" onMouseMove={onMove} onMouseLeave={() => setHover(null)}>
           {xTicks.map((t, i) => (
             <g key={`x${i}`}>
-              <line x1={x(t)} x2={x(t)} y1={PAD.t} y2={H - PAD.b} stroke="#1e293b" strokeWidth={1} />
-              <text x={x(t)} y={H - 6} textAnchor="middle" fontSize={9} fill="#475569">{t.toFixed(0)}</text>
+              <line x1={x(t)} x2={x(t)} y1={PAD.t} y2={H - PAD.b} stroke={GRID} strokeWidth={1} />
+              <text x={x(t)} y={H - 6} textAnchor="middle" fontSize={9} fill={AXIS}>{t.toFixed(0)}</text>
             </g>
           ))}
           {yTicks.map((t) => (
             <g key={t}>
-              <line x1={PAD.l} x2={W - PAD.r} y1={y(t)} y2={y(t)} stroke="#1e293b" strokeWidth={1} />
-              <text x={PAD.l - 4} y={y(t) + 3} textAnchor="end" fontSize={9} fill="#475569">{t >= 1 ? `$${t}` : `$${t.toFixed(2)}`}</text>
+              <line x1={PAD.l} x2={W - PAD.r} y1={y(t)} y2={y(t)} stroke={GRID} strokeWidth={1} />
+              <text x={PAD.l - 4} y={y(t) + 3} textAnchor="end" fontSize={9} fill={AXIS}>{t >= 1 ? `$${t}` : `$${t.toFixed(2)}`}</text>
             </g>
           ))}
           {pts.map((p) => (
@@ -330,7 +330,7 @@ function ValueScatter({ models, vendors }: { models: AaModel[]; vendors: string[
           ))}
         </svg>
         {hover && (
-          <div className="pointer-events-none absolute left-2 top-1 z-10 rounded border border-slate-700/60 bg-[#0b1120]/95 px-2 py-1 text-[9px] leading-4 shadow">
+          <div className="pointer-events-none absolute left-2 top-1 z-10 rounded border border-slate-700/60 px-2 py-1 text-[9px] leading-4 shadow" style={{ background: TOOLTIP_BG + "F2" }}>
             <div className="font-semibold text-slate-200">{hover.name}</div>
             <div className="text-slate-500">{hover.vendor}</div>
             <div style={TNUM}>智能 {hover.intel?.toFixed(1)} · 任务成本 <b style={{ color: colorOf(hover) }}>{fmtUsd(hover.taskCost)}</b></div>
@@ -345,7 +345,7 @@ function ValueScatter({ models, vendors }: { models: AaModel[]; vendors: string[
           </span>
         ))}
         <span className="flex items-center gap-1 text-[9px] text-slate-500">
-          <span className="h-2 w-2 rounded-full" style={{ background: OTHER_COLOR }} />其他
+          <span className="h-2 w-2 rounded-full" style={{ background: CROSSHAIR }} />其他
         </span>
       </div>
     </div>
@@ -356,7 +356,7 @@ export const ValueScatterPanel = memo(function ValueScatterPanel({ className = "
   const { data: aa, loading, error, retry } = useRetryPolling(() => api.aaModels(), POLL.AA_MODELS);
   const vendors = useMemo(() => vendorsOf(aa), [aa]);
   return (
-    <Panel className={className} {...zoomProps} title="智能 × 任务成本" icon={<Gauge size={14} />} accent="#f5c542"
+    <Panel className={className} {...zoomProps} title="智能 × 任务成本" icon={<Gauge size={14} />} accent={SERIES[6]}
       right={<span className="text-[9px] text-slate-500">{aa ? aa.models.filter((m) => m.intel != null && m.taskCost != null).length : "—"} 个</span>}>
       <div className="flex h-full flex-col p-2 pt-1">
         <AsyncContent loading={loading} error={error} empty={false} onRetry={retry}>
