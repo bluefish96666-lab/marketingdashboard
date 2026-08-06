@@ -60,7 +60,9 @@ function TrendChart({ reports, tab, mainopHistory }: { reports: FinanceReport[];
   const hovLines = hov
     ? chart.mode === "perf"
       ? (() => {
-          const p = hov as { segs: { name: string; income: number; profit: number }[]; other: { income: number; profit: number }; totalNet: number | null; yoy: (number | null)[]; fallback?: boolean; fullRev?: number; fullNet?: number };
+          // 行类型按模式判别(PerfRow 带 segs, FinanceReport 不带): in 收窄后无需断言
+          if (!("segs" in hov)) return null;
+          const p = hov;
           return [
             // 全量兜底期: 无主营段, 只显示财务全量 + 合计净利
             ...(p.fallback
@@ -100,7 +102,9 @@ function TrendChart({ reports, tab, mainopHistory }: { reports: FinanceReport[];
           ];
         })()
       : (() => {
-          const f = hov as FinanceReport;
+          // 质量/杠杆行是 FinanceReport(带 roe 等字段, PerfRow 不带): in 收窄后无需断言
+          if (!("roe" in hov)) return null;
+          const f = hov;
           return chart.mode === "quality"
             ? [
                 <span key="r" className="text-slate-400" style={TNUM}>ROE <b className="text-slate-200">{f.roe.toFixed(1)}%</b></span>,

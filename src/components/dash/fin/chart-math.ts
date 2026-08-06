@@ -6,6 +6,38 @@ export { GRID, ZERO, AXIS, CROSSHAIR, SEG_COLORS };
 
 export type ChartTab = "perf" | "quality" | "leverage";
 
+/** 业绩页签: 主营构成段 */
+export interface PerfSeg {
+  name: string;
+  income: number;
+  profit: number;
+}
+
+/** 业绩页签行(每报告期): 主营段 + 其他 + 财务全量兜底 */
+export interface PerfRow {
+  date: string;
+  segs: PerfSeg[];
+  other: { income: number; profit: number };
+  totalNet: number | null;
+  revYoy: number | null;
+  netYoy: number | null;
+  yoy: (number | null)[];
+  fallback: boolean;
+  fullRev: number;
+  fullNet: number;
+}
+
+/** 质量页签序列(ROE/毛利率/净利率) */
+export interface QualitySeries {
+  key: "roe" | "grossMargin" | "netMargin";
+  name: string;
+  color: string;
+  dash?: string;
+  pts: string;
+  lastY: number;
+  lastV: number;
+}
+
 /** 扩展双侧值域使零轴同帧(柱转负/线穿零同一水平线可读) */
 function alignZero(aMin: number, aMax: number, bMin: number, bMax: number) {
   const frac = (min: number, max: number) => (max > min && min < 0 ? -min / (max - min) : 0);
@@ -32,7 +64,7 @@ export type ChartLayout =
       zeroY: number;
       ticks: { y: number; m: number }[];
       pctTicks: { y: number; label: string }[];
-      rows: any[];
+      rows: PerfRow[];
       segNames: string[];
       hasFallback: boolean;
       line: (key: "revYoy" | "netYoy") => string;
@@ -44,8 +76,8 @@ export type ChartLayout =
       cx: (i: number) => number;
       ticks: { y: number; v: number }[];
       rows: FinanceReport[];
-      series: { key: "roe" | "grossMargin" | "netMargin"; name: string; color: string; dash?: string; pts: string; lastY: number; lastV: number }[];
-      labels: { s: any; labelY: number }[];
+      series: QualitySeries[];
+      labels: { s: QualitySeries; labelY: number }[];
     }
   | {
       mode: "leverage";
