@@ -27,6 +27,35 @@ check() {
   fi
 }
 
+# futures 专用: 断言响应 data 必须包含请求的内盘(nf_)与全部 hf_ key;
+# BTCUSDT 允许缺失(上游 Binance/OKX 不可达属基线常态)
+check_futures() {
+  local name="$1" url="$2" required="$3"
+  local code body
+  body=$(curl -s --max-time 25 -o /tmp/smoke-body.json -w "%{http_code}" "$BASE$url" 2>/dev/null)
+  code=$?
+  if [ "$code" = "0" ] && [ "$body" = "200" ]; then
+    local missing
+    missing=$(python3 -c "
+import json
+d = json.load(open('/tmp/smoke-body.json')).get('data', {})
+req = [k for k in '$required'.split(',') if k]
+miss = [k for k in req if k not in d]
+print(','.join(miss))
+" 2>/dev/null)
+    if [ -z "$missing" ]; then
+      echo "PASS  $name  ($url)" >> "$OUT"
+      PASS=$((PASS+1))
+    else
+      echo "FAIL  $name  ($url) — 缺失: $missing" >> "$OUT"
+      FAIL=$((FAIL+1)); FAILED+=("$name")
+    fi
+  else
+    echo "FAIL  $name  ($url) — HTTP ${body:-timeout}" >> "$OUT"
+    FAIL=$((FAIL+1)); FAILED+=("$name")
+  fi
+}
+
 # 无参端点
 check health /api/health
 check stats /api/stats
@@ -46,7 +75,9 @@ check quotes "/api/quotes?codes=sh000001,sz399001,hf_GC"
 check minute "/api/minute?code=sh000001"
 check batch-minute "/api/batch-minute?codes=sh000001,sz399001"
 check batch-fmin "/api/batch-fmin?codes=sh000001,sz399001"
-check futures "/api/futures?list=hf_GC,hf_XAU"
+check_futures futures-hf "/api/futures?list=hf_GC,hf_XAU" "hf_GC,hf_XAU"
+check_futures futures-nf "/api/futures?list=nf_AU0,nf_AG0" "nf_AU0,nf_AG0"
+check_futures futures-mixed "/api/futures?list=hf_GC,hf_SI,nf_AU0,nf_CU0" "hf_GC,hf_SI,nf_AU0,nf_CU0"
 check future-minute "/api/future-minute?code=hf_GC"
 check future-daily "/api/future-daily?code=hf_GC"
 check stock-boards "/api/stock-boards?code=sh600519"
