@@ -2,6 +2,7 @@ import { memo, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { Spark } from "./Spark";
 import { api } from "@/lib/api";
+import { POLL } from "@/lib/intervals";
 import { useQuote } from "@/lib/market";
 import { usePolling } from "@/hooks/usePolling";
 import { isTv } from "@/lib/tv";
@@ -381,7 +382,7 @@ export const QuoteRow = memo(function QuoteRow({
 
   const { data: minute } = usePolling(
     () => (spark && !sparkData && visible ? api.minute(code) : Promise.resolve(null)),
-    60000,
+    POLL.MINUTE,
     [code, spark, visible, !!sparkData],
     (a, b) => JSON.stringify(a) === JSON.stringify(b)
   );
@@ -392,7 +393,7 @@ export const QuoteRow = memo(function QuoteRow({
   );
   const { data: fl } = usePolling(
     () => (flow && visible ? api.stockFlow(code) : Promise.resolve(null)),
-    30000,
+    POLL.STOCK_FLOW,
     [code, flow, visible]
   );
 

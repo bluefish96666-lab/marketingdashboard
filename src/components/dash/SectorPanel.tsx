@@ -4,6 +4,7 @@ import { Panel, type PanelZoomProps } from "./Panel";
 import { QuoteRow } from "./QuoteRow";
 import { usePolling } from "@/hooks/usePolling";
 import { api, type Board } from "@/lib/api";
+import { POLL } from "@/lib/intervals";
 import { clsChg, fmtPct, fmtYuan, hexChg } from "@/lib/format";
 import { isTv } from "@/lib/tv";
 import { TabBar } from "./SharedUI";
@@ -61,7 +62,7 @@ export function SectorPanel({ className = "", ...zoomProps }: { className?: stri
   const [auto, setAuto] = useState(false);
   const [idx, setIdx] = useState(0);
 
-  const { data: boards, error } = usePolling(() => api.boards(kind, dir, kind === "01" ? 300 : 1000), 15000, [kind, dir]);
+  const { data: boards, error } = usePolling(() => api.boards(kind, dir, kind === "01" ? 300 : 1000), POLL.SECTOR, [kind, dir]);
 
   const filtered = useMemo(() => boards?.filter((b) => !q || b.name.includes(q)), [boards, q]);
   const visibleBoards = useMemo(() => filtered?.slice(0, MAX_BOARD_ROWS), [filtered]);
@@ -95,7 +96,7 @@ export function SectorPanel({ className = "", ...zoomProps }: { className?: stri
 
   const { data: stocks } = usePolling(
     () => (activeBoard ? api.boardStocks(activeBoard.code, MAX_STOCK_ROWS) : Promise.resolve(null)),
-    15000,
+    POLL.SECTOR,
     [activeBoard?.code]
   );
 

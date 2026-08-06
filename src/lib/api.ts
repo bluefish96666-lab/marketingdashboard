@@ -6,6 +6,7 @@
 import { usePolling } from "@/hooks/usePolling";
 import { num } from "./format";
 import { POLL } from "@/lib/intervals";
+import { quoteUrl, tencentMinuteUrl, tencentRankUrl } from "./tencent-urls";
 
 export interface Quote {
   symbol: string;
@@ -379,7 +380,7 @@ function throttleDirect(key: string): boolean {
 async function directQuotes(codes: string[]): Promise<Record<string, Quote>> {
   const fresh = codes.filter((c) => !throttleDirect(`q:${c}`));
   if (!fresh.length) return {};
-  const r = await fetch(`https://qt.gtimg.cn/q=${fresh.join(",")}`);
+  const r = await fetch(quoteUrl(fresh));
   const text = new TextDecoder("gbk").decode(await r.arrayBuffer());
   return parseTencent(text);
 }
@@ -394,14 +395,14 @@ function mapBoards(list: Record<string, string>[]): Board[] {
 
 async function directBoards(type: "01" | "02", dir: 0 | 1, n: number): Promise<Board[]> {
   if (throttleDirect(`b:${type}:${dir}`)) return [];
-  const r = await fetch(`https://ifzq.gtimg.cn/appstock/app/mktHs/rank?l=${n}&p=1&t=${type}/averatio&o=${dir}`);
+  const r = await fetch(tencentRankUrl(n, type, dir));
   const j = await r.json();
   return mapBoards(j?.data || []);
 }
 
 async function directMinute(code: string): Promise<MinuteData> {
   if (throttleDirect(`m:${code}`)) return { code, prec: 0, points: [] };
-  const r = await fetch(`https://ifzq.gtimg.cn/appstock/app/minute/query?code=${code}`);
+  const r = await fetch(tencentMinuteUrl(code));
   const j = await r.json();
   const d = j?.data?.[code];
   const arr: string[] = d?.data?.data || [];

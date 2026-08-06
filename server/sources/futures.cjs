@@ -1,6 +1,8 @@
 // 期货 + 加密货币行情源 — 腾讯/新浪/Binance/OKX
 "use strict";
 
+const { quoteUrl } = require("../lib/tencent-urls.cjs");
+
 module.exports = function createFutures(ctx) {
   const { fetchText, curlText, num, changeOf, pctOf, fmtHHMM, safeRecord } = ctx;
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -128,7 +130,7 @@ module.exports = function createFutures(ctx) {
       jobs.push((async () => {
         // 主源:腾讯(稳定,无WAF)
         try {
-          const r = parseFutures(await fetchText(`https://qt.gtimg.cn/q=${hf.map(encodeURIComponent).join(",")}`, { gbk: true }));
+          const r = parseFutures(await fetchText(quoteUrl(hf.map(encodeURIComponent).join(",")), { gbk: true }));
           if (Object.keys(r).length >= Math.min(2, hf.length)) return Object.assign(out, r);
         } catch { /* fallthrough */ }
         // 兜底:新浪
@@ -212,7 +214,7 @@ module.exports = function createFutures(ctx) {
       );
       const arr = parseJsonp(text)?.minLine_1d || [];
       const pts = arr.filter((f) => String(f[0]).includes(":")).map((f) => ({ t: f[0], p: num(f[1]) }));
-      const q = parseFutures(await fetchText(`https://qt.gtimg.cn/q=${code}`, { gbk: true }));
+      const q = parseFutures(await fetchText(quoteUrl(code), { gbk: true }));
       return { code, prec: q[code]?.prev || 0, points: pts };
     }
     if (code.startsWith("nf_")) {

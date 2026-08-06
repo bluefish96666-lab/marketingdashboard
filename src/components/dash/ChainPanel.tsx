@@ -6,6 +6,7 @@ import { usePolling } from "@/hooks/usePolling";
 import { useSharedPolling } from "@/hooks/useSharedPolling";
 import { useQuote } from "@/lib/market";
 import { api, type MysteryStock, type NewsItem } from "@/lib/api";
+import { POLL } from "@/lib/intervals";
 import { canonBoardName, unionBoards } from "@/lib/boards";
 import { CHAINS } from "@/config/dashboard";
 import type { Chain, ChainStock } from "@/config/dashboard";
@@ -80,8 +81,8 @@ export function ChainPanel({ className = "", ...zoomProps }: { className?: strin
     [dynMatched, dynamicData, chain]
   );
 
-  const { data: news } = useSharedPolling<NewsItem[]>("news:60", () => api.news(60), 20000);
-  const { data: boards } = usePolling(() => unionBoards(40), 25000);
+  const { data: news } = useSharedPolling<NewsItem[]>("news:60", () => api.news(60), POLL.NEWS);
+  const { data: boards } = usePolling(() => unionBoards(40), POLL.CHAIN_BOARDS);
 
   const chainNews = useMemo(() => {
     if (!news) return [];

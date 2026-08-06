@@ -1,6 +1,8 @@
 // 腾讯行情源 — 报价/分钟线/板块榜/板块成分股
 "use strict";
 
+const { quoteUrl, tencentMinuteUrl, usMinuteUrl, tencentRankUrl } = require("../lib/tencent-urls.cjs");
+
 module.exports = function createTencent(ctx) {
   const { fetchText, fetchTextAny, curlText, cache, cacheSet, parseCsvParam, chunked, safeRecord, num, changeOf, pctOf } = ctx;
 
@@ -94,7 +96,7 @@ module.exports = function createTencent(ctx) {
           const p = (async () => {
             const rs = safeRecord(); // 无原型对象, 防 __proto__ 污染
             try {
-              const text = await fetchText(`https://qt.gtimg.cn/q=${encodeURIComponent(chunk.join(","))}`, { gbk: true });
+              const text = await fetchText(quoteUrl(encodeURIComponent(chunk.join(","))), { gbk: true });
               for (const line of text.split(";")) {
                 const q = parseTencentLine(line.trim());
                 if (q) {
@@ -183,8 +185,8 @@ module.exports = function createTencent(ctx) {
     }
     // 美股指数(us*)只有 usMinute 接口返回全日序列, minute/query 只给最后一个点
     const url = code.startsWith("us")
-      ? `https://web.ifzq.gtimg.cn/appstock/app/usMinute/query?code=${encodeURIComponent(code)}`
-      : `https://ifzq.gtimg.cn/appstock/app/minute/query?code=${encodeURIComponent(code)}`;
+      ? usMinuteUrl(code)
+      : tencentMinuteUrl(code);
     const text = await fetchText(url);
     const json = JSON.parse(text);
     const d = json?.data?.[code];
@@ -200,7 +202,7 @@ module.exports = function createTencent(ctx) {
 
   /* ---------------- 腾讯板块榜(行业 t=01 / 概念 t=02) ---------------- */
   async function handleBoards(type, dir, n) {
-    const url = `https://ifzq.gtimg.cn/appstock/app/mktHs/rank?l=${encodeURIComponent(n)}&p=1&t=${encodeURIComponent(type)}/averatio&o=${encodeURIComponent(dir)}`;
+    const url = tencentRankUrl(n, type, dir);
     const text = await fetchText(url);
     const json = JSON.parse(text);
     return (json?.data || []).map((b) => ({

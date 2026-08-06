@@ -20,6 +20,7 @@ import { useSharedPolling } from "@/hooks/useSharedPolling";
 import { useQuotes } from "@/lib/market";
 import { useFullscreen } from "@/hooks/useFullscreen";
 import { api } from "@/lib/api";
+import { POLL } from "@/lib/intervals";
 import { INDICES, FOREX, COMMODITIES } from "@/config/dashboard";
 
 function Tape() {
@@ -28,7 +29,7 @@ function Tape() {
   // 指数与期货报价: 统一报价中心(与全站所有面板同帧)
   const quotes = useQuotes(codes);
   const futures = useQuotes(futureCodes);
-  const { data: treasuries } = useSharedPolling("treasuries", () => api.treasuries(), 60000);
+  const { data: treasuries } = useSharedPolling("treasuries", () => api.treasuries(), POLL.TREASURY_LIVE);
 
   const items: TapeItem[] = useMemo(() => {
     const list: TapeItem[] = [];

@@ -20,6 +20,6 @@ export function useFinBoard(period: string) {
 export function useFinMain(code: string) {
   const [retry, setRetry] = useState(0);
   const key = `fm:${code}:r${retry}`;
-  const { data, error } = useSharedPolling<FinanceMain>(key, () => api.financeMain(code), 1800000);
+  const { data, error } = useSharedPolling<FinanceMain>(key, () => api.financeMain(code), POLL.FIN);
   return { data, error, loading: data === null && error === null, retry: () => setRetry((r) => r + 1) };
 }

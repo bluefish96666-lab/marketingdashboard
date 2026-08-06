@@ -3,11 +3,12 @@ import { Panel, type PanelZoomProps } from "./Panel";
 import { QuoteRow } from "./QuoteRow";
 import { usePolling } from "@/hooks/usePolling";
 import { api } from "@/lib/api";
+import { POLL } from "@/lib/intervals";
 import { clsChg, fmtYuan } from "@/lib/format";
 
 /** 实时资金流向 — 个股主力净流入 TOP(东财口径) */
 export function MoneyFlowPanel({ className = "", ...zoomProps }: { className?: string } & PanelZoomProps) {
-  const { data, error } = usePolling(() => api.moneyflow(15), 20000);
+  const { data, error } = usePolling(() => api.moneyflow(15), POLL.MONEYFLOW);
 
   const total = data?.reduce((s, d) => s + d.netIn, 0) ?? 0;
 

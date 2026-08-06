@@ -3,6 +3,7 @@ import { Rss } from "lucide-react";
 import { Panel, type PanelZoomProps } from "./Panel";
 import { useSharedPolling } from "@/hooks/useSharedPolling";
 import { api, type NewsItem } from "@/lib/api";
+import { POLL } from "@/lib/intervals";
 import { fmtTime } from "@/lib/format";
 import { isTv } from "@/lib/tv";
 import { MACRO_KEYWORDS, CHAINS } from "@/config/dashboard";
@@ -40,7 +41,7 @@ function NewsRow({ item, isNew }: { item: NewsItem; isNew: boolean }) {
 
 /** 7x24 实时快讯 */
 export function NewsPanel({ className = "", ...zoomProps }: { className?: string } & PanelZoomProps) {
-  const { data, error } = useSharedPolling<NewsItem[]>("news:60", () => api.news(60), 20000);
+  const { data, error } = useSharedPolling<NewsItem[]>("news:60", () => api.news(60), POLL.NEWS);
   const [newIds, setNewIds] = useState<Set<number>>(new Set());
   const seenRef = useRef<Set<number>>(new Set());
   const [autoScroll, setAutoScroll] = useState(true);
