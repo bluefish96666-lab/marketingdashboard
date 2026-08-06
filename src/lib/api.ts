@@ -499,7 +499,6 @@ export const api = {
   moneyflow: (n = 15) => get<FlowStock[]>(`/api/moneyflow?n=${n}`),
   stockBoards: (code: string) => get<StockBoards>(`/api/stock-boards?code=${encodeURIComponent(code)}`),
   stockFlow: (code: string) => flowLoader(code),
-  futureMinute: (code: string) => get<MinuteData>(`/api/future-minute?code=${encodeURIComponent(code)}`),
   batchFutureMinute: (codes: string[]) =>
     get<Record<string, MinuteData | null>>(`/api/batch-fmin?codes=${codes.slice(0, 20).join(",")}`),
   futureDaily: (code: string) => get<FutureDaily>(`/api/future-daily?code=${encodeURIComponent(code)}`),
@@ -510,8 +509,8 @@ export const api = {
   treasuries: () => get<Treasury[]>(`/api/treasuries`),
   treasuryHistory: () => get<TreasuryCurvePoint[]>(`/api/treasury-history`),
   openRouterUsage: () => get<OrUsageDay[]>(`/api/openrouter-usage`),
-  mysterySelect: (query: string, limit = 30, refresh = false) =>
-    get<MysteryResult>(`/api/mystery-select?query=${encodeURIComponent(query)}&limit=${limit}${refresh ? "&refresh=1" : ""}`),
+  mysterySelect: (query: string, limit = 30, opts: { refresh?: boolean } = {}) =>
+    get<MysteryResult>(`/api/mystery-select?query=${encodeURIComponent(query)}&limit=${limit}${opts.refresh ? "&refresh=1" : ""}`),
   parseChain: (name: string, content: string) =>
     post<{ name: string; source: string; segments: { name: string; desc: string; stocks: { code: string; name: string }[] }[]; warnings?: string[] }>(`/api/chain-parse`, { name, content }),
   stockSearch: (q: string) => get<StockSearchResult[]>(`/api/stock-search?q=${encodeURIComponent(q)}`),

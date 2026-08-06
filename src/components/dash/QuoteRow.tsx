@@ -1,7 +1,7 @@
 import { memo, useEffect, useRef, useState } from "react";
-import type { ReactNode } from "react";
+import type { ReactNode, RefObject } from "react";
 import { Spark } from "./Spark";
-import { api } from "@/lib/api";
+import { api, type StockBoards, type StockFlow } from "@/lib/api";
 import { POLL } from "@/lib/intervals";
 import { useQuote } from "@/lib/market";
 import { usePolling } from "@/hooks/usePolling";
@@ -12,6 +12,70 @@ import type { QuoteRowProps } from "./QuoteRowTypes";
 
 const COMPACT_WIDTH = 400;
 export { COMPACT_WIDTH };
+
+/** 行标签元素: 有 onClick 渲染为 button, 否则 div */
+type RowTag = "button" | "div";
+
+/** 主组件预处理后分发到各变体的共享 props */
+interface RowSharedProps {
+  Tag: RowTag;
+  rootRef: RefObject<HTMLElement | null>;
+  onClick?: () => void;
+  className?: string;
+  active?: boolean;
+  name: string;
+  subtitle?: string;
+  sp: { points: { t: string; p: number }[]; prec: number } | null;
+  sparkData?: QuoteRowProps["sparkData"];
+  p: number | undefined;
+  pc: number | undefined;
+}
+
+/** 变体 1: compact 单行(商品/现货) */
+type CompactRowProps = RowSharedProps & {
+  variant: "compact";
+  basis?: QuoteRowProps["basis"];
+  accent?: string;
+  badge?: string;
+  pct?: number;
+};
+
+/** 变体 2: index 布局(全球指数) */
+type IndexRowProps = RowSharedProps & {
+  badge?: string;
+  amount?: string;
+};
+
+/** 变体 3: plain + 财务列(extraCols/leadingCols/sparkExtra) */
+type FinanceRowProps = RowSharedProps & {
+  accent?: string;
+  rank?: number;
+  badge?: string;
+  leadingCols?: QuoteRowProps["leadingCols"];
+  extraCols?: QuoteRowProps["extraCols"];
+  sparkExtra?: ReactNode;
+  onRemove?: () => void;
+};
+
+/** 变体 4: plain/card 双行 Grid(个股/商品) */
+type PlainGridRowProps = RowSharedProps & {
+  variant: "plain" | "card";
+  accent?: string;
+  rank?: number;
+  badge?: string;
+  onRemove?: () => void;
+  amount?: string;
+  turnover?: string;
+  fl: StockFlow | null;
+  compact: boolean;
+  ratioBar: number;
+  tag?: string;
+  bd: StockBoards | null;
+  boards?: boolean;
+};
+
+/** 四变体行组件 props 联合 */
+export type RowVariantProps = CompactRowProps | IndexRowProps | FinanceRowProps | PlainGridRowProps;
 
 function Stat({ label, value, valueCls = "text-slate-300" }: { label?: string; value: ReactNode; valueCls?: string }) {
   return (
@@ -25,7 +89,7 @@ function Stat({ label, value, valueCls = "text-slate-300" }: { label?: string; v
 }
 
 /* ================= 变体 1: compact 单行(商品/现货) ================= */
-function CompactRow({ basis, Tag, rootRef, onClick, className, active, accent, badge, name, subtitle, sp, sparkData, p, pct }: any) {
+function CompactRow({ basis, Tag, rootRef, onClick, className, active, accent, badge, name, subtitle, sp, sparkData, p, pct }: CompactRowProps) {
   if (basis) {
     return (
       <Tag
@@ -97,7 +161,7 @@ function CompactRow({ basis, Tag, rootRef, onClick, className, active, accent, b
 }
 
 /* ================= 变体 2: index 布局(全球指数) ================= */
-function IndexRow({ Tag, rootRef, onClick, className, active, badge, name, subtitle, sp, sparkData, p, pc, amount }: any) {
+function IndexRow({ Tag, rootRef, onClick, className, active, badge, name, subtitle, sp, sparkData, p, pc, amount }: IndexRowProps) {
   return (
     <Tag
       ref={(el: HTMLElement | null) => { rootRef.current = el; }}
@@ -144,10 +208,10 @@ function IndexRow({ Tag, rootRef, onClick, className, active, badge, name, subti
 }
 
 /* ================= 变体 3: plain + 财务列(extraCols/leadingCols/sparkExtra) ================= */
-function FinanceRow({ Tag, rootRef, onClick, className, active, accent, rank, badge, leadingCols, extraCols, sparkExtra, onRemove, name, subtitle, sp, sparkData, p, pc }: any) {
+function FinanceRow({ Tag, rootRef, onClick, className, active, accent, rank, badge, leadingCols, extraCols, sparkExtra, onRemove, name, subtitle, sp, sparkData, p, pc }: FinanceRowProps) {
   const prefix = (rank != null ? "auto " : "") + (badge ? "auto " : "");
-  const lead = leadingCols ? leadingCols.map((c: any) => `${c.w}px`).join(" ") + " " : "";
-  const cols = `${prefix}${lead}72px minmax(0,1fr) 60px ${extraCols ? extraCols.map((c: any) => `${c.w}px`).join(" ") : ""}${onRemove ? " auto" : ""}`;
+  const lead = leadingCols ? leadingCols.map((c) => `${c.w}px`).join(" ") + " " : "";
+  const cols = `${prefix}${lead}72px minmax(0,1fr) 60px ${extraCols ? extraCols.map((c) => `${c.w}px`).join(" ") : ""}${onRemove ? " auto" : ""}`;
   return (
     <Tag
       ref={(el: HTMLElement | null) => { rootRef.current = el; }}
@@ -168,7 +232,7 @@ function FinanceRow({ Tag, rootRef, onClick, className, active, accent, rank, ba
             <span className="w-6 shrink-0 rounded-sm bg-slate-700/50 text-center text-[8px] leading-3 text-slate-400">{badge}</span>
           </div>
         )}
-        {leadingCols?.map((c: any, i: number) => (
+        {leadingCols?.map((c, i) => (
           <div key={i} className="flex min-w-0 items-center gap-1 overflow-hidden whitespace-nowrap leading-none">
             {c.top ?? <span />}
           </div>
@@ -185,19 +249,19 @@ function FinanceRow({ Tag, rootRef, onClick, className, active, accent, rank, ba
           )}
         </div>
         <Stat label="价" value={p != null ? fmtPrice(p) : "—"} valueCls={`font-semibold ${p != null ? clsChg(p) : "text-slate-600"}`} />
-        {extraCols?.map((c: any, i: number) => (
+        {extraCols?.map((c, i) => (
           <div key={i} className="flex min-w-0 items-center justify-end gap-1 overflow-hidden whitespace-nowrap leading-none">
             {c.top ?? <span />}
           </div>
         ))}
-        {leadingCols?.map((c: any, i: number) => (
+        {leadingCols?.map((c, i) => (
           <div key={i} className="flex min-w-0 items-center gap-1 overflow-hidden whitespace-nowrap leading-none">
             {c.bottom ?? <span />}
           </div>
         ))}
         <div className="flex h-[16px] min-w-0 items-center justify-between gap-1.5 self-center">{sparkExtra}</div>
         <Stat label="幅" value={pc != null ? fmtPct(pc, 2) : ""} valueCls={`font-semibold ${pc != null ? clsChg(pc) : "text-slate-600"}`} />
-        {extraCols?.map((c: any, i: number) => (
+        {extraCols?.map((c, i) => (
           <div key={i} className="flex min-w-0 items-center justify-end gap-1 overflow-hidden whitespace-nowrap leading-none">
             {c.bottom ?? <span />}
           </div>
@@ -213,7 +277,7 @@ function FinanceRow({ Tag, rootRef, onClick, className, active, accent, rank, ba
 }
 
 /* ================= 变体 4: plain/card 双行 Grid(个股/商品) ================= */
-function PlainGridRow({ variant, Tag, rootRef, onClick, active, accent, rank, badge, onRemove, name, subtitle, sp, sparkData, p, pc, amount, turnover, fl, compact, ratioBar, tag, bd, boards }: any) {
+function PlainGridRow({ variant, Tag, rootRef, onClick, active, accent, rank, badge, onRemove, name, subtitle, sp, sparkData, p, pc, amount, turnover, fl, compact, ratioBar, tag, bd, boards }: PlainGridRowProps) {
   const hasFlow = Boolean(fl);
   const hasAmount = Boolean(amount);
   const hasTurnover = Boolean(turnover);
@@ -399,7 +463,7 @@ export const QuoteRow = memo(function QuoteRow({
 
   const sp = sparkData ?? (spark && minute ? { points: minute.points, prec: minute.prec } : null);
 
-  const Tag = onClick ? "button" : "div";
+  const Tag: RowTag = onClick ? "button" : "div";
   const ratioBar = fl ? Math.min(100, Math.abs(fl.netRatio) * 2) : 0;
   const subtitle = unit ?? code;
   const shared = { Tag, rootRef, onClick, className, active, name, subtitle, sp, sparkData, p, pc };

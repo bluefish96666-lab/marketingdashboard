@@ -24,6 +24,13 @@ const LEGEND_H = 64;
 /** 端点标签模式预留的右侧标签宽度 */
 const END_LABEL_W = 86;
 
+/** 绘图区左边距(Y 轴"亿"刻度标签宽) */
+const PLOT_LEFT = 34;
+/** 绘图区右缘相对 labelW 区域的收进(grid/零轴/标线共用) */
+const PLOT_INSET = 6;
+/** Y 轴刻度文本横坐标(贴左缘) */
+const AXIS_TEXT_X = 4;
+
 /** 板块实时资金流向图(分钟级累计主力净流入, 东财口径)
  *  progress: 0..1 播放进度(重放用), 1 = 全天
  *  labelMode: "end" 端点标签+标线(默认) / "legend" 图下方图例 */
@@ -47,7 +54,7 @@ export function BoardFlowChart({ flows, progress = 1, labelMode = "end" }: { flo
     const pad = (max - min) * 0.04 || 1;
     min -= pad;
     max += pad;
-    const X = (i: number) => 34 + (i / Math.max(n - 1, 1)) * (W - 40 - labelW);
+    const X = (i: number) => PLOT_LEFT + (i / Math.max(n - 1, 1)) * (W - 40 - labelW);
     const Y = (v: number) => 8 + (1 - (v - min) / (max - min)) * (chartH - 26);
     // 颜色: 流入侧按名次取红, 流出侧取绿
     let ri = 0;
@@ -86,11 +93,11 @@ export function BoardFlowChart({ flows, progress = 1, labelMode = "end" }: { flo
             {/* 网格与零轴 */}
             {chart.ticks.map((t, i) => (
               <g key={i}>
-                <line x1={34} y1={t.y} x2={chart.W - chart.labelW - 6} y2={t.y} stroke={GRID} strokeWidth={1} />
-                <text x={4} y={t.y + 3} fontSize={9} fill={CROSSHAIR} style={TNUM}>{(t.v / 1e8).toFixed(0)}亿</text>
+                <line x1={PLOT_LEFT} y1={t.y} x2={chart.W - chart.labelW - PLOT_INSET} y2={t.y} stroke={GRID} strokeWidth={1} />
+                <text x={AXIS_TEXT_X} y={t.y + 3} fontSize={9} fill={CROSSHAIR} style={TNUM}>{(t.v / 1e8).toFixed(0)}亿</text>
               </g>
             ))}
-            <line x1={34} y1={chart.Y(0)} x2={chart.W - chart.labelW - 6} y2={chart.Y(0)} stroke={ZERO} strokeWidth={1} />
+            <line x1={PLOT_LEFT} y1={chart.Y(0)} x2={chart.W - chart.labelW - PLOT_INSET} y2={chart.Y(0)} stroke={ZERO} strokeWidth={1} />
             {/* 时间刻度 */}
             {X_TICKS.map(([i, t, anchor]) => (
               <text key={t} x={chart.X(i)} y={chart.chartH - 8} fontSize={8} fill={AXIS} textAnchor={anchor}>{t}</text>
@@ -103,7 +110,7 @@ export function BoardFlowChart({ flows, progress = 1, labelMode = "end" }: { flo
             {labelMode === "end" &&
               chart.labels.map((l) => (
                 <g key={l.line.s.code}>
-                  <line x1={chart.W - chart.labelW - 6} y1={l.line.lastY} x2={chart.W - chart.labelW} y2={l.labelY} stroke={l.line.color} strokeWidth={0.6} strokeOpacity={0.5} />
+                  <line x1={chart.W - chart.labelW - PLOT_INSET} y1={l.line.lastY} x2={chart.W - chart.labelW} y2={l.labelY} stroke={l.line.color} strokeWidth={0.6} strokeOpacity={0.5} />
                   <text x={chart.W - chart.labelW + 2} y={l.labelY + 3} fontSize={8.5} fill={l.line.color} style={TNUM}>
                     {l.line.s.name} {l.line.lastV >= 0 ? "+" : ""}{(l.line.lastV / 1e8).toFixed(0)}
                   </text>

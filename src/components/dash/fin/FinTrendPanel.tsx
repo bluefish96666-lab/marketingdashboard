@@ -343,7 +343,7 @@ function TrendChart({ reports, tab, mainopHistory }: { reports: FinanceReport[];
   );
 }
 
-/** 公司趋势: 业绩(分组柱+同比双轴) | 质量(ROE/毛利率/净利率) */
+/** 公司趋势: 业绩(主营构成堆叠柱+同比线+合计净利) | 质量(ROE/毛利率/净利率) | 杠杆与回报(资产负债率/ROIC/每股OCF) */
 export function FinTrendPanel({ className = "", ...zoomProps }: { className?: string } & PanelZoomProps) {
   const [tab, setTab] = useState<ChartTab>("perf");
   const { company } = useFin();

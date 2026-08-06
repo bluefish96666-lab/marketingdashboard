@@ -11,7 +11,7 @@ import { num } from "./format";
  *  领域数据(成分股/榜单/资金流)仍走各自端点, 仅展示价格统一从这里读。
  */
 
-export interface HubQuote {
+interface HubQuote {
   /** 证券名称(供 代码→名称 解析) */
   name?: string;
   price: number;

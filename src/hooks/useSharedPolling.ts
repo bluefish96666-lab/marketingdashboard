@@ -17,6 +17,12 @@ interface SharedEntry<T> {
 /** 模块级共享轮询注册表: 同 key 的所有订阅者共享同一条轮询循环与数据缓存 */
 const registry = new Map<string, SharedEntry<unknown>>();
 
+// 同 key 必然由同一 T 的订阅者创建与读取(见 useSharedPolling 注释的 fn 等价约定),
+// 仅此一处按 T 收窄 unknown 注册项, 其余代码不再出现断言
+function getEntry<T>(key: string): SharedEntry<T> | undefined {
+  return registry.get(key) as SharedEntry<T> | undefined;
+}
+
 async function tick<T>(key: string, entry: SharedEntry<T>) {
   // 存活判断必须用 entry 同一性而非 key 存在性:
   // 全部订阅者卸载(release 删 key)后同 key 新订阅者会重建 entry,
@@ -37,7 +43,7 @@ async function tick<T>(key: string, entry: SharedEntry<T>) {
 }
 
 function acquire<T>(key: string, fn: () => Promise<T>, intervalMs: number): SharedEntry<T> {
-  let entry = registry.get(key) as SharedEntry<T> | undefined;
+  let entry = getEntry<T>(key);
   if (!entry) {
     entry = {
       snapshot: { data: null, error: null, updated: 0 },
@@ -46,7 +52,8 @@ function acquire<T>(key: string, fn: () => Promise<T>, intervalMs: number): Shar
       fn,
       intervalMs,
     };
-    registry.set(key, entry as SharedEntry<unknown>);
+    // SharedEntry<T> 可协变赋给 SharedEntry<unknown>(T→unknown), 无需断言
+    registry.set(key, entry);
     void tick(key, entry); // 首个订阅者挂载: 立即拉取
   }
   return entry;
@@ -101,6 +108,7 @@ export function useSharedPolling<T>(
 
   return useSyncExternalStore(
     subscribe,
-    () => (registry.get(key) as SharedEntry<T> | undefined)?.snapshot ?? (EMPTY as Snapshot<T>),
+    // Snapshot<never> 是 Snapshot<T> 的子类型(never→T), 无需断言
+    () => getEntry<T>(key)?.snapshot ?? EMPTY,
   );
 }

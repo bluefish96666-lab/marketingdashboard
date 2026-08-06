@@ -19,7 +19,7 @@ export const quarterLabel = (s: string) => {
 
 
 /** 预告类型配色: 预喜=rose / 预悲=emerald / 不确定=slate(A股红涨绿跌) */
-export const FORECAST_GOOD = new Set(["预增", "略增", "扭亏", "减亏"]);
-export const FORECAST_BAD = new Set(["预减", "略减", "首亏", "增亏"]);
+const FORECAST_GOOD = new Set(["预增", "略增", "扭亏", "减亏"]);
+const FORECAST_BAD = new Set(["预减", "略减", "首亏", "增亏"]);
 export const forecastTone = (type: string): "good" | "bad" | "neutral" =>
   FORECAST_GOOD.has(type) ? "good" : FORECAST_BAD.has(type) ? "bad" : "neutral";

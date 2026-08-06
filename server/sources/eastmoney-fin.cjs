@@ -42,6 +42,25 @@ module.exports = function createEastmoneyFin(ctx) {
 
   const validPeriod = (p) => (/^\d{4}-\d{2}-\d{2}$/.test(p || "") ? p : defaultReportPeriod());
 
+  // 主营构成段抽取: 同一报告期可能混有产品/行业两套口径,
+  // 优先按产品(MAINOP_TYPE=2), 降级按行业(1); 按收入降序取 Top cap 段
+  // MAINOP_TYPE 为字符串("1"/"2"), 须数字比较
+  function pickSegments(rows, cap) {
+    const isType = (r, t) => Number(r.MAINOP_TYPE) === t;
+    const typed = rows.some((r) => isType(r, 2)) ? rows.filter((r) => isType(r, 2)) : rows.filter((r) => isType(r, 1));
+    return typed
+      .sort((a, b) => num(b.MAIN_BUSINESS_INCOME) - num(a.MAIN_BUSINESS_INCOME))
+      .slice(0, cap)
+      .map((r) => ({
+        name: r.ITEM_NAME || "",
+        income: num(r.MAIN_BUSINESS_INCOME),
+        incomeRatio: num(r.MBI_RATIO),
+        profit: num(r.MAIN_BUSINESS_RPOFIT),
+        profitRatio: num(r.MBR_RATIO),
+        margin: num(r.GROSS_RPOFIT_RATIO), // 该业务毛利率
+      }));
+  }
+
   // 单公司近 12 期主指标(F10)
   async function handleFinanceMain(code) {
     const secu = secuCode(code);
@@ -81,25 +100,11 @@ module.exports = function createEastmoneyFin(ctx) {
         emwebJson(`https://emweb.securities.eastmoney.com/PC_HSF10/NewFinanceAnalysis/zcfzbAjaxNew?companyType=4&reportDateType=0&reportType=1&dates=${latestDate}&code=${emCode}`),
         emwebJson(`https://emweb.securities.eastmoney.com/PC_HSF10/NewFinanceAnalysis/xjllbAjaxNew?companyType=4&reportDateType=0&reportType=1&dates=${latestDate}&code=${emCode}`),
       ]);
-      // 主营构成: 取 zygcfx 自身最新报告期(该接口与 datacenter 最新期不同),
-      // 优先按产品(MAINOP_TYPE=2), 降级按行业(1); 取收入 Top 8
+      // 主营构成: 取 zygcfx 自身最新报告期(该接口与 datacenter 最新期不同), 收入 Top 8
       const opRows = opJson?.zygcfx || [];
-      // MAINOP_TYPE 为字符串("1"/"2"), 须数字比较
-      const isType = (r, t) => Number(r.MAINOP_TYPE) === t;
       const opLatest = [...new Set(opRows.map((r) => String(r.REPORT_DATE).slice(0, 10)))].sort().reverse()[0] || "";
       const opPeriod = opRows.filter((r) => String(r.REPORT_DATE).slice(0, 10) === opLatest);
-      const typed = opPeriod.some((r) => isType(r, 2)) ? opPeriod.filter((r) => isType(r, 2)) : opPeriod.filter((r) => isType(r, 1));
-      mainop = typed
-        .sort((a, b) => num(b.MAIN_BUSINESS_INCOME) - num(a.MAIN_BUSINESS_INCOME))
-        .slice(0, 8)
-        .map((r) => ({
-          name: r.ITEM_NAME || "",
-          income: num(r.MAIN_BUSINESS_INCOME),
-          incomeRatio: num(r.MBI_RATIO),
-          profit: num(r.MAIN_BUSINESS_RPOFIT),
-          profitRatio: num(r.MBR_RATIO),
-          margin: num(r.GROSS_RPOFIT_RATIO), // 该业务毛利率
-        }));
+      mainop = pickSegments(opPeriod, 8);
 
       // 主营构成全历史(按产品优先, 降级行业): 每报告期段列表, 供趋势堆叠柱
       const opByPeriod = new Map();
@@ -112,18 +117,11 @@ module.exports = function createEastmoneyFin(ctx) {
         .sort((a, b) => (a[0] < b[0] ? -1 : 1))
         .slice(-40)
         .map(([date, rows]) => {
-          const typedRows = rows.some((r) => isType(r, 2)) ? rows.filter((r) => isType(r, 2)) : rows.filter((r) => isType(r, 1));
+          // 历史段不输出收入/利润占比, 与 FinanceMain.mainopHistory 类型一致
+          const stripRatio = ({ incomeRatio, profitRatio, ...seg }) => seg;
           return {
             date,
-            segments: typedRows
-              .sort((a, b) => num(b.MAIN_BUSINESS_INCOME) - num(a.MAIN_BUSINESS_INCOME))
-              .slice(0, 6)
-              .map((r) => ({
-                name: r.ITEM_NAME || "",
-                income: num(r.MAIN_BUSINESS_INCOME),
-                profit: num(r.MAIN_BUSINESS_RPOFIT),
-                margin: num(r.GROSS_RPOFIT_RATIO),
-              })),
+            segments: pickSegments(rows, 6).map(stripRatio),
           };
         });
       const zc = zcJson?.data?.[0] || {};

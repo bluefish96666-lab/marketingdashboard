@@ -4,7 +4,7 @@ import { Panel, type PanelZoomProps } from "./Panel";
 import { QuoteRow } from "./QuoteRow";
 import { useQuote } from "@/lib/market";
 import { type StockSearchResult } from "@/lib/api";
-import { fmtWan } from "@/lib/format";
+import { fmtTurnover, fmtWan } from "@/lib/format";
 import { normalizeStockCode } from "@/lib/code";
 import { loadJson, saveJson } from "@/lib/storage";
 import { useStockSearch } from "@/hooks/useStockSearch";
@@ -32,7 +32,7 @@ const WatchRow = memo(function WatchRow({
       code={code}
       name={q?.name || code}
       amount={q?.amount && q.amount > 0 ? fmtWan(q.amount) : undefined}
-      turnover={q?.turnover && q.turnover > 0 ? `${q.turnover.toFixed(1)}%` : undefined}
+      turnover={fmtTurnover(q?.turnover)}
       spark
       boards
       flow

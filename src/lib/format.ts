@@ -11,6 +11,9 @@ export const num = (v: unknown) => {
 
 export const fmtPct = (v: number, digits = 2) => `${v > 0 ? "+" : ""}${v.toFixed(digits)}%`;
 
+/** 换手率: 0/缺失返回 undefined(隐藏该列), 否则 "12.3%" */
+export const fmtTurnover = (t?: number): string | undefined => (t != null && t > 0 ? `${t.toFixed(1)}%` : undefined);
+
 export const clsChg = (v: number) =>
   v > 0 ? "text-rose-400" : v < 0 ? "text-emerald-400" : "text-slate-400";
 

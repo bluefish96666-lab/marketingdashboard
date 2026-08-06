@@ -20,6 +20,16 @@ const PALETTE = [
   "#7f7f7f", "#00bcd4", "#ff5722", "#8bc34a",
 ];
 
+/** 时间范围 → 天数(与顶部 range 按钮一一对应) */
+const RANGE_DAYS: Record<"7d" | "14d" | "30d" | "60d" | "180d" | "1y", number> = {
+  "7d": 7,
+  "14d": 14,
+  "30d": 30,
+  "60d": 60,
+  "180d": 180,
+  "1y": 365,
+};
+
 // 已知厂商/分组的固定配色(保持原视觉)
 const KNOWN_COLORS: Record<string, string> = {
   腾讯: "#4e79a7", 小米: "#f28e2b", DeepSeek: "#e15759", Anthropic: "#76b7b2",
@@ -187,7 +197,7 @@ export function OpenRouterPanel({ className, panelId, isZoomed, onToggleZoom }: 
 
   const sliced = useMemo(() => {
     if (!data || data.length === 0) return [];
-    const n = range === "7d" ? 7 : range === "14d" ? 14 : range === "30d" ? 30 : range === "60d" ? 60 : range === "180d" ? 180 : 365;
+    const n = RANGE_DAYS[range];
     const days = data.slice(-n);
     return agg === "week" ? aggregateWeekly(days) : days;
   }, [data, range, agg]);

@@ -10,7 +10,7 @@ import { POLL } from "@/lib/intervals";
 import { canonBoardName, unionBoards } from "@/lib/boards";
 import { CHAINS } from "@/config/dashboard";
 import type { Chain, ChainStock } from "@/config/dashboard";
-import { clsChg, fmtPct, fmtTime, fmtWan, TNUM } from "@/lib/format";
+import { clsChg, fmtPct, fmtTime, fmtTurnover, fmtWan, TNUM } from "@/lib/format";
 import { toMarketCode } from "@/lib/code";
 import { loadJson, saveJson } from "@/lib/storage";
 import { buildChainFromParse, updateChainSegments } from "./chain-utils";
@@ -31,7 +31,7 @@ function StockCell({ code, name, tag }: { code: string; name: string; tag?: stri
   return (
     <QuoteRow code={code} name={name} tag={tag}
       amount={q?.amount && q.amount > 0 ? fmtWan(q.amount) : undefined}
-      turnover={q?.turnover && q.turnover > 0 ? `${q.turnover.toFixed(1)}%` : undefined}
+      turnover={fmtTurnover(q?.turnover)}
       spark boards flow variant="card" />
   );
 }
@@ -64,7 +64,7 @@ export function ChainPanel({ className = "", ...zoomProps }: { className?: strin
       const fallback = seg.stocks || [];
       if (!seg.query || refreshTick === 0) { segments.push({ name: seg.name, source: "local", stocks: fallback }); continue; }
       try {
-        const result = await api.mysterySelect(seg.query, 36, true);
+        const result = await api.mysterySelect(seg.query, 36, { refresh: true });
         const stocks = result.rows.map((row) => toChainStock(row, seg.desc?.split("·")?.[0]?.trim() || seg.name)).filter((s): s is ChainStock => s !== null).slice(0, 10);
         segments.push({ name: seg.name, source: stocks.length > 0 ? "iwencai" : "local", stocks: stocks.length > 0 ? stocks : fallback });
       } catch { segments.push({ name: seg.name, source: "local", stocks: fallback }); }
@@ -113,9 +113,11 @@ export function ChainPanel({ className = "", ...zoomProps }: { className?: strin
         setParseState({ loading: false, error: "", warnings: parsed.warnings || [] });
         setEditor(null);
       } else {
-        // 更新已有链的股票(纯函数)
+        // 更新已有链的股票(纯函数); 先算 next 再 setState + saveJson(与 add 分支一致, 避免 updater 内副作用)
         const segments = updateChainSegments(chain.segments, parsed);
-        setChainOverrides((prev) => { const next = { ...prev, [chain.id]: { segments } }; saveJson(CHAIN_OVERRIDES_KEY, next); return next; });
+        const next = { ...chainOverrides, [chain.id]: { segments } };
+        setChainOverrides(next);
+        saveJson(CHAIN_OVERRIDES_KEY, next);
         setRefreshTick((x) => x + 1);
         setParseState({ loading: false, error: "", warnings: parsed.warnings || [] });
         setEditor(null);
@@ -131,7 +133,7 @@ export function ChainPanel({ className = "", ...zoomProps }: { className?: strin
       if (!base) { setParseState({ loading: false, error: "请先填写产业链名称。", warnings: [] }); return; }
       setParseState({ loading: true, error: "", warnings: [] });
       try {
-        const result = await api.mysterySelect(base, 30, true);
+        const result = await api.mysterySelect(base, 30, { refresh: true });
         const rows = result.rows || [];
         if (rows.length === 0) throw new Error("问财未返回匹配股票，请换个名称或手动粘贴内容");
         const stockText = rows.slice(0, 30).map((r) => `${r.name}（${r.code}）`).join("、");
@@ -154,7 +156,7 @@ export function ChainPanel({ className = "", ...zoomProps }: { className?: strin
     for (const seg of chain.segments) {
       if (!seg.query) { lines.push(`\n${seg.name}：\n（未配置问财查询语）\n`); continue; }
       try {
-        const result = await api.mysterySelect(seg.query, 12, true);
+        const result = await api.mysterySelect(seg.query, 12, { refresh: true });
         const rows = result.rows || [];
         if (rows.length === 0) { lines.push(`\n${seg.name}：\n（问财未返回）\n`); continue; }
         const stockText = rows.slice(0, 10).map((r) => `${r.name}（${r.code}）`).join("、");
