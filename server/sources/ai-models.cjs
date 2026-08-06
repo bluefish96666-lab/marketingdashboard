@@ -44,8 +44,12 @@ module.exports = function createAiModels(ctx) {
       console.error("[aa-models] upstream fail, fallback to history:", e?.message || e);
       const hist = readHistory(MODEL_PRICES_FILE) || {};
       models = Object.entries(hist).map(([slug, h]) => {
-        const last = h?.points?.[h.points.length - 1] || {};
-        return { slug, name: h?.name || slug, vendor: h?.vendor || "", release: "", intel: null, input: last.i ?? null, output: last.o ?? null, cacheHit: null, taskCost: last.task ?? null };
+        const pts = h?.points || [];
+        const last = pts[pts.length - 1] || {};
+        // taskCost: 取最近一个有值的点(部分模型最后一天缺 task)
+        let task = null;
+        for (let i = pts.length - 1; i >= 0; i--) { if (pts[i].task != null) { task = pts[i].task; break; } }
+        return { slug, name: h?.name || slug, vendor: h?.vendor || "", release: "", intel: null, input: last.i ?? null, output: last.o ?? null, cacheHit: null, taskCost: task };
       }).filter((m) => m.input != null || m.output != null);
       if (!models.length) throw e; // 历史也没有 → 抛原错
       return { models, history: hist, source: "local snapshot (AA upstream unavailable)" };

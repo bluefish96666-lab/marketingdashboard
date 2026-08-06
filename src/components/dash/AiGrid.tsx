@@ -16,7 +16,7 @@ const MemoCell = memo(function MemoCell({ component: C, ...props }: { component:
 });
 
 /**
- * /ai 页专用 3×2 网格(移动端单列): Token 消耗左上单格, 基础设施 ROI 左下。
+ * /ai 页专用 3×4 网格(移动端单列): Token 消耗与投资回报面板各占 2×2, 其余 1×1。
  * 放大 = 面板铺满整个网格区域(任何面板都只会变大), 其余面板暂时隐藏,
  * 还原即恢复 — 与 TV 模式全屏浮层同一模型, 避免重排模型下
  * "跨行面板越放越矮/兄弟面板被压扁"的问题。
@@ -27,12 +27,12 @@ export function AiGrid({ cells }: { cells: AiCellDef[] }) {
   const zoomed = zoomedId != null;
 
   return (
-    <main className="grid min-h-0 flex-1 grid-cols-1 gap-1 overflow-y-auto p-1 lg:grid-cols-3 lg:grid-rows-2 lg:overflow-hidden">
+    <main className="grid min-h-0 flex-1 grid-cols-1 gap-1 overflow-y-auto p-1 lg:grid-cols-3 lg:grid-rows-4 lg:overflow-hidden">
       {cells.map((c) => (
         <div
           key={c.id}
           className={`min-h-0 transition-all duration-300 ${c.mobileH} lg:h-full ${
-            zoomed ? (zoomedId === c.id ? "z-10 lg:col-start-1 lg:row-start-1 lg:col-span-3 lg:row-span-2" : "hidden") : c.area
+            zoomed ? (zoomedId === c.id ? "z-10 lg:col-start-1 lg:row-start-1 lg:col-span-3 lg:row-span-4" : "hidden") : c.area
           }`}
         >
           <MemoCell
