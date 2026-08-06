@@ -9,6 +9,7 @@ const path = require("path");
 const iconv = require("iconv-lite");
 const { execFile } = require("child_process");
 const crypto = require("crypto");
+const { num, changeOf, pctOf, fmtHHMM, toMarketCode6 } = require("./lib/format.cjs");
 
 // 加载 .env
 try {
@@ -95,11 +96,6 @@ function send(res, code, obj, extra = {}) {
   res.writeHead(code, headers);
   res.end(body);
 }
-
-const num = (v) => {
-  const n = parseFloat(v);
-  return Number.isFinite(n) ? n : 0;
-};
 
 /* ---------------- 腾讯行情 qt.gtimg.cn ---------------- */
 function parseTencentLine(line) {
@@ -244,8 +240,8 @@ async function handleQuotes(codes) {
           name: "VIX恐慌指数期货",
           price,
           prev,
-          change: +(price - prev).toFixed(4),
-          pct: prev ? +(((price - prev) / prev) * 100).toFixed(3) : 0,
+          change: changeOf(price, prev),
+          pct: pctOf(price, prev),
           time: `${f[12]} ${f[6]}`,
         };
         cacheSet("q:usVIX", { ts: Date.now(), data: rec, inflight: null, ttl: QUOTE_CACHE_TTL, failAt: null, failCount: 0 });
@@ -364,8 +360,8 @@ function parseFutures(text) {
       low: num(f[5]),
       open: num(f[8]),
       prev: prevSettle,
-      change: +(price - prevSettle).toFixed(4),
-      pct: prevSettle ? +(((price - prevSettle) / prevSettle) * 100).toFixed(3) : 0,
+      change: changeOf(price, prevSettle),
+      pct: pctOf(price, prevSettle),
       time: `${f[12]} ${f[6]}`,
     };
   }
@@ -509,8 +505,8 @@ function parseSinaDomestic(text) {
       low: num(f[4]),
       open: num(f[2]),
       prev: prevSettle,
-      change: +(price - prevSettle).toFixed(4),
-      pct: prevSettle ? +(((price - prevSettle) / prevSettle) * 100).toFixed(3) : 0,
+      change: changeOf(price, prevSettle),
+      pct: pctOf(price, prevSettle),
       time: f[16],
     };
   }
@@ -554,7 +550,7 @@ async function fetchBtc() {
     symbol: "BTCUSDT", name: "BTC/USDT", price, prev,
     open: prev, high: num(d.high24h), low: num(d.low24h),
     change: +(price - prev).toFixed(2),
-    pct: prev ? +(((price - prev) / prev) * 100).toFixed(3) : 0,
+    pct: pctOf(price, prev),
     time: "",
   };
 }
@@ -612,8 +608,8 @@ async function handleFutures(list) {
             const livePrice = num(arr[0][1]);
             if (livePrice > 0) {
               item.price = livePrice;
-              item.change = +(livePrice - item.prev).toFixed(4);
-              item.pct = item.prev ? +(((livePrice - item.prev) / item.prev) * 100).toFixed(3) : 0;
+              item.change = changeOf(livePrice, item.prev);
+              item.pct = pctOf(livePrice, item.prev);
             }
           }
         } catch { /* minLine 失败就保留现有值 */ }
@@ -648,10 +644,7 @@ async function handleFutureMinute(code) {
         fetchJsonAny(["https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1m&limit=240"]),
         fetchJsonAny(["https://api.binance.com/api/v3/ticker/24hr?symbol=BTCUSDT"]),
       ]);
-      const pts = klines.map((k) => {
-        const d = new Date(k[0]);
-        return { t: `${String(d.getHours()).padStart(2, "0")}${String(d.getMinutes()).padStart(2, "0")}`, p: num(k[4]) };
-      });
+      const pts = klines.map((k) => ({ t: fmtHHMM(new Date(k[0])), p: num(k[4]) }));
       return { code, prec: num(ticker.prevClosePrice), points: pts };
     } catch (e) {
       // 上游故障抛错(走 cached 负缓存退避), 不返回空数据冒充成功
@@ -866,14 +859,6 @@ async function emGet(url) {
     }
   }
   throw lastErr;
-}
-
-// 统一的"6位代码→市场前缀"映射(镜像前端 src/lib/code.ts toMarketCode): 6→sh, 0/3→sz, 4/8/9→bj
-function toMarketCode6(code6) {
-  if (/^6/.test(code6)) return `sh${code6}`;
-  if (/^[03]/.test(code6)) return `sz${code6}`;
-  if (/^[489]/.test(code6)) return `bj${code6}`;
-  return code6;
 }
 
 const emSymbol = (code6) => toMarketCode6(code6);
