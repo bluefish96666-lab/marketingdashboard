@@ -143,6 +143,12 @@ export const InfraRoiPanel = memo(function InfraRoiPanel({ className, panelId, i
               <path d={chart.roiPath.actual} fill="none" stroke="#a78bfa" strokeWidth={1.4} />
               {chart.capexPath && <path d={chart.capexPath.actual} fill="none" stroke="#fbbf24" strokeWidth={1.3} />}
               {chart.gridPath && <path d={chart.gridPath.actual} fill="none" stroke="#34d399" strokeWidth={1.3} />}
+              {/* 历史→预测连接段(填补拆段断口) */}
+              <path d={chart.costPath.bridge} fill="none" stroke="#fb7185" strokeWidth={1.2} strokeDasharray="2 2" />
+              <path d={chart.pricePath.bridge} fill="none" stroke="#38bdf8" strokeWidth={1.2} strokeDasharray="2 2" />
+              <path d={chart.roiPath.bridge} fill="none" stroke="#a78bfa" strokeWidth={1.1} strokeDasharray="2 2" />
+              {chart.capexPath && <path d={chart.capexPath.bridge} fill="none" stroke="#fbbf24" strokeWidth={1.1} strokeDasharray="2 2" />}
+              {chart.gridPath && <path d={chart.gridPath.bridge} fill="none" stroke="#34d399" strokeWidth={1.1} strokeDasharray="2 2" />}
               {/* 轴标签 */}
               {chart.lTicks.map((t) => <text key={`lt${t}`} x={chart.PL - 4} y={chart.lY(t) + 3} textAnchor="end" fill="#64748b" fontSize={8} fontFamily="monospace">{fmtM(t)}</text>)}
               {chart.rTicks.map((t) => <text key={`rt${t}`} x={size.w - chart.PR + 4} y={chart.rY(t) + 3} textAnchor="start" fill="#475569" fontSize={8} fontFamily="monospace">{t}</text>)}

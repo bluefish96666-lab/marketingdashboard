@@ -44,11 +44,13 @@ export function linTicks(lo: number, hi: number, count = 5): number[] {
   return out;
 }
 
-/** 折线 path(实/虚分段由 actual 决定 — 返回两段) */
-export function seriesPath(points: AiInfraPoint[], key: SeriesKey, X: (i: number) => number, Y: (v: number) => number): { actual: string; forecast: string } {
+/** 折线 path(实/虚分段由 actual 决定 — 返回两段 + 连接段) */
+export function seriesPath(points: AiInfraPoint[], key: SeriesKey, X: (i: number) => number, Y: (v: number) => number): { actual: string; forecast: string; bridge: string } {
   let actual = "", forecast = "";
   let cur = "", curActual: boolean | null = null;
   let started = false;
+  let lastActualSeg = "", firstForecastSeg = "";
+  let sawActual = false, sawForecast = false;
   const flush = () => { if (!cur) return; if (curActual) actual += cur; else forecast += cur; };
   for (let i = 0; i < points.length; i++) {
     const v = points[i][key];
@@ -57,10 +59,16 @@ export function seriesPath(points: AiInfraPoint[], key: SeriesKey, X: (i: number
     if (curActual !== a) { flush(); cur = ""; curActual = a; started = false; } // 边界: 新段用 M
     const cmd = started ? "L" : "M";
     cur += `${cmd}${X(i).toFixed(1)},${Y(v).toFixed(1)}`;
+    if (a) { lastActualSeg = `${cmd}${X(i).toFixed(1)},${Y(v).toFixed(1)}`; sawActual = true; }
+    else { if (!sawForecast) { firstForecastSeg = `${cmd}${X(i).toFixed(1)},${Y(v).toFixed(1)}`; sawForecast = true; } }
     started = true;
   }
   flush();
-  return { actual, forecast };
+  // 连接段: 最后一个历史点 → 第一个预测点(填补 x 方向断口)
+  const bridge = sawActual && sawForecast && lastActualSeg.startsWith("L")
+    ? `M${lastActualSeg.slice(1)} L${firstForecastSeg.slice(1)}`
+    : "";
+  return { actual, forecast, bridge };
 }
 
 /** 单系列图布局计算: 返回坐标映射 + 刻度 */

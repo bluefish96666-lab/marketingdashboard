@@ -44,20 +44,23 @@ describe("seriesPath", () => {
     const data = pts([
       { pricePerM: 1 }, { pricePerM: 2 }, { pricePerM: 3 }, { pricePerM: 4 }, { pricePerM: 5 },
     ]);
-    const { actual, forecast } = seriesPath(data, "pricePerM", X, Y);
+    const { actual, forecast, bridge } = seriesPath(data, "pricePerM", X, Y);
     expect(actual).toContain("M0.0,1.0"); // 2022 起点在实线
     expect(actual).toContain("L20.0,3.0"); // 2024(历史终点)在实线
     expect(forecast).toContain("M30.0,4.0"); // 2025(预测起点)在虚线
     expect(forecast).toContain("L40.0,5.0");
     expect(actual).not.toContain("M30.0"); // 预测点不在实线
+    expect(bridge).toContain("M20.0,3.0"); // 连接段从历史终点出发
+    expect(bridge).toContain("L30.0,4.0"); // 到预测起点
   });
   it("空值跳过不产生断裂命令", () => {
     const X = (i: number) => i * 10;
     const data = pts([{ pricePerM: 1 }, { pricePerM: Number.NaN }, { pricePerM: 3 }]);
-    const { actual } = seriesPath(data, "pricePerM", X, (v) => v);
+    const { actual, bridge } = seriesPath(data, "pricePerM", X, (v) => v);
     expect(actual).toContain("M0.0,1.0");
     expect(actual).toContain("M20.0,3.0"); // NaN 后重新起段
     expect(actual).not.toContain("L10.0"); // 无跳段连线
+    expect(bridge).toBe(""); // 无历史→预测切换时 bridge 为空
   });
 });
 
