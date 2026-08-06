@@ -36,13 +36,14 @@ export const InfraRoiPanel = memo(function InfraRoiPanel({ className, panelId, i
     const leftLo = Math.min(...leftVals) * 0.5, leftHi = Math.max(...leftVals) * 1.2;
     // 右轴: ROI 域(-100..+10)
     const roiVals = pts.map((p) => p.roiPct);
-    const rightLo = Math.min(-90, Math.min(...roiVals) * 1.1), rightHi = Math.max(10, Math.max(...roiVals) * 1.1);
+    // 右轴封顶 +100%(>100% 的 ROI 图上封顶显示, tooltip 给真实值 — 避免 288% 压扁其他线)
+    const rightLo = Math.min(-90, Math.min(...roiVals) * 1.1), rightHi = Math.max(10, Math.min(100, Math.max(...roiVals) * 1.1));
 
     const PL = 40, PR = 44, PT = 8, PB = 22;
     const iw = size.w - PL - PR, ih = size.h - PT - PB;
     const X = (i: number) => PL + (i / Math.max(n - 1, 1)) * iw;
     const lY = (v: number) => PT + ih - ((Math.log(Math.max(v, leftLo)) - Math.log(leftLo)) / (Math.log(leftHi) - Math.log(leftLo))) * ih;
-    const rY = (v: number) => PT + ih - ((v - rightLo) / (rightHi - rightLo)) * ih;
+    const rY = (v: number) => { const raw = PT + ih - ((v - rightLo) / (rightHi - rightLo)) * ih; return Math.max(PT - 1, Math.min(PT + ih + 1, raw)); };
 
     // log 左轴刻度
     const lTicks: number[] = [];
@@ -101,7 +102,7 @@ export const InfraRoiPanel = memo(function InfraRoiPanel({ className, panelId, i
         <div className="flex shrink-0 flex-wrap items-center gap-x-2.5 gap-y-0.5 pb-1 text-[9px]">
           <span className="flex items-center gap-1"><span className="inline-block h-[3px] w-3.5 rounded bg-[#38bdf8]" />售价 <span className="text-slate-600">($/M)</span></span>
           <span className="flex items-center gap-1"><span className="inline-block h-[3px] w-3.5 rounded bg-[#fb7185]" />生产成本 <span className="text-slate-600">($/M)</span></span>
-          <span className="flex items-center gap-1"><span className="inline-block h-[3px] w-3.5 rounded bg-[#a78bfa]" />复合ROI <span className="text-slate-600">(右轴%)</span></span>
+          <span className="flex items-center gap-1"><span className="inline-block h-[3px] w-3.5 rounded bg-[#a78bfa]" />AI专项ROI <span className="text-slate-600">(右轴%)</span></span>
           <span className="flex items-center gap-1"><span className="inline-block h-[3px] w-3.5 rounded bg-[#fbbf24]" />CapEx <span className="text-slate-600">($B, 归一)</span></span>
           <span className="flex items-center gap-1"><span className="inline-block h-[3px] w-3.5 rounded bg-[#34d399]" />电网 <span className="text-slate-600">(指数, 归一)</span></span>
           <span className="ml-auto text-slate-600">历史 2022-2026 · 预测 2027-2035</span>

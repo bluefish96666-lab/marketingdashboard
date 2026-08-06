@@ -12,15 +12,19 @@ module.exports = function createAiInfra(ctx) {
     gridAnchors: { 2022: 82, 2023: 74, 2024: 68, 2025: 61 },
     gridCapCagr: 0.06,      // 电网容量年增(建设稳步, 电网本身不退化)
     gridDemandK: 1.0,       // 需求增速 = 容量增速 × (1 + K×capexGrowth/0.2) (AI景气度驱动)
-    // 云巨头 CapEx 预测增速([0]=2026当年估算(年中), [1..9]=2027-2035: 高增长→见顶→出清负增长)
-    capexGrowth: [0.20, 0.18, 0.16, 0.10, 0.05, 0.00, -0.05, -0.08, -0.06, -0.03],
+    // 云巨头 CapEx 预测增速([0]=2026当年估算见顶, [1..9]=2027-2035: 资本硬着陆增速趋缓, 2030+平稳)
+    capexGrowth: [0.20, 0.05, 0.03, 0.02, 0.01, 0.00, -0.02, -0.02, -0.01, 0.00],
     // Token 单位经济学
-    costDecline: -0.42,     // 生产成本年降(摩尔式)
-    priceDecline: -0.35,    // 售价年降(慢于成本 → 毛利扩张)
+    costDecline: -0.42,     // 生产成本年降(2023-2026 崩塌 ~95%, 硬件算力密度+算法蒸馏)
+    priceDecline: -0.35,    // 售价年降(2022-2026, 慢于成本 → 毛利扩张)
+    priceStableFrom: 2027,  // 2027+ 价格策略性稳定(按价值计费, B端溢价), 降价趋缓
+    priceStableDecline: -0.12,
     // 云 AI 收入预测增速([0]=2026当年估算, [1..9]=2027-2035): 对齐市场共识 30%→衰减
     revenueGrowth: [0.30, 0.30, 0.28, 0.25, 0.20, 0.16, 0.13, 0.11, 0.09, 0.08],
-    // AI 收入占比(云收入 × 此比例 = AI 收入): 2022 15% → 2035 70%
-    aiShare: [0.15, 0.20, 0.28, 0.35, 0.42, 0.50, 0.56, 0.60, 0.64, 0.66, 0.68, 0.69, 0.70, 0.70], // 保留(纯AI口径参考), 当前ROI用云整体收入
+    // AI 收入占比(云收入 × 此比例 = AI 增量收入): 2022 15% → 2025 55% → 2035 85%(B端全面铺开, 按价值计费)
+    aiShare: [0.15, 0.25, 0.45, 0.55, 0.62, 0.68, 0.72, 0.76, 0.79, 0.81, 0.83, 0.84, 0.85, 0.85],
+    // AI 相关 capex 占比(数据中心/AI基建占总资本开支): 2022 40% → 2035 98%
+    aiCapexShare: [0.40, 0.50, 0.60, 0.70, 0.80, 0.85, 0.88, 0.90, 0.92, 0.94, 0.95, 0.96, 0.97, 0.98],
   };
   const START_YEAR = 2022;
   const FORECAST_START = 2027; // 2026 为当年估算(实际已过半), 2027 起预测
@@ -51,41 +55,43 @@ module.exports = function createAiInfra(ctx) {
       price[y] = y === FORECAST_START - 1
         ? +(price[y - 1] * (1 + MODEL.priceDecline)).toFixed(2)
         : isForecast
-          ? +(price[y - 1] * (1 + MODEL.priceDecline)).toFixed(2)
+          ? +(price[y - 1] * (1 + (y >= MODEL.priceStableFrom ? MODEL.priceStableDecline : MODEL.priceDecline))).toFixed(2)
           : (priceHist[y] ?? null);
       cost[y] = y === FORECAST_START - 1
         ? +(cost[y - 1] * (1 + MODEL.costDecline)).toFixed(3)
         : isForecast
           ? +(cost[y - 1] * (1 + MODEL.costDecline)).toFixed(3)
           : (costHist[y] ?? null);
-      // AI 收入 = 云业务收入 + 独立模型公司收入(市场ROI口径: AI基建总变现 vs 云巨头 CapEx)
+      // AI 收入 = 云业务 AI 增量 + 独立模型公司收入(纯AI口径, 排除云存量)
       const cloudRev = y === FORECAST_START - 1
         ? (cloudRevHist[y - 1] || 0) * (1 + MODEL.revenueGrowth[0])
         : isForecast
           ? (cloudRevenue[y - 1] * (1 + MODEL.revenueGrowth[idx]))
           : (cloudRevHist[y] ?? 0);
       cloudRevenue[y] = cloudRev;
+      const shareIdx = y - START_YEAR;
       const modelCo = (inputs.modelCoHist || {})[y] ?? 0;
-      revenue[y] = Math.round(cloudRev + modelCo);
+      const aiRev = cloudRev * MODEL.aiShare[shareIdx] + modelCo;
+      revenue[y] = Math.round(aiRev);
       actual[y] = !isForecast;
-      // 电网就绪度 = 容量增速 ÷ 需求增速(供需比, 0-100)
-      // 需求增速 = 容量增速 × (1 + capexGrowth/0.2): AI热潮期需求爆发→回落, 出清期需求降温→回升(U型)
-      if (isForecast || y === FORECAST_START - 1) {
-        const gIdx = y === FORECAST_START - 1 ? 0 : idx; // 2026 用 capexGrowth[0], 2027+ 用 [1..9]
-        const demG = MODEL.gridCapCagr * (1 + MODEL.gridDemandK * MODEL.capexGrowth[gIdx] / 0.2);
-        const ratio = (1 + MODEL.gridCapCagr) / (1 + demG);
-        grid[y] = Math.max(5, Math.min(100, +((grid[y - 1] / 100) * ratio * 100).toFixed(1)));
+      // 电网就绪度: 2022-2026H1 横盘走低(排队积压), 2026H2 政策拐点
+      // FERC 60天并网强制令 + 巨头自建核电/微电网激活 → 陡峭上扬
+      if (y >= FORECAST_START) {
+        // 政策效应: 供给端加速(自建核电+强制并网), 就绪度每年 +6~8, 2035 稳定在 85
+        grid[y] = Math.max(5, Math.min(100, +(grid[y - 1] + 6.5).toFixed(1)));
+      } else if (y === FORECAST_START - 1) {
+        grid[y] = Math.max(5, Math.min(100, +((gridAnchors[y] ?? grid[y - 1]) * 0.97).toFixed(1))); // 2026 年中仍在底部
       } else {
         grid[y] = gridAnchors[y] ?? 50;
       }
     }
 
-    // 复合 ROI: 累计(收入-资本开支)/累计资本开支 — 折旧不重复扣除(已含于capex分母)
-    let cumCap = 0, cumRev = 0;
+    // 年度 AI 专项 ROI: (AI收入 - AI capex) / AI capex — AI capex = 总capex × AI占比
+    // 投入期深负 → 2026 拐点 → 2027-2028 转正(市场观点), 排除云存量干扰
     const roi = {};
     for (const y of years) {
-      cumCap += capex[y]; cumRev += revenue[y];
-      roi[y] = cumCap > 0 ? +(((cumRev - cumCap) / cumCap) * 100).toFixed(1) : 0;
+      const aiCap = capex[y] * MODEL.aiCapexShare[y - START_YEAR];
+      roi[y] = aiCap > 0 ? +(((revenue[y] - aiCap) / aiCap) * 100).toFixed(1) : 0;
     }
 
     return years.map((y) => ({
@@ -142,7 +148,7 @@ module.exports = function createAiInfra(ctx) {
         "grid: LBNL 年度锚点 + 模型外推(合成指数, 非官方)",
         "costPerM: 厂商不披露, 公开研究估算",
         "pricePerM: 2022-2024 定价史锚点, 2025+ OpenRouter 实时加权均价",
-        "roiPct: 累计(云收入+模型公司收入-资本开支)/累计资本开支; 模型公司收入为估算(OpenAI/Anthropic等)",
+        "roiPct: 年度AI专项ROI = (AI收入-AI capex)/AI capex; AI收入=云AI增量+模型公司(估算), AI capex=总capex×AI占比",
       ],
     };
   }
@@ -171,7 +177,7 @@ module.exports = function createAiInfra(ctx) {
 
   // 独立模型公司收入(OpenAI/Anthropic/xAI/Mistral 等, 十亿美元) — AI 基建变现另一半
   function computeModelCoHist() {
-    return { 2022: 0, 2023: 2, 2024: 6, 2025: 18, 2026: 80, 2027: 140, 2028: 200, 2029: 260, 2030: 320, 2031: 370, 2032: 410, 2033: 440, 2034: 460, 2035: 470 };
+    return { 2022: 0, 2023: 2, 2024: 6, 2025: 18, 2026: 70, 2027: 110, 2028: 160, 2029: 215, 2030: 275, 2031: 330, 2032: 380, 2033: 425, 2034: 465, 2035: 500 };
   }
 
   return { computeSeries, handleAiInfra, MODEL };

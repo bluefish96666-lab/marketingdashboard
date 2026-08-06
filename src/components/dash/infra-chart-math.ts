@@ -8,7 +8,7 @@ export const SERIES_META: Record<SeriesKey, { label: string; color: string; unit
   grid: { label: "电网就绪度", color: "#34d399", unit: "指数", axis: "right", note: "LBNL 年度锚点+外推, 合成指数非官方" },
   costPerM: { label: "生产成本", color: "#fb7185", unit: "$/M", axis: "left", note: "厂商不披露, 公开研究估算" },
   pricePerM: { label: "售价", color: "#38bdf8", unit: "$/M", axis: "left", note: "2022-2024 定价史, 2025+ OpenRouter 实时均价" },
-  roiPct: { label: "复合 ROI", color: "#a78bfa", unit: "%", axis: "right", note: "累计(云收入+模型公司收入-CapEx)/CapEx, 收入为近似口径" },
+  roiPct: { label: "AI 专项 ROI", color: "#a78bfa", unit: "%", axis: "right", note: "年度(云AI增量+模型公司收入-AI capex)/AI capex; AI capex=总capex×AI占比" },
 };
 
 /** 对数刻度: 值 → 图内 y(线性映射到 log 域) */
