@@ -134,7 +134,7 @@ module.exports = function createFutures(ctx) {
         // 兜底:新浪
         const url = `https://hq.sinajs.cn/list=${hf.map(encodeURIComponent).join(",")}`; // 新浪要求逗号不转码
         const opts = { referer: "https://finance.sina.com.cn/futures/quotes/CL.shtml" };
-        let r = await retryOnEmpty(() => parseFutures(curlText(url, opts)));
+        let r = await retryOnEmpty(async () => parseFutures(await curlText(url, opts)));
         Object.assign(out, r);
       })());
     }
@@ -142,7 +142,10 @@ module.exports = function createFutures(ctx) {
       jobs.push((async () => {
         const url = `https://hq.sinajs.cn/list=${nf.map(encodeURIComponent).join(",")}`;
         const opts = { referer: "https://finance.sina.com.cn/futures/quotes/AU0.shtml" };
-        let r = await retryOnEmpty(() => parseSinaDomestic(curlText(url, opts)));
+        let r;
+        try {
+          r = await retryOnEmpty(async () => parseSinaDomestic(await curlText(url, opts)));
+        } catch (e) { console.error("[futures-nf]", url, e?.message || e); throw e; }
         // 夜盘期间 hq.sinajs.cn 最新价可能为0,从分钟线接口补实时价格
         for (const code of nf) {
           const item = r[code];
