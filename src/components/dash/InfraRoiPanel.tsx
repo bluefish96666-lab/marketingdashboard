@@ -127,9 +127,9 @@ export const InfraRoiPanel = memo(function InfraRoiPanel({ className, panelId, i
               {/* 网格 */}
               {chart.lTicks.map((t) => <line key={`l${t}`} x1={chart.PL} y1={chart.lY(t)} x2={size.w - chart.PR} y2={chart.lY(t)} stroke="#1e293b" strokeWidth={0.5} />)}
               {chart.rTicks.map((t) => <line key={`r${t}`} x1={chart.PL} y1={chart.rY(t)} x2={size.w - chart.PR} y2={chart.rY(t)} stroke="rgba(148,163,184,0.08)" strokeWidth={0.5} strokeDasharray="2 3" />)}
-              {/* 预测区分隔线 */}
-              <line x1={chart.X(3.5)} y1={chart.PT} x2={chart.X(3.5)} y2={size.h - chart.PB} stroke="rgba(251,191,36,0.35)" strokeWidth={0.8} strokeDasharray="4 3" />
-              <text x={chart.X(4)} y={chart.PT + 7} fill="#fbbf24" fontSize={8} fontFamily="monospace" opacity={0.7}>预测→</text>
+              {/* 预测区分隔线: 2026(实际)与2027(预测)之间 — X(4.5) */}
+              <line x1={chart.X(4.5)} y1={chart.PT} x2={chart.X(4.5)} y2={size.h - chart.PB} stroke="rgba(251,191,36,0.35)" strokeWidth={0.8} strokeDasharray="4 3" />
+              <text x={chart.X(5)} y={chart.PT + 7} fill="#fbbf24" fontSize={8} fontFamily="monospace" opacity={0.7}>预测→</text>
               {/* 十字准线 */}
               {hover != null && <line x1={chart.X(hover)} y1={chart.PT} x2={chart.X(hover)} y2={size.h - chart.PB} stroke="rgba(148,163,184,0.5)" strokeWidth={0.8} />}
               {/* 预测虚线 */}
