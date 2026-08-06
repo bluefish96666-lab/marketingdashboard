@@ -7,7 +7,7 @@
 "use strict";
 
 module.exports = function createSecCapex(ctx) {
-  const { fetchText, readHistory, writeHistory, bjToday } = ctx;
+  const { fetchWithFallback, readHistory, writeHistory, bjToday } = ctx;
   const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36";
   const HISTORY_FILE = "sec-capex-history.json"; // 落盘历史(每次拉取追加年度快照)
 
@@ -20,10 +20,13 @@ module.exports = function createSecCapex(ctx) {
 
   /** 拉取一家 companyfacts, 提取指定标签的年度 10-K 值 { year: val } */
   async function fetchAnnualTag(cik, tag) {
+    // fetchWithFallback: SEC 对 node fetch TLS 指纹敏感, curl 兜底
     const j = JSON.parse(
-      await fetchText(`https://data.sec.gov/api/xbrl/companyfacts/CIK${cik}.json`, {
+      await fetchWithFallback(`https://data.sec.gov/api/xbrl/companyfacts/CIK${cik}.json`, {
         headers: { "User-Agent": UA },
         referer: "https://www.sec.gov/",
+        timeout: 20000,
+        retries: 1,
       })
     );
     const u = j?.facts?.["us-gaap"]?.[tag];

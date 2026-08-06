@@ -4,7 +4,7 @@
 "use strict";
 
 module.exports = function createAiInfra(ctx) {
-  const { fetchText, readHistory, writeHistory } = ctx;
+  const { fetchText, fetchWithFallback, readHistory, writeHistory, bjToday } = ctx;
 
   // 模型参数(集中在顶部, 调参只改这里)
   const MODEL = {
@@ -112,9 +112,17 @@ module.exports = function createAiInfra(ctx) {
     const tokenOk = token.status === "fulfilled" ? token.value : null;
     const ppiOk = ppi.status === "fulfilled" ? ppi.value : null;
 
-    // 历史输入: SEC 实测 + 锚点 fallback
-    const capexHist = secOk?.capexTotal || {};
-    const depHist = secOk?.depTotal || {};
+    // 历史输入: SEC 实测 + 落盘历史兜底 + 锚点 fallback
+    // (SEC 上游失败时用上次成功落盘的数据, 避免 ROI 全 0)
+    const lastHist = readHistory("sec-capex-history.json") || {};
+    const lastSnap = Object.values(lastHist).pop() || {};
+    const secCapex = secOk?.capexTotal || lastSnap.capexTotal || {};
+    const secDep = secOk?.depTotal || lastSnap.depTotal || {};
+    // 最终锚点 fallback(2022-2025 四家实测值, SEC 与历史都不可用时保底)
+    const CAPEX_ANCHORS = { 2022: 146, 2023: 141, 2024: 225, 2025: 317 };
+    const DEP_ANCHORS = { 2022: 60, 2023: 70, 2024: 90, 2025: 110 };
+    const capexHist = Object.keys(secCapex).length ? secCapex : CAPEX_ANCHORS;
+    const depHist = Object.keys(secDep).length ? secDep : DEP_ANCHORS;
     const cloudRevHist = computeRevenueHist(secOk); // 四家云业务收入锚点(近似)
     const priceHist = tokenOk?.priceSeries || {};
     const costHist = tokenOk?.costSeries || {};
@@ -141,7 +149,7 @@ module.exports = function createAiInfra(ctx) {
 
   // SEC 封装(避免与 createSecCapex 重复依赖, 直接内联轻量拉取)
   async function fetchSecCapex() {
-    const { handleSecCapex } = require("./sec-capex.cjs")({ fetchText, readHistory, writeHistory });
+    const { handleSecCapex } = require("./sec-capex.cjs")({ fetchWithFallback, readHistory, writeHistory, bjToday });
     return handleSecCapex();
   }
   async function fetchTokenPrices() {
