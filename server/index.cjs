@@ -17,6 +17,18 @@ const { cache, set: cacheSet, sweep: sweepCache, backoffOf } = createCache();
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36";
 
+// 加载 .env(须先于数据源模块 require, 模块内读取 process.env 密钥)
+try {
+  const envPath = path.join(__dirname, ".env");
+  if (fs.existsSync(envPath)) {
+    for (const line of fs.readFileSync(envPath, "utf-8").split("\n")) {
+      const m = line.trim().match(/^export\s+(.+?)=(.*)$/) || line.trim().match(/^([A-Z_][A-Z0-9_]*)=(.*)$/);
+      if (m) process.env[m[1]] = m[2].replace(/^["']|["']$/g, "");
+    }
+    console.log("[env] loaded", envPath);
+  }
+} catch (e) { console.error("[env] load error:", e.message); }
+
 // 数据源适配器(依赖注入共享工具)
 const srcTencent = require("./sources/tencent.cjs")({
   fetchText, fetchTextAny, curlText, cache, cacheSet, parseCsvParam, chunked, safeRecord, num, changeOf, pctOf,
@@ -50,20 +62,14 @@ const { handleTreasuries, handleTreasuryHistory } = srcTreasuries;
 const srcOpenRouter = require("./sources/openrouter.cjs")({ safeRecord, fs, path });
 const { handleOpenRouterUsage } = srcOpenRouter;
 
+const srcSunsirs = require("./sources/sunsirs.cjs")({ fetchText, num, UA, readHistory, writeHistory, bjToday, path, fs });
+const { handleSpotTable, handleChemSpot } = srcSunsirs;
+
+const srcAiModels = require("./sources/ai-models.cjs")({ fetchText, num, readHistory, writeHistory, bjToday, path, fs });
+const { handleAaModels, handleSpendIndex } = srcAiModels;
+
 // 个股资金流上游 inflight 去重表(handleStockFlows 使用)
 const flowInflight = new Map();
-
-// 加载 .env
-try {
-  const envPath = path.join(__dirname, ".env");
-  if (fs.existsSync(envPath)) {
-    for (const line of fs.readFileSync(envPath, "utf-8").split("\n")) {
-      const m = line.trim().match(/^export\s+(.+?)=(.*)$/) || line.trim().match(/^([A-Z_][A-Z0-9_]*)=(.*)$/);
-      if (m) process.env[m[1]] = m[2].replace(/^["']|["']$/g, "");
-    }
-    console.log("[env] loaded", envPath);
-  }
-} catch (e) { console.error("[env] load error:", e.message); }
 
 // 运行观测(压测/运维): 仅聚合计数, 无敏感信息; /api/stats 读取
 const stats = { reqs: 0, upstream: 0, blocked: 0, started: Date.now() };
@@ -164,252 +170,6 @@ async function cached(key, ttl, fn) {
   cacheSet(key, { ts: hit?.ts || 0, data: hit?.data, inflight, ttl, failAt: hit?.failAt ?? null, failCount: hit?.failCount ?? 0 });
   return inflight;
 }
-
-/* ---------------- 生意社现期对照表(现货价/期货价/基差) + 现货历史积累 ---------------- */
-const SPOT_DATA_FILE = path.join(__dirname, "data", "spot-history.json");
-
-// 生意社华为云 HW_CHECK 质询绕过: 质询页 JS 内嵌 cookie 值, 提取后带 cookie 重试
-async function fetchSunsir(url, { timeout = 12000 } = {}) {
-  const once = (cookie) => {
-    const headers = { "User-Agent": UA, Accept: "text/html" };
-    if (cookie) headers.Cookie = cookie;
-    return fetch(url, { headers, signal: AbortSignal.timeout(timeout) });
-  };
-  let resp = await once();
-  let text = await resp.text();
-  if (text.length < 4000 && text.includes("HW_CHECK")) {
-    const m = text.match(/=\s*"([0-9a-f]{16,})"/);
-    if (m) {
-      resp = await once(`HW_CHECK=${m[1]}`);
-      text = await resp.text();
-    }
-  }
-  if (text.includes("HW_CHECK") && text.length < 4000) throw new Error("sunsir waf challenge failed");
-  return text;
-}
-
-function parseSfTable(html) {
-  const parts = html.split(/<td colspan="8"[^>]*>([^<]+)<\/td>/i);
-  const rows = [];
-  for (let i = 1; i < parts.length; i += 2) {
-    const exchange = parts[i];
-    const body = parts[i + 1] || "";
-    const chunks = body.split(/<tr[^>]*bgcolor="#fafdff"[^>]*>/i);
-    for (let c = 1; c < chunks.length; c++) {
-      let chunk = chunks[c];
-      // 嵌套 table 内的 font 值依次为 基差1/基差率1/基差2/基差率2
-      const fonts = [...chunk.matchAll(/<font[^>]*>(-?[\d.,]+%?)<\/font>/g)].map((m) => m[1]);
-      chunk = chunk.replace(/<table[\s\S]*?<\/table>/g, "");
-      const cells = [...chunk.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/g)]
-        .map((m) => m[1].replace(/<[^>]+>/g, "").replace(/&nbsp;/g, "").trim())
-        .filter((v) => v !== "");
-      if (cells.length < 4 || !cells[0]) continue;
-      const basisPct1 = parseFloat(fonts[1]);
-      rows.push({
-        exchange,
-        name: cells[0],
-        spot: num(cells[1]),
-        contract: cells[2] || "",
-        futures: num(cells[3]),
-        basis: num(fonts[0]),
-        basisPct: Number.isFinite(basisPct1) ? basisPct1 : 0,
-      });
-    }
-  }
-  return rows;
-}
-
-async function handleSpotTable() {
-  const html = await fetchSunsir("https://www.100ppi.com/sf/");
-  const dm = html.match(/20\d{2}年\d{1,2}月\d{1,2}日/);
-  const date = dm ? dm[0].replace(/[年月]/g, "-").replace("日", "") : new Date().toISOString().slice(0, 10);
-  const rows = parseSfTable(html);
-  if (!rows.length) throw new Error("sunsir sf table parse empty");
-  // 现货价按日积累(与 openrouter-usage 同模式), 供现货趋势线使用
-  let history = readHistory(SPOT_DATA_FILE);
-  const today = bjToday();
-  for (const r of rows) {
-    if (!r.spot) continue;
-    const arr = history[r.name] || (history[r.name] = []);
-    if (arr.length && arr[arr.length - 1].t === today) arr[arr.length - 1].p = r.spot;
-    else arr.push({ t: today, p: r.spot });
-    if (arr.length > 400) arr.splice(0, arr.length - 400);
-  }
-  await writeHistory(SPOT_DATA_FILE, history, "spot");
-  return { date, rows, history };
-}
-
-/* ---------------- Artificial Analysis 模型定价(free 层, ~600 模型) ---------------- */
-const AA_API_KEY = process.env.ARTIFICIAL_ANALYSIS_API_KEY || "";
-const MODEL_PRICES_FILE = path.join(__dirname, "data", "model-prices.json");
-
-async function handleAaModels() {
-  if (!AA_API_KEY) { const e = new Error("未配置 ARTIFICIAL_ANALYSIS_API_KEY(server/.env)"); e.status = 500; throw e; }
-  // free 层 100 次/天: 3 页 × 200, 每次上游刷新约 3 次调用, 24h 缓存足够
-  const models = [];
-  let page = 1;
-  let hasMore = true;
-  while (hasMore && page <= 4) {
-    const j = JSON.parse(
-      await fetchText(`https://artificialanalysis.ai/api/v2/language/models/free?page=${page}&page_size=200`, {
-        referer: "https://artificialanalysis.ai/",
-        headers: { "x-api-key": AA_API_KEY },
-      })
-    );
-    for (const d of j.data || []) {
-      const intelCost = d.artificial_analysis_intelligence_index_cost;
-      models.push({
-        slug: d.slug,
-        name: d.name,
-        vendor: d.model_creator?.name || "",
-        release: d.release_date || "",
-        intel: d.evaluations?.artificial_analysis_intelligence_index ?? null,
-        input: d.pricing?.price_1m_input_tokens ?? null,
-        output: d.pricing?.price_1m_output_tokens ?? null,
-        cacheHit: d.pricing?.price_1m_cache_hit_tokens ?? null,
-        taskCost: intelCost?.cost_per_task?.total_cost ?? null,
-      });
-    }
-    hasMore = j.pagination?.has_more === true;
-    page++;
-  }
-  // 每日快照积累(与 spot-history 同模式): 供价格趋势线使用, 按日去重
-  let history = readHistory(MODEL_PRICES_FILE);
-  const today = bjToday();
-  for (const m of models) {
-    if (m.input == null && m.output == null) continue;
-    const arr = history[m.slug] || (history[m.slug] = { name: m.name, vendor: m.vendor, points: [] });
-    const last = arr.points[arr.points.length - 1];
-    if (last && last.t === today) last.i = m.input, last.o = m.output, last.task = m.taskCost;
-    else arr.points.push({ t: today, i: m.input, o: m.output, task: m.taskCost });
-    if (arr.points.length > 730) arr.points.splice(0, arr.points.length - 730);
-  }
-  await writeHistory(MODEL_PRICES_FILE, history, "aa");
-  return { models, history, source: "Artificial Analysis free API" };
-}
-
-/* ---------------- traktoken 支出指数(全量 CSV + RSS 补尾 + 降价事件) ---------------- */
-const TTSI_CSV_FILE = path.join(__dirname, "data", "ttsi.csv");
-
-/** 解析 ttsi.csv(CC BY 4.0, 列: date,ttsi,ma7,spend_price_usd,ma7,f... 见文件头注释) */
-function parseTtsiCsv(text) {
-  const points = [];
-  for (const line of text.split("\n")) {
-    if (!line || line.startsWith("#")) continue;
-    const f = line.split(",");
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(f[0] || "")) continue;
-    points.push({
-      date: f[0],
-      ttsi: num(f[3]),     // spend_price_usd 全市场用量加权价
-      indexPoint: num(f[1]), // ttsi 指数点位
-      closed: num(f[6]),   // spend_price_f_usd 闭源前沿价
-      open: num(f[8]),     // spend_price_o_usd 开源权重价
-      premium: num(f[9]),  // frontier_premium 前沿溢价
-      pct: null,
-    });
-  }
-  return points;
-}
-
-async function handleSpendIndex() {
-  // 全量历史: 本地 ttsi.csv 优先, RSS 提供事件流 + 补齐 CSV 之后的新日期
-  let csvPoints = [];
-  try {
-    csvPoints = parseTtsiCsv(fs.readFileSync(TTSI_CSV_FILE, "utf-8"));
-  } catch (e) { console.error("[ttsi] csv read error:", e?.message || e); }
-  const csvDates = new Set(csvPoints.map((p) => p.date));
-
-  const text = await fetchText("https://www.traktoken.com/spend-index/feed.xml", { referer: "https://www.traktoken.com/" });
-  const rssPoints = [];
-  const events = [];
-  for (const m of text.matchAll(/<item>([\s\S]*?)<\/item>/g)) {
-    const it = m[1];
-    const strip = (tag) => (it.match(new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`)) || [,""])[1].replace(/<[^>]+>/g, "").replace(/&amp;/g, "&").trim();
-    const title = strip("title");
-    const desc = strip("description");
-    const dm = title.match(/^(\d{4}-\d{2}-\d{2})/);
-    if (!dm) continue;
-    const ttsi = title.match(/\$([\d.]+)\/M/);
-    const pct = title.match(/([+-][\d.]+)%/);
-    rssPoints.push({
-      date: dm[1],
-      ttsi: ttsi ? parseFloat(ttsi[1]) : null,
-      pct: pct ? parseFloat(pct[1]) : null,
-      indexPoint: num(desc.match(/指数点位\s*([\d.]+)/)?.[1]),
-      closed: num(desc.match(/闭源前沿\s*\$([\d.]+)\/M/)?.[1]),
-      open: num(desc.match(/开源权重\s*\$([\d.]+)\/M/)?.[1]),
-      premium: num(desc.match(/前沿溢价\s*([\d.]+)\s*倍/)?.[1]),
-    });
-    // 事件标注: 标题第 3 段(降幅/份额变动), 如 "GPT-5.6 Luna (max) 降价 80%"
-    const parts = title.split("·").map((s) => s.trim());
-    if (parts.length >= 3 && !parts[2].startsWith("TTSI")) events.push({ date: dm[1], text: parts[2] });
-  }
-  events.reverse(); // RSS 最新在前, 翻转为时间升序
-
-  const merged = [...csvPoints, ...rssPoints.filter((p) => !csvDates.has(p.date))].sort((a, b) => (a.date < b.date ? -1 : 1));
-  return { points: merged, events, source: "TrakToken TTSI 全量(CC BY 4.0)" };
-}
-
-/* ---------------- 生意社化工现货(报价中心 plist 页, 中位数为代表价) ---------------- */
-async function handleChemSpot(id, name) {
-  if (!/^\d{1,10}$/.test(id)) { const e = new Error("bad id"); e.status = 400; throw e; }
-  name = String(name || id).slice(0, 40); // name 来自用户输入并写入历史文件, 限长
-  const html = await fetchSunsir(`https://www.100ppi.com/mprice/plist-1-${encodeURIComponent(id)}-1.html`);
-  // 行结构: 品名/规格/产地/价格(元/吨)/价格类型/交货地/企业/日期
-  const market = []; // 市场价(真实行情)
-  const all = [];
-  for (const m of html.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/g)) {
-    const row = m[1];
-    const pm = row.match(/>\s*([\d.]+)\s*元\/吨\s*</);
-    if (!pm || !row.includes("p-name")) continue;
-    const p = num(pm[1]);
-    all.push(p);
-    if (row.includes("市场价")) market.push(p);
-  }
-  if (!all.length) throw new Error("chem spot parse empty");
-  // 优先市场价中位数(出厂价多为厂商挂高价); 无市场价则全体中位数
-  const pool = market.length ? market : all;
-  pool.sort((a, b) => a - b);
-  const mid = pool.length >> 1;
-  const price = pool.length % 2 ? pool[mid] : +((pool[mid - 1] + pool[mid]) / 2).toFixed(2);
-  const dm = html.match(/>(20\d{2}-\d{2}-\d{2})</);
-  // 历史积累(与现货表同一文件); 条目总数有界, 防止恶意 name 缓慢填满磁盘
-  let history = readHistory(SPOT_DATA_FILE);
-  const today = bjToday();
-  if (name === "__proto__" || name === "constructor" || name === "prototype") {
-    throw Object.assign(new Error("invalid name"), { status: 400 }); // 防原型污染键写盘
-  }
-  let arr = history[name];
-  if (!arr && Object.keys(history).length < 500) arr = history[name] = [];
-  if (arr) {
-    if (arr.length && arr[arr.length - 1].t === today) arr[arr.length - 1].p = price;
-    else arr.push({ t: today, p: price });
-    if (arr.length > 400) arr.splice(0, arr.length - 400);
-    await writeHistory(SPOT_DATA_FILE, history, "chem-spot");
-  }
-  return { id, name, price, quotes: all.length, date: dm ? dm[1] : today, history: arr || [] };
-}
-
-/* ---------------- 现货每日定时采集(服务端自驱, 无需前端在线) ---------------- */
-// 与前端 src/config/goods.ts 的 CHEM_SPOTS 保持一致
-const CHEM_SPOT_SEEDS = [["7250", "碳酸亚乙烯酯"]];
-
-async function collectSpotDaily() {
-  try {
-    await handleSpotTable();
-    console.log("[spot] 定时采集: 现期表完成");
-  } catch (e) { console.error("[spot] 定时采集: 现期表失败:", e?.message || e); }
-  for (const [id, name] of CHEM_SPOT_SEEDS) {
-    try {
-      await handleChemSpot(id, name);
-      console.log("[spot] 定时采集: 化工现货", name, "完成");
-    } catch (e) { console.error("[spot] 定时采集: 化工现货", name, "失败:", e?.message || e); }
-  }
-}
-// 生意社交易日 16:30 更新, 每 4 小时采集一轮保证覆盖; unref 不阻止进程退出
-setInterval(collectSpotDaily, 4 * 3600 * 1000).unref();
-// 启动 1 分钟后先补一轮(部署当日即有数据)
-setTimeout(collectSpotDaily, 60 * 1000).unref();
 
 /* ------------------------------------------------------------- */
 
