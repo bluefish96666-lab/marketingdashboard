@@ -15,7 +15,7 @@ function Stat({ label, value, valueCls = "text-slate-300" }: { label?: string; v
   return (
     <span className="flex min-w-0 items-center justify-end gap-1 leading-none">
       {label && <span className="shrink-0 text-[9px] text-slate-600">{label}</span>}
-      <span className={`truncate ${valueCls}`} style={TNUM}>
+      <span className={`truncate text-[11px] ${valueCls}`} style={TNUM}>
         {value}
       </span>
     </span>
