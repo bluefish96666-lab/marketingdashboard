@@ -555,6 +555,16 @@ async function fetchBtc() {
   };
 }
 
+// 空结果重试一次(上游偶发返回空 JSONP 时, 等待后重拉)
+async function retryOnEmpty(fn, delay = 1200) {
+  let r = await fn();
+  if (Object.keys(r).length === 0) {
+    await sleep(delay);
+    r = await fn();
+  }
+  return r;
+}
+
 async function handleFutures(list) {
   // 代码白名单 + 数量上限: 防止畸形代码注入上游 URL 或制造超长请求
   const codes = String(list || "")
@@ -576,11 +586,7 @@ async function handleFutures(list) {
       // 兜底:新浪
       const url = `https://hq.sinajs.cn/list=${hf.map(encodeURIComponent).join(",")}`; // 新浪要求逗号不转码
       const opts = { referer: "https://finance.sina.com.cn/futures/quotes/CL.shtml" };
-      let r = parseFutures(await curlText(url, opts));
-      if (Object.keys(r).length === 0) {
-        await sleep(1200);
-        r = parseFutures(await curlText(url, opts));
-      }
+      let r = await retryOnEmpty(() => parseFutures(curlText(url, opts)));
       Object.assign(out, r);
     })());
   }
@@ -588,11 +594,7 @@ async function handleFutures(list) {
     jobs.push((async () => {
       const url = `https://hq.sinajs.cn/list=${nf.map(encodeURIComponent).join(",")}`;
       const opts = { referer: "https://finance.sina.com.cn/futures/quotes/AU0.shtml" };
-      let r = parseSinaDomestic(await curlText(url, opts));
-      if (Object.keys(r).length === 0) {
-        await sleep(1200);
-        r = parseSinaDomestic(await curlText(url, opts));
-      }
+      let r = await retryOnEmpty(() => parseSinaDomestic(curlText(url, opts)));
       // 夜盘期间 hq.sinajs.cn 最新价可能为0,从分钟线接口补实时价格
       for (const code of nf) {
         const item = r[code];
