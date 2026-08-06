@@ -140,7 +140,7 @@ module.exports = function createAiInfra(ctx) {
       series,
       sources: {
         sec: secOk ? { ok: true, byCompany: secOk.byCompany } : { ok: false, err: sec.reason?.message },
-        token: tokenOk ? { ok: true, marketInputPerM: tokenOk.live?.marketInputPerM, vendorCount: tokenOk.live?.vendorCount } : { ok: false, err: token.reason?.message },
+        token: tokenOk ? { ok: true, marketInputPerM: tokenOk.live?.marketInputPerM, frontierInputPerM: tokenOk.live?.frontierInputPerM, vendorCount: tokenOk.live?.vendorCount } : { ok: false, err: token.reason?.message },
         ppi: ppiOk ? { ok: true, trend: ppiOk.trend, yoy12m: ppiOk.yoy12m } : { ok: false, err: ppi.reason?.message },
       },
       notes: [

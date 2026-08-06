@@ -591,7 +591,7 @@ export interface AiInfraResp {
   series: AiInfraPoint[];
   sources: {
     sec: { ok: boolean; byCompany?: { name: string; capex: Record<string, number> }[]; err?: string };
-    token: { ok: boolean; marketInputPerM?: number | null; vendorCount?: number; err?: string };
+    token: { ok: boolean; marketInputPerM?: number | null; frontierInputPerM?: number | null; vendorCount?: number; err?: string };
     ppi: { ok: boolean; trend?: string; yoy12m?: number; err?: string };
   };
   notes: string[];

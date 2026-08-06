@@ -9,7 +9,7 @@ module.exports = function createTokenPrices(ctx) {
     2022: 60,   // GPT-3 davinci $0.06/1K
     2023: 30,   // GPT-4 发布 $30/M
     2024: 5,    // GPT-4o/竞品价格战
-    2025: 1.5,  // 旗舰加权(与 model-prices.json 积累校验)
+    2025: 3.4,  // 闭源前沿均价(与 spend-index closed 同口径, 2025 实时校验)
   };
   // 生产成本估算锚点(美元/百万 token): 厂商不披露, 公开研究估算
   const COST_ANCHORS = {
@@ -46,16 +46,23 @@ module.exports = function createTokenPrices(ctx) {
       .map((m) => parseFloat(m.pricing?.prompt) * 1e6)
       .filter((v) => Number.isFinite(v) && v > 0 && v < 10000);
     const marketAvg = inPrices.length ? +(inPrices.reduce((s, v) => s + v, 0) / inPrices.length).toFixed(3) : null;
-    return { generatedAt: new Date().toISOString(), source: "openrouter.ai/api/v1/models", vendorCount: vendors.length, marketInputPerM: marketAvg, vendors: vendors.slice(0, 30) };
+    // 闭源前沿均价(主流闭源厂商, 与 spend-index closed 同口径 — 剔除免费/开源小模型拉低)
+    const FRONTIER = ["openai", "anthropic", "google", "x-ai", "mistralai", "meta-llama"];
+    const frontPrices = all
+      .map((m) => ({ v: parseFloat(m.pricing?.prompt) * 1e6, id: m.id || "" }))
+      .filter((x) => Number.isFinite(x.v) && x.v > 0 && x.v < 10000 && FRONTIER.some((f) => x.id.startsWith(f)))
+      .map((x) => x.v);
+    const frontierAvg = frontPrices.length ? +(frontPrices.reduce((s, v) => s + v, 0) / frontPrices.length).toFixed(3) : null;
+    return { generatedAt: new Date().toISOString(), source: "openrouter.ai/api/v1/models", vendorCount: vendors.length, marketInputPerM: marketAvg, frontierInputPerM: frontierAvg, vendors: vendors.slice(0, 30) };
   }
 
-  /** 完整售价序列: 2022-2024 锚点 + 2025+ 实时(取市场均价, 若实时拉取失败用锚点2025) */
+  /** 完整售价序列: 2022-2024 锚点 + 2025+ 实时(取闭源前沿均价, 与 spend-index closed 同口径; 拉取失败用锚点) */
   async function buildPriceSeries() {
     let live = null;
     try { live = await fetchOpenRouterPrices(); } catch { /* 上游失败用锚点 */ }
     const series = {};
     for (const [y, v] of Object.entries(PRICE_ANCHORS)) {
-      if (y === "2025" && live?.marketInputPerM != null) series[y] = live.marketInputPerM;
+      if (y === "2025" && live?.frontierInputPerM != null) series[y] = live.frontierInputPerM;
       else series[y] = v;
     }
     return { priceSeries: series, costSeries: { ...COST_ANCHORS }, live };
