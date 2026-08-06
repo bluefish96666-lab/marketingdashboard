@@ -10,8 +10,8 @@ module.exports = function createAiInfra(ctx) {
   const MODEL = {
     // 电网就绪度: LBNL 年度锚点(0-100 合成指数, 已批准并网容量/数据中心需求)
     gridAnchors: { 2022: 82, 2023: 74, 2024: 68, 2025: 61 },
-    gridCapCagr: 0.06,      // 并网容量年增
-    gridDemandK: 1.55,      // 数据中心需求放大系数(需求增速 = capCagr × K)
+    gridCapCagr: 0.06,      // 电网容量年增(建设稳步, 电网本身不退化)
+    gridDemandK: 1.0,       // 需求增速 = 容量增速 × (1 + K×capexGrowth/0.2) (AI景气度驱动)
     // 云巨头 CapEx 预测增速([0]=2026当年估算(年中), [1..9]=2027-2035: 高增长→见顶→出清负增长)
     capexGrowth: [0.20, 0.18, 0.16, 0.10, 0.05, 0.00, -0.05, -0.08, -0.06, -0.03],
     // Token 单位经济学
@@ -68,11 +68,13 @@ module.exports = function createAiInfra(ctx) {
       cloudRevenue[y] = cloudRev;
       revenue[y] = Math.round(cloudRev * MODEL.aiShare[shareIdx]);
       actual[y] = !isForecast;
-      // 电网就绪度: 需求增速 = 容量增速 × K; 就绪度 = 100 × (容量/需求)
+      // 电网就绪度 = 容量增速 ÷ 需求增速(供需比, 0-100)
+      // 需求增速 = 容量增速 × (1 + capexGrowth/0.2): AI热潮期需求爆发→回落, 出清期需求降温→回升(U型)
       if (isForecast || y === FORECAST_START - 1) {
-        const capRatio = 1 + MODEL.gridCapCagr;
-        const demRatio = 1 + MODEL.gridCapCagr * MODEL.gridDemandK;
-        grid[y] = Math.max(5, Math.min(100, +((grid[y - 1] / 100) * (capRatio / demRatio) * 100).toFixed(1)));
+        const gIdx = y === FORECAST_START - 1 ? 0 : idx; // 2026 用 capexGrowth[0], 2027+ 用 [1..9]
+        const demG = MODEL.gridCapCagr * (1 + MODEL.gridDemandK * MODEL.capexGrowth[gIdx] / 0.2);
+        const ratio = (1 + MODEL.gridCapCagr) / (1 + demG);
+        grid[y] = Math.max(5, Math.min(100, +((grid[y - 1] / 100) * ratio * 100).toFixed(1)));
       } else {
         grid[y] = gridAnchors[y] ?? 50;
       }

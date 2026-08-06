@@ -62,15 +62,21 @@ test("复合 ROI: 早期为负(资本出清期), 后期转正", () => {
   for (let i = 1; i < rois.length; i++) assert.ok(rois[i] >= rois[i - 1], `ROI ${s[i].year} 应≥前一年`);
 });
 
-test("电网就绪度: 需求放大 → 指数趋势性回落(资本瓶颈)后触底", () => {
+test("电网就绪度: U型 — AI热潮期回落(瓶颈), 出清后回升(修复)", () => {
   const s = computeSeries(inputs);
   const g = s.map((p) => p.grid);
   assert.ok(g.every((v) => v >= 5 && v <= 100), "就绪度应在 [5,100]");
   // 历史锚点 2022=82 -> 2025=61
   assert.equal(g[0], 82);
   // 2026(当年估算)应继续回落(需求增速>容量增速)
-  const f = s.filter((p) => p.year >= 2026);
-  assert.ok(f[0].grid < 61, `2026 就绪度应低于 2025: ${f[0].grid}`);
+  assert.ok(g[4] < 61, `2026 就绪度应低于 2025: ${g[4]}`);
+  // 出清后回升: 谷底后单调上升, 2035 > 谷底
+  const valley = Math.min(...g.slice(4));
+  const valleyIdx = g.indexOf(valley);
+  const tail = g.slice(valleyIdx + 1);
+  assert.ok(tail.length >= 3, "谷底后应有足够回升空间");
+  assert.ok(tail.every((v, i) => i === 0 || v >= tail[i - 1]), "谷底后就绪度应回升");
+  assert.ok(g[g.length - 1] > valley, `2035 应高于谷底: ${g[g.length - 1]} vs ${valley}`);
 });
 
 test("序列完整: 2022-2035 共 14 年, 字段齐全", () => {
