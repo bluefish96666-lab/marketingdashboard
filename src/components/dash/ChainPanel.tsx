@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "lucide-react";
 import { Panel, type PanelZoomProps } from "./Panel";
 import { QuoteRow } from "./QuoteRow";
@@ -12,6 +12,9 @@ import type { Chain, ChainStock } from "@/config/dashboard";
 import { clsChg, fmtPct, fmtTime, fmtWan, TNUM } from "@/lib/format";
 import { toMarketCode } from "@/lib/code";
 import { loadJson, saveJson } from "@/lib/storage";
+import { buildChainFromParse, updateChainSegments } from "./chain-utils";
+import { ChainEditorDialog } from "./ChainEditorDialog";
+import type { ChainEditorState, ChainParseState } from "./ChainEditorDialog";
 
 const CHAIN_OVERRIDES_KEY = "market-dashboard.chain-overrides.v2";
 const CUSTOM_CHAINS_KEY = "market-dashboard.custom-chains";
@@ -37,8 +40,8 @@ export function ChainPanel({ className = "", ...zoomProps }: { className?: strin
   const [chainId, setChainId] = useState(CHAINS[0].id);
   const [refreshTick, setRefreshTick] = useState(0);
   const [chainOverrides, setChainOverrides] = useState<Record<string, { segments: { stocks: ChainStock[] }[] }>>(() => loadJson(CHAIN_OVERRIDES_KEY, {}));
-  const [editor, setEditor] = useState<{ mode: "add" | "update"; name: string; content: string } | null>(null);
-  const [parseState, setParseState] = useState<{ loading: boolean; error: string; warnings: string[] }>({ loading: false, error: "", warnings: [] });
+  const [editor, setEditor] = useState<ChainEditorState>(null);
+  const [parseState, setParseState] = useState<ChainParseState>({ loading: false, error: "", warnings: [] });
 
   // 合并内置链 + 自定义链（编辑覆盖）
   const mergedChains = useMemo(() =>
@@ -90,16 +93,6 @@ export function ChainPanel({ className = "", ...zoomProps }: { className?: strin
     return boards.filter((b) => keys.some((k) => b.cname.includes(k) || k.includes(b.cname))).sort((a, b) => b.pct - a.pct).slice(0, 8);
   }, [boards, chain]);
 
-  // 编辑弹窗 Esc 关闭
-  useEffect(() => {
-    if (!editor) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setEditor(null);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [editor]);
-
   // 编辑保存（更新已有链）
   const submitEditor = async () => {
     if (!editor || parseState.loading) return;
@@ -109,34 +102,18 @@ export function ChainPanel({ className = "", ...zoomProps }: { className?: strin
     try {
       const parsed = await api.parseChain(name, contentText);
       if (editor.mode === "add") {
-        // 创建新自定义链
-        const id = "custom_" + Date.now();
-        const newChain: Chain = {
-          id, name,
-          icon: "▣",
-          segments: parsed.segments.map((seg, si) => ({
-            name: seg.name || `${["上游", "中游", "下游"][si] || "环节" + (si + 1)}`,
-            desc: seg.desc || "",
-            stocks: seg.stocks.map((s) => ({ code: s.code, name: s.name, tag: seg.name })),
-          })),
-          tech: parsed.segments.flatMap((s) => {
-            const ts = s.name?.match(/[（(][^)）]*[)）]/g)?.map((t) => t.replace(/[（()）]/g, "")) || [];
-            return ts;
-          }).filter(Boolean).slice(0, 12),
-          keywords: [name],
-        };
+        // 创建新自定义链(纯函数)
+        const newChain: Chain = buildChainFromParse(name, parsed);
         if (newChain.segments.length === 0) throw new Error("未解析出有效环节，请检查内容格式");
         const next = [...customChains, newChain];
         setCustomChains(next);
         saveJson(CUSTOM_CHAINS_KEY, next);
-        setChainId(id);
+        setChainId(newChain.id);
         setParseState({ loading: false, error: "", warnings: parsed.warnings || [] });
         setEditor(null);
       } else {
-        // 更新已有链的股票
-        const segments = chain.segments.map((seg, si) => ({
-          ...seg, stocks: parsed.segments[si]?.stocks.map((s) => ({ code: s.code, name: s.name, tag: seg.desc?.split("·")?.[0]?.trim() || seg.name })) || seg.stocks,
-        }));
+        // 更新已有链的股票(纯函数)
+        const segments = updateChainSegments(chain.segments, parsed);
         setChainOverrides((prev) => { const next = { ...prev, [chain.id]: { segments } }; saveJson(CHAIN_OVERRIDES_KEY, next); return next; });
         setRefreshTick((x) => x + 1);
         setParseState({ loading: false, error: "", warnings: parsed.warnings || [] });
@@ -302,46 +279,14 @@ export function ChainPanel({ className = "", ...zoomProps }: { className?: strin
       </Panel>
 
       {editor && (
-        <div className="fixed inset-0 z-[75] flex items-center justify-center bg-black/65 p-4 backdrop-blur-sm" role="dialog" aria-modal="true">
-          <div className="flex max-h-[86vh] w-[640px] max-w-[96vw] flex-col rounded-md border border-cyan-400/35 bg-[#0a1220] shadow-[0_0_42px_rgba(34,211,238,0.18)]">
-            <div className="flex items-center justify-between border-b border-slate-700/45 px-4 py-3">
-              <div>
-                <div className="text-[16px] font-semibold text-slate-100">{editor.mode === "add" ? "添加自定义产业链" : "更新产业链股票库"}</div>
-                <div className="mt-0.5 text-[12px] text-slate-500">粘贴问财结论，或点击「从问财获取」自动查询。</div>
-              </div>
-              <button type="button" onClick={() => setEditor(null)} className="rounded px-2 py-1 text-[14px] text-slate-400 transition hover:bg-slate-800 hover:text-slate-100">关闭</button>
-            </div>
-            <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
-              <label className="block">
-                <span className="mb-1 block text-[13px] font-semibold text-slate-300">产业链名称</span>
-                <input value={editor.name} onChange={(e) => setEditor((cur) => cur && { ...cur, name: e.target.value })}
-                  readOnly={editor.mode === "update"} placeholder="例如：人工智能产业链"
-                  className="h-9 w-full rounded border border-slate-700 bg-slate-950/80 px-3 text-[14px] text-slate-100 outline-none transition focus:border-cyan-400/70 placeholder:text-slate-600" />
-              </label>
-              <div className="flex justify-end">
-                <button type="button" onClick={autoFetchChain} disabled={parseState.loading}
-                  className="rounded border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-[12px] font-semibold text-emerald-300 transition hover:bg-emerald-500/20 disabled:opacity-50">
-                  {parseState.loading ? "查询中..." : "从问财获取"}
-                </button>
-              </div>
-              <label className="block">
-                <span className="mb-1 block text-[13px] font-semibold text-slate-300">问财结论内容</span>
-                <textarea value={editor.content} onChange={(e) => setEditor((cur) => cur && { ...cur, content: e.target.value })}
-                  placeholder="从问财获取结果会自动填充到这里，也可以手动粘贴&#10;&#10;格式示例：&#10;AI产业链&#10;&#10;上游 · 算力基座：&#10;寒武纪(sh688256)、海光信息(sh688041)、中际旭创(sz300308)&#10;&#10;中游 · 模型平台：&#10;科大讯飞(sz002230)、商汤(hk00020)&#10;&#10;下游 · 应用：&#10;金山办公(sh688111)、万兴科技(sz300624)&#10;&#10;核心逻辑：AI产业链&#10;数据来源：同花顺问财"
-                  className="h-[240px] w-full resize-none rounded border border-slate-700 bg-slate-950/80 px-3 py-2 text-[13px] leading-6 text-slate-200 outline-none transition placeholder:text-slate-600 focus:border-cyan-400/70" />
-              </label>
-              {parseState.error && <div className="rounded border border-rose-400/30 bg-rose-500/10 px-3 py-2 text-[12px] text-rose-300">{parseState.error}</div>}
-              {parseState.warnings.map((w, i) => <div key={i} className="rounded border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-[12px] text-amber-300">{w}</div>)}
-            </div>
-            <div className="flex justify-end gap-2 border-t border-slate-700/45 px-4 py-3">
-              <button type="button" onClick={() => setEditor(null)} className="rounded border border-slate-700 px-3 py-1.5 text-[13px] text-slate-300 transition hover:bg-slate-800">取消</button>
-              <button type="button" onClick={submitEditor} disabled={parseState.loading}
-                className="rounded border border-cyan-400/50 bg-cyan-500/15 px-3 py-1.5 text-[13px] font-semibold text-cyan-200 transition hover:bg-cyan-500/25 disabled:opacity-50">
-                {parseState.loading ? "处理中..." : editor.mode === "add" ? "创建并保存" : "整理并保存"}
-              </button>
-            </div>
-          </div>
-        </div>
+        <ChainEditorDialog
+          editor={editor}
+          parseState={parseState}
+          onChange={setEditor}
+          onClose={() => setEditor(null)}
+          onAutoFetch={autoFetchChain}
+          onSubmit={submitEditor}
+        />
       )}
     </>
   );
