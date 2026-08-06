@@ -280,5 +280,5 @@ module.exports = function createEastmoney(ctx) {
     });
   }
 
-  return { handleRank, handleMoneyFlow, handleStockBoards, handleMoneyFlowEM, handleStockFlows, handleBoardFlow };
+  return { handleRank, handleMoneyFlow, handleStockBoards, handleMoneyFlowEM, handleStockFlows, handleBoardFlow, fetchSinaJson };
 };
