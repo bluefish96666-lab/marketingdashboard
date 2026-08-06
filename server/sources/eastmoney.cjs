@@ -2,16 +2,14 @@
 "use strict";
 
 module.exports = function createEastmoney(ctx) {
-  const { fetchText, fetchTextAny, curlText, cache, cacheSet, num, toMarketCode6, sleep } = ctx;
+  const { fetchWithFallback, cache, cacheSet, num, toMarketCode6 } = ctx;
+  const { entry, failEntry, quoteBackoff, TTLS, qqRank } = ctx;
 
-  /* ---------------- 新浪接口(node fetch 被拦时回退 curl) ---------------- */
+  const EM_REFERER = "https://quote.eastmoney.com/"; // 东财接口统一 Referer
+
+  /* ---------------- 新浪接口(fetch/curl 双通道, 见 lib/fetch-any.cjs) ---------------- */
   async function fetchSinaJson(url, { referer } = {}) {
-    try {
-      const text = await fetchText(url, { referer });
-      return JSON.parse(text);
-    } catch {
-      return JSON.parse(await curlText(url, { referer, encoding: "utf-8" }));
-    }
+    return JSON.parse(await fetchWithFallback(url, { referer }));
   }
 
   /* ---------------- 个股榜单(涨幅/跌幅/热门) — 新浪盘中 + 腾讯盘后双源 ---------------- */
@@ -44,10 +42,14 @@ module.exports = function createEastmoney(ctx) {
   async function rankViaTencent(sort, asc, want) {
     // 盘后新浪清零,腾讯保留收盘价;涨跌幅字段同样清零(返回0)
     const sortMap = { changepercent: "PriceRatio", amount: "volume", turnoverratio: "PriceRatio" };
-    const url = `https://proxy.finance.qq.com/cgi/cgi-bin/rank/hs/getBoardRankList?board_code=aStock&sort_type=${encodeURIComponent(sortMap[sort] || "PriceRatio")}&direct=${asc === "1" ? "up" : "down"}&offset=0&count=${want}`;
-    const text = await fetchText(url);
-    const json = JSON.parse(text);
-    return (json?.data?.rank_list || [])
+    const list = await qqRank.getBoardRankList({
+      boardCode: "aStock",
+      sortType: sortMap[sort] || "PriceRatio",
+      direct: asc === "1" ? "up" : "down",
+      offset: 0,
+      count: want,
+    });
+    return list
       .filter((s) => num(s.zxj) > 0)
       .map((s) => ({
         symbol: s.code,
@@ -58,7 +60,7 @@ module.exports = function createEastmoney(ctx) {
         pct: num(s.zdf),
         open: 0, high: 0, low: 0,
         vol: num(s.volume),
-        amount: num(s.volume) * 100 * num(s.zxj), // 成交量(手)估算成交额
+        amount: qqRank.estAmount(s), // 成交量(手)估算成交额, 公式见 lib/qq-rank.cjs
         pe: num(s.pe_ttm),
         pb: 0,
         total_mv: num(s.zsz) * 10000,
@@ -119,32 +121,24 @@ module.exports = function createEastmoney(ctx) {
     if (!m) throw Object.assign(new Error(`bad code: ${code}`), { status: 400 });
     const market = m[1] === "sh" ? 1 : 0;
     return emEnqueue(async () => {
-      let lastErr = new Error("empty stock-boards");
-      for (const host of ["push2delay.eastmoney.com", "push2.eastmoney.com"]) {
-        const url = `https://${host}/api/qt/stock/get?secid=${market}.${m[2]}&fields=f57,f58,f127,f128,f129`;
-        for (const via of ["fetch", "curl"]) {
-          try {
-            const text =
-              via === "fetch"
-                ? await fetchText(url, { referer: "https://quote.eastmoney.com/" })
-                : await curlText(url, { referer: "https://quote.eastmoney.com/", encoding: "utf-8" });
-            const d = JSON.parse(text)?.data;
-            if (d) {
-              await sleep(60); // 队列节流
-              return {
-                code: `${m[1]}${m[2]}`,
-                industry: d.f127 || "",
-                area: d.f128 || "",
-                concepts: String(d.f129 || "").split(",").filter(Boolean),
-              };
-            }
-          } catch (e) {
-            lastErr = e;
-          }
-          await sleep(400);
+      // 双节点 × fetch/curl 双通道 × 节流, 统一走 fetchWithFallback(见 lib/fetch-any.cjs);
+      // accept 校验 "HTTP 成功但 data 为空" 的情况, 视为失败继续下一通道
+      const text = await fetchWithFallback(
+        `https://push2delay.eastmoney.com/api/qt/stock/get?secid=${market}.${m[2]}&fields=f57,f58,f127,f128,f129`,
+        {
+          referer: EM_REFERER,
+          hosts: ["push2.eastmoney.com"],
+          throttle: { ok: 60, err: 400 }, // 队列节流
+          accept: (t) => { try { return !!JSON.parse(t)?.data; } catch { return false; } },
         }
-      }
-      throw lastErr;
+      );
+      const d = JSON.parse(text)?.data;
+      return {
+        code: `${m[1]}${m[2]}`,
+        industry: d.f127 || "",
+        area: d.f128 || "",
+        concepts: String(d.f129 || "").split(",").filter(Boolean),
+      };
     });
   }
 
@@ -153,21 +147,11 @@ module.exports = function createEastmoney(ctx) {
   const EM_FS = "m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23,m:0+t:81+s:2048";
 
   async function emGet(url) {
-    let lastErr = new Error("em request failed");
-    for (const via of ["fetch", "curl"]) {
-      try {
-        const text =
-          via === "fetch"
-            ? await fetchText(url, { referer: "https://quote.eastmoney.com/" })
-            : await curlText(url, { referer: "https://quote.eastmoney.com/", encoding: "utf-8" });
-        await sleep(60); // 队列节流
-        return JSON.parse(text);
-      } catch (e) {
-        lastErr = e;
-        await sleep(400);
-      }
-    }
-    throw lastErr;
+    // fetch/curl 双通道 + 成功/失败节流, 统一走 fetchWithFallback(见 lib/fetch-any.cjs)
+    return JSON.parse(await fetchWithFallback(url, {
+      referer: EM_REFERER,
+      throttle: { ok: 60, err: 400 }, // 队列节流
+    }));
   }
 
   const emSymbol = (code6) => toMarketCode6(code6);
@@ -228,7 +212,7 @@ module.exports = function createEastmoney(ctx) {
               for (const d of diff) {
                 const c = emSymbol(d.f12);
                 const rec = { code: c, netIn: num(d.f62), netRatio: num(d.f184) };
-                cacheSet(`sf:${c}`, { ts: Date.now(), data: rec, inflight: null, ttl: 30000 });
+                cacheSet(`sf:${c}`, entry(rec, TTLS.STOCK_FLOW)); // 30s 命名 TTL, 见 lib/cache.cjs
                 rs[c] = rec;
               }
             }

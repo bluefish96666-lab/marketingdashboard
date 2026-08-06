@@ -4,7 +4,8 @@
 const { quoteUrl } = require("../lib/tencent-urls.cjs");
 
 module.exports = function createFutures(ctx) {
-  const { fetchText, curlText, num, changeOf, pctOf, fmtHHMM, safeRecord } = ctx;
+  const { fetchText, curlText, fetchWithFallback, num, changeOf, pctOf, fmtHHMM, safeRecord } = ctx;
+  const { cache, cacheSet, cached, entry, failEntry, quoteBackoff, TTLS } = ctx;
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
   /* ---------------- 外盘期货(金银铜油):腾讯主源 + 新浪兜底 ---------------- */
@@ -65,21 +66,9 @@ module.exports = function createFutures(ctx) {
 
   /* ---------------- 加密货币(Binance 主源 + OKX 兜底, fetch/curl 双通道) ---------------- */
   async function fetchJsonAny(urls) {
-    let lastErr = new Error("fetch failed");
-    for (const url of urls) {
-      for (const via of ["fetch", "curl"]) {
-        try {
-          const text =
-            via === "fetch"
-              ? await fetchText(url, { referer: "https://www.binance.com/" })
-              : await curlText(url, { encoding: "utf-8" });
-          return JSON.parse(text);
-        } catch (e) {
-          lastErr = e;
-        }
-      }
-    }
-    throw lastErr;
+    // 上游 URL 列表恒为单元素, 双通道统一走 fetchWithFallback(见 lib/fetch-any.cjs)
+    const text = await fetchWithFallback(urls[0], { referer: "https://www.binance.com/" });
+    return JSON.parse(text);
   }
 
   async function fetchBtc() {
@@ -202,8 +191,9 @@ module.exports = function createFutures(ctx) {
         const pts = klines.map((k) => ({ t: fmtHHMM(new Date(k[0])), p: num(k[4]) }));
         return { code, prec: num(ticker.prevClosePrice), points: pts };
       } catch (e) {
-        // 上游故障抛错(走 cached 负缓存退避), 不返回空数据冒充成功
-        throw Object.assign(new Error(`binance btc minute: ${e?.message || e}`), { status: 502 });
+        // 上游故障抛错(走 cached 负缓存退避), 不返回空数据冒充成功;
+        // 回显文案白名单化, 不携带上游 URL/网络细节
+        throw Object.assign(new Error("binance btc minute unavailable"), { status: 502 });
       }
     }
     if (code.startsWith("hf_")) {

@@ -2,7 +2,8 @@
 "use strict";
 
 module.exports = function createSina(ctx) {
-  const { fetchText, fetchSinaJson, num, toMarketCode6, UA } = ctx;
+  const { fetchText, fetchTextAny, fetchSinaJson, num, toMarketCode6 } = ctx;
+  const { cache, cacheSet, cached, entry, failEntry, quoteBackoff, TTLS } = ctx;
 
   /* ---------------- 新浪 7x24 快讯 ---------------- */
   function parseNewsItem(it) {
@@ -55,12 +56,10 @@ module.exports = function createSina(ctx) {
     if (!query || query.length < 1) return [];
     const results = [];
 
-    // 1. 新浪搜索(覆盖沪深北)
+    // 1. 新浪搜索(覆盖沪深北): fetchTextAny 双通道(带 UA, node fetch 被拦时 curl 兜底, 计入 stats.upstream)
     const sinaUrl = `https://suggest3.sinajs.cn/suggest/type=&key=${encodeURIComponent(query)}`;
     try {
-      const resp = await fetch(sinaUrl, { signal: AbortSignal.timeout(5000) });
-      const buf = await resp.arrayBuffer();
-      const text = new TextDecoder("gbk").decode(buf);
+      const text = await fetchTextAny(sinaUrl, { gbk: true });
       const m = text.match(/suggestvalue="([^"]+)"/);
       if (m) {
         for (const part of m[1].split(";")) {
@@ -72,14 +71,10 @@ module.exports = function createSina(ctx) {
       }
     } catch { /* 新浪不可用时降级 */ }
 
-    // 2. 东方财富搜索(覆盖新三板 NEEQ)
+    // 2. 东方财富搜索(覆盖新三板 NEEQ): fetchSinaJson 双通道(带 UA/Referer, curl 兜底)
     const emUrl = `https://searchadapter.eastmoney.com/api/suggest/get?input=${encodeURIComponent(query)}&type=14&token=D43BF722C8E33BDC906FB84D85E326E8&count=8`;
     try {
-      const emResp = await fetch(emUrl, {
-        headers: { "User-Agent": UA, Referer: "https://www.eastmoney.com/" },
-        signal: AbortSignal.timeout(5000),
-      });
-      const emJson = await emResp.json();
+      const emJson = await fetchSinaJson(emUrl, { referer: "https://www.eastmoney.com/" });
       const emData = emJson?.QuotationCodeTable?.Data || [];
       for (const d of emData) {
         const code = d.Code;

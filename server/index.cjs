@@ -6,16 +6,21 @@
 const http = require("http");
 const fs = require("fs");
 const path = require("path");
-const iconv = require("iconv-lite");
-const { execFile } = require("child_process");
 const crypto = require("crypto");
 const { num, changeOf, pctOf, fmtHHMM, toMarketCode6 } = require("./lib/format.cjs");
 const { parseCsvParam, chunked, safeRecord } = require("./lib/netutil.cjs");
 const { bjToday, readHistory, writeHistory } = require("./lib/persist.cjs");
 const { createCache } = require("./lib/cache.cjs");
-const { cache, set: cacheSet, sweep: sweepCache, backoffOf } = createCache();
+const createFetchAny = require("./lib/fetch-any.cjs");
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36";
+
+// 运行观测(压测/运维): 仅聚合计数, 无敏感信息; /api/stats 读取
+const stats = { reqs: 0, upstream: 0, blocked: 0, started: Date.now() };
+
+// 统一上游数据通道(fetch/curl 双通道 + 状态码校验)与统一内存缓存(命名 TTL + 失败退避 + 负缓存)
+const { fetchText, curlText, fetchTextAny, fetchWithFallback, UA } = createFetchAny({ onUpstream: () => stats.upstream++ });
+const { cache, set: cacheSet, sweep: sweepCache, backoffOf, cached, quoteBackoff, entry, failEntry, TTLS } = createCache();
+const qqRank = require("./lib/qq-rank.cjs")({ fetchText, num });
 
 // 加载 .env(须先于数据源模块 require, 模块内读取 process.env 密钥)
 try {
@@ -29,30 +34,39 @@ try {
   }
 } catch (e) { console.error("[env] load error:", e.message); }
 
-// 数据源适配器(依赖注入共享工具)
+// 数据源适配器(依赖注入共享工具: 统一 fetch 通道 / 统一缓存)
 const srcTencent = require("./sources/tencent.cjs")({
   fetchText, fetchTextAny, curlText, cache, cacheSet, parseCsvParam, chunked, safeRecord, num, changeOf, pctOf,
+  entry, failEntry, quoteBackoff, TTLS, qqRank,
 });
 const { handleQuotes, handleMinute, handleBoards, handleBoardStocks } = srcTencent;
 
 const srcFutures = require("./sources/futures.cjs")({
-  fetchText, curlText, num, changeOf, pctOf, fmtHHMM, safeRecord,
+  fetchText, curlText, fetchWithFallback, num, changeOf, pctOf, fmtHHMM, safeRecord,
+  cache, cacheSet, cached, entry, failEntry, quoteBackoff, TTLS,
 });
 const { handleFutures, handleFutureMinute, handleFutureDaily } = srcFutures;
 
-const srcAi = require("./sources/ai.cjs")({});
+const srcAi = require("./sources/ai.cjs")({
+  cache, cacheSet, cached, entry, failEntry, quoteBackoff, TTLS,
+});
 const { handleMysterySelect } = srcAi;
 
 const srcEastmoney = require("./sources/eastmoney.cjs")({
-  fetchText, fetchTextAny, curlText, cache, cacheSet, num, toMarketCode6, sleep,
+  fetchText, fetchWithFallback, cache, cacheSet, num, toMarketCode6,
+  entry, failEntry, quoteBackoff, TTLS, qqRank,
 });
 const { handleRank, handleMoneyFlow, handleStockBoards, handleMoneyFlowEM, handleStockFlows, handleBoardFlow, fetchSinaJson } = srcEastmoney;
 
-const srcSina = require("./sources/sina.cjs")({ fetchText, fetchSinaJson, num, toMarketCode6, UA });
+const srcSina = require("./sources/sina.cjs")({
+  fetchTextAny, fetchSinaJson, num, toMarketCode6,
+  cache, cacheSet, cached, entry, failEntry, quoteBackoff, TTLS,
+});
 const { handleNews, handleStockSearch } = srcSina;
 
 const srcEastmoneyFin = require("./sources/eastmoney-fin.cjs")({
   fetchTextAny, num, toMarketCode6,
+  cache, cacheSet, cached, entry, failEntry, quoteBackoff, TTLS,
 });
 const { handleFinanceMain, handleFinanceBoard, handleFinanceForecast, validPeriod } = srcEastmoneyFin;
 
@@ -71,8 +85,6 @@ const { handleAaModels, handleSpendIndex } = srcAiModels;
 // 个股资金流上游 inflight 去重表(handleStockFlows 使用)
 const flowInflight = new Map();
 
-// 运行观测(压测/运维): 仅聚合计数, 无敏感信息; /api/stats 读取
-const stats = { reqs: 0, upstream: 0, blocked: 0, started: Date.now() };
 // 活跃访客窗口: ip -> 最近请求时间戳; /api/stats 暴露 activeIps5m / visitors24h
 const activeIps = new Map(); // ip -> lastSeen(ms), 24h 内访问过的 IP 保留(个人站点量级, 内存有界)
 const activeSweeper = setInterval(() => {
@@ -82,52 +94,8 @@ const activeSweeper = setInterval(() => {
 activeSweeper.unref();
 function trackActiveIp(ip) { activeIps.set(ip, Date.now()); }
 
-function curlText(url, { referer, timeout = 8000, encoding = "gbk", headers } = {}) {
-  stats.upstream++; // 上游调用计数(fetchText/curlText 是所有上游 fetch 的唯一出口)
-  return new Promise((resolve, reject) => {
-    // -sS: 静默进度但保留错误信息到 stderr, 失败原因可诊断(28=超时, 35=TLS握手, 6=DNS...)
-    const args = ["-sS", "--max-time", String(Math.ceil(timeout / 1000)), "-H", `User-Agent: ${UA}`];
-    if (referer) args.push("-H", `Referer: ${referer}`);
-    for (const [k, v] of Object.entries(headers || {})) args.push("-H", `${k}: ${v}`);
-    args.push(url);
-    execFile("curl", args, { maxBuffer: 4 * 1024 * 1024, encoding: "buffer" }, (err, stdout, stderr) => {
-      if (err) {
-        const detail = stderr && stderr.length ? String(stderr).trim().slice(0, 200) : err.message;
-        return reject(new Error(`curl(${err.code ?? "?"}) ${url} -> ${detail}`));
-      }
-      resolve(iconv.decode(stdout, encoding));
-    });
-  });
-}
-
 const PORT = process.env.PORT || 3000;
 const DIST = path.join(__dirname, "..", "dist");
-
-/* ---------------- 基础工具 ---------------- */
-async function fetchText(url, { referer, gbk = false, timeout = 8000, headers } = {}) {
-  stats.upstream++;
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), timeout);
-  try {
-    const h = { "User-Agent": UA, Accept: "*/*", ...headers };
-    if (referer) h["Referer"] = referer;
-    const resp = await fetch(url, { headers: h, signal: ctrl.signal });
-    const buf = Buffer.from(await resp.arrayBuffer());
-    return gbk ? iconv.decode(buf, "gbk") : buf.toString("utf-8");
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-/* node fetch 被拦/失败时回退 curl(与 emGet / fetchSinaJson 同模式);
-   适用于对 TLS 指纹敏感、对 node fetch 间歇性断连的上游(CNBC 等) */
-async function fetchTextAny(url, { referer, gbk = false, timeout = 8000 } = {}) {
-  try {
-    return await fetchText(url, { referer, gbk, timeout });
-  } catch {
-    return curlText(url, { referer, timeout, encoding: gbk ? "gbk" : "utf-8" });
-  }
-}
 
 function send(res, code, obj, extra = {}) {
   const body = typeof obj === "string" ? obj : JSON.stringify(obj);
@@ -143,35 +111,7 @@ function send(res, code, obj, extra = {}) {
   res.end(body);
 }
 
-/* ---------------- TTL 缓存 + 并发合并(防上游限流) ---------------- */
-async function cached(key, ttl, fn) {
-  const now = Date.now();
-  const hit = cache.get(key);
-  if (hit) {
-    if (hit.data !== undefined && now - hit.ts < ttl) return hit.data;
-    if (hit.inflight) return hit.inflight;
-    // 失败退避窗口内: 有旧数据降级返回, 无旧数据直接抛错 — 都不再打上游(负缓存)
-    if (hit.failAt != null && now - hit.failAt < backoffOf(hit.failCount)) {
-      if (hit.data !== undefined) return hit.data;
-      throw new Error("upstream degraded");
-    }
-  }
-  const inflight = fn()
-    .then((data) => {
-      cacheSet(key, { ts: Date.now(), data, inflight: null, ttl, failAt: null, failCount: 0 });
-      return data;
-    })
-    .catch((e) => {
-      const c = cache.get(key);
-      cacheSet(key, { ts: c?.ts || 0, data: c?.data, inflight: null, ttl, failAt: Date.now(), failCount: (c?.failCount || 0) + 1 });
-      if (c?.data !== undefined) return c.data; // 出错回退到旧数据
-      throw e;
-    });
-  cacheSet(key, { ts: hit?.ts || 0, data: hit?.data, inflight, ttl, failAt: hit?.failAt ?? null, failCount: hit?.failCount ?? 0 });
-  return inflight;
-}
-
-/* ------------------------------------------------------------- */
+/* ---------------- TTL 缓存 + 并发合并(防上游限流) — cached() 在 lib/cache.cjs 统一实现 ---------------- */
 
 const { handleChainParse } = require("./lib/chain-parse.cjs");
 
@@ -476,7 +416,8 @@ const server = http.createServer(async (req, res) => {
         const data = await routes[u.pathname](u.searchParams, body);
         send(res, 200, { ok: true, data, ts: Date.now() }, cors);
       } catch (e) {
-        // 内部细节只记日志; err.status 由可预期的业务错误(如队列满)携带, 其 message 可安全回显
+        // 错误回显契约: 内部细节只记日志; err.status 由可预期的业务错误(队列满/问财配额等)携带,
+        // 其 message 必须为白名单文案(不含 URL/网络细节); 无 status 一律回显静态 "upstream error"
         console.error("[api]", u.pathname, e?.stack || e?.message || e);
         send(res, e?.status || 502, { ok: false, error: e?.status ? e.message : "upstream error" }, cors);
       }

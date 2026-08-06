@@ -5,6 +5,7 @@ const { quoteUrl, tencentMinuteUrl, usMinuteUrl, tencentRankUrl } = require("../
 
 module.exports = function createTencent(ctx) {
   const { fetchText, fetchTextAny, curlText, cache, cacheSet, parseCsvParam, chunked, safeRecord, num, changeOf, pctOf } = ctx;
+  const { entry, failEntry, quoteBackoff, TTLS, qqRank } = ctx;
 
   /* ---------------- 腾讯行情 qt.gtimg.cn ---------------- */
   function parseTencentLine(line) {
@@ -49,13 +50,8 @@ module.exports = function createTencent(ctx) {
     };
   }
 
-  // 报价缓存 TTL 与前端报价中心轮询周期(5s)对齐: 每个 code 每 5s 最多 1 次上游, 不再有 1.5s 的多余流量
-  const QUOTE_CACHE_TTL = 5000;
-
-  // 上游失败退避: 5s → 15s → 45s → 2min, 成功即复位。退避窗口内同 key 不再打上游(负缓存),
-  // 多用户场景下上游宕机时, 全站重复轮询折叠为每窗口 1 次, 避免锤死上游
-  const FAIL_BACKOFF = [5000, 15000, 45000, 120000];
-  const quoteBackoff = (n) => FAIL_BACKOFF[Math.min(n || 0, FAIL_BACKOFF.length - 1)];
+  // 报价缓存 TTL(与前端报价中心轮询周期 5s 对齐, 见 lib/cache.cjs TTLS.QUOTE)与
+  // 报价退避(5s → 15s → 45s → 2min, 负缓存)均由 lib/cache.cjs 统一提供, 经 ctx 注入
 
   // 块级上游 inflight 去重(缓存过期瞬间的并发 miss 共享同一次上游拉取)
   const chunkInflight = new Map();
@@ -68,7 +64,7 @@ module.exports = function createTencent(ctx) {
     const missing = [];
     for (const c of parseCsvParam(codes)) {
       const hit = cache.get(`q:${c}`);
-      if (hit && hit.data !== undefined && now - hit.ts < QUOTE_CACHE_TTL) {
+      if (hit && hit.data !== undefined && now - hit.ts < TTLS.QUOTE) {
         out[c] = hit.data;
       } else if (hit && hit.data !== undefined && hit.failAt != null && now - hit.failAt < quoteBackoff(hit.failCount)) {
         out[c] = hit.data; // 失败退避窗口内降级返回旧数据, 不再打上游
@@ -81,7 +77,6 @@ module.exports = function createTencent(ctx) {
     if (missing.length) {
       // 按 60 个/块分块并发(报价中心全集可达数百, 单 URL 过长会被上游拒绝)
       const chunks = chunked(missing, 60);
-      const ts = Date.now();
       // 块级 inflight 去重: 缓存过期瞬间的并发 miss 共享同一次上游拉取。
       // 否则多用户同频轮询时, 每个过期窗口会爆发几十次重复请求(单用户场景不暴露)
       await Promise.all(
@@ -101,13 +96,13 @@ module.exports = function createTencent(ctx) {
                 const q = parseTencentLine(line.trim());
                 if (q) {
                   rs[q.symbol] = q;
-                  if (q.symbol !== "usVIX") cacheSet(`q:${q.symbol}`, { ts, data: q, inflight: null, ttl: QUOTE_CACHE_TTL, failAt: null, failCount: 0 }); // usVIX 由新浪覆盖值接管
+                  if (q.symbol !== "usVIX") cacheSet(`q:${q.symbol}`, entry(q, TTLS.QUOTE)); // usVIX 由新浪覆盖值接管
                 }
               }
             } catch {
               for (const c of chunk) {
                 const hit = cache.get(`q:${c}`);
-                cacheSet(`q:${c}`, { ts: hit?.ts || 0, data: hit?.data, inflight: null, ttl: QUOTE_CACHE_TTL, failAt: Date.now(), failCount: (hit?.failCount || 0) + 1 });
+                cacheSet(`q:${c}`, failEntry(hit, TTLS.QUOTE));
               }
             }
             return rs;
@@ -126,7 +121,7 @@ module.exports = function createTencent(ctx) {
     // 带 inflight 去重 + 失败负缓存, 与主循环同理, 防并发 miss 打爆新浪)
     if (codes.includes("usVIX")) {
       const hit = cache.get("q:usVIX");
-      if (hit && hit.data !== undefined && now - hit.ts < QUOTE_CACHE_TTL) {
+      if (hit && hit.data !== undefined && now - hit.ts < TTLS.QUOTE) {
         out.usVIX = hit.data;
       } else if (hit && hit.data !== undefined && hit.failAt != null && now - hit.failAt < quoteBackoff(hit.failCount)) {
         out.usVIX = hit.data; // 退避窗口内降级返回旧数据
@@ -150,7 +145,7 @@ module.exports = function createTencent(ctx) {
             pct: pctOf(price, prev),
             time: `${f[12]} ${f[6]}`,
           };
-          cacheSet("q:usVIX", { ts: Date.now(), data: rec, inflight: null, ttl: QUOTE_CACHE_TTL, failAt: null, failCount: 0 });
+          cacheSet("q:usVIX", entry(rec, TTLS.QUOTE));
           return rec;
         })();
         vixInflight = p;
@@ -158,7 +153,7 @@ module.exports = function createTencent(ctx) {
           out.usVIX = await p;
         } catch {
           // 失败: 标记退避, 保留旧数据降级(无旧数据时保持腾讯兜底值)
-          cacheSet("q:usVIX", { ts: hit?.ts || 0, data: hit?.data, inflight: null, ttl: QUOTE_CACHE_TTL, failAt: Date.now(), failCount: (hit?.failCount || 0) + 1 });
+          cacheSet("q:usVIX", failEntry(hit, TTLS.QUOTE));
         } finally {
           vixInflight = null;
         }
@@ -233,14 +228,11 @@ module.exports = function createTencent(ctx) {
       speed: num(s.speed),
       circ_mv: num(s.ltsz), // 流通市值(亿)
       total_mv: num(s.zsz),
-      amount: num(s.volume) * 100 * num(s.zxj), // 成交量(手)估算成交额(元)
+      amount: qqRank.estAmount(s), // 成交量(手)估算成交额(元), 公式见 lib/qq-rank.cjs
     });
     const out = [];
     for (let offset = 0; out.length < want; offset += 100) {
-      const url = `https://proxy.finance.qq.com/cgi/cgi-bin/rank/hs/getBoardRankList?board_code=${encodeURIComponent(code)}&sort_type=PriceRatio&direct=${encodeURIComponent(dir)}&offset=${offset}&count=100`;
-      const text = await fetchText(url);
-      const json = JSON.parse(text);
-      const list = json?.data?.rank_list || [];
+      const list = await qqRank.getBoardRankList({ boardCode: code, sortType: "PriceRatio", direct: dir, offset, count: 100 });
       if (!list.length) break;
       out.push(...list.map(map));
       if (list.length < 100) break;

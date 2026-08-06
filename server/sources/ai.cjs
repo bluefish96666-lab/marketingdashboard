@@ -24,15 +24,24 @@ module.exports = function createAi(ctx) {
     return Number.isFinite(n) ? n : undefined;
   }
 
-  function iwencaiErrorFromText(text) {
+  // 错误回显契约: 业务错误显式携带 status(4xx 业务错误如配额用尽)与白名单可回显文案;
+  // 上游原文只记服务端日志, 不回显给客户端
+  function iwencaiErrorFromText(text, { json = false } = {}) {
     const clean = String(text || "").replace(/\s+/g, " ").trim();
-    if (clean.includes("次数已用完")) return "IWENCAI_QUOTA_EXHAUSTED: 问财今日次数已用完";
-    if (clean.includes("Invalid") || clean.includes("Unauthorized") || clean.includes("鉴权") || clean.includes("权限")) {
-      return "IWENCAI_AUTH_FAILED: 问财鉴权失败";
+    if (clean.includes("次数已用完")) {
+      const e = new Error("IWENCAI_QUOTA_EXHAUSTED: 问财今日次数已用完");
+      e.status = 429;
+      return e;
     }
-    // 上游原文只记服务端日志, 不回显给客户端
-    console.error("[iwencai] non-json response:", clean.slice(0, 160));
-    return "IWENCAI_NON_JSON: 问财返回非JSON响应";
+    if (clean.includes("Invalid") || clean.includes("Unauthorized") || clean.includes("鉴权") || clean.includes("权限")) {
+      const e = new Error("IWENCAI_AUTH_FAILED: 问财鉴权失败");
+      e.status = 500;
+      return e;
+    }
+    console.error("[iwencai] upstream response:", clean.slice(0, 160));
+    const e = new Error(json ? "IWENCAI_HTTP_ERROR: 问财服务异常" : "IWENCAI_NON_JSON: 问财返回非JSON响应");
+    e.status = 502;
+    return e;
   }
 
   // 问财返回的列名带查询时日期区间(如 平均成交额[20260715-20260717]), 日期随查询变化, 硬编码会失效
@@ -102,11 +111,11 @@ module.exports = function createAi(ctx) {
     try {
       json = JSON.parse(text);
     } catch {
-      throw new Error(iwencaiErrorFromText(text));
+      throw iwencaiErrorFromText(text);
     }
     if (!resp.ok) {
-      const errMsg = typeof json?.error === "string" ? json.error : json?.error?.message || json?.message || `IWENCAI_HTTP_${resp.status}`;
-      throw new Error(errMsg);
+      const raw = typeof json?.error === "string" ? json.error : json?.error?.message || json?.message || "";
+      throw iwencaiErrorFromText(raw, { json: true });
     }
     const datas = Array.isArray(json.datas) ? json.datas : Array.isArray(json.data) ? json.data : [];
     return {

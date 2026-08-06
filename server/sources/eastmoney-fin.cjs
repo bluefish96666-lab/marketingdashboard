@@ -3,6 +3,7 @@
 
 module.exports = function createEastmoneyFin(ctx) {
   const { fetchTextAny, num, toMarketCode6 } = ctx;
+  const { cache, cacheSet, cached, entry, failEntry, quoteBackoff, TTLS } = ctx;
 
   // 统一走 fetch/curl 双通道, Referer 为东财数据中心
   async function emDataGet(url) {
