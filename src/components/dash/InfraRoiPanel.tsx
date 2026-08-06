@@ -54,8 +54,15 @@ export const InfraRoiPanel = memo(function InfraRoiPanel({ className, panelId, i
     const costPath = seriesPath(pts, "costPerM", X, lY);
     const pricePath = seriesPath(pts, "pricePerM", X, lY);
     const roiPath = seriesPath(pts, "roiPct", X, rY);
-    const capexPath = true ? seriesPath(pts, "capexB", X, rY) : null;
-    const gridPath = true ? seriesPath(pts, "grid", X, rY) : null;
+    // capex/grid 量纲远超 ROI 轴域, 各自独立 min-max 归一化映射(形状保留, 数值见 tooltip)
+    const capVals = pts.map((p) => p.capexB);
+    const capLo = Math.min(...capVals) * 0.9, capHi = Math.max(...capVals) * 1.05;
+    const capY = (v: number) => PT + ih - ((v - capLo) / (capHi - capLo)) * ih;
+    const gridVals = pts.map((p) => p.grid);
+    const gridLo = Math.min(...gridVals) * 0.9, gridHi = Math.max(...gridVals) * 1.05;
+    const gridY = (v: number) => PT + ih - ((v - gridLo) / (gridHi - gridLo)) * ih;
+    const capexPath = seriesPath(pts, "capexB", X, capY);
+    const gridPath = seriesPath(pts, "grid", X, gridY);
 
     const xLabels: { label: string; x: number }[] = [];
     for (let i = 0; i < n; i += Math.max(1, Math.floor(n / 8))) xLabels.push({ label: String(pts[i].year), x: X(i) });
@@ -95,8 +102,8 @@ export const InfraRoiPanel = memo(function InfraRoiPanel({ className, panelId, i
           <span className="flex items-center gap-1"><span className="inline-block h-[3px] w-3.5 rounded bg-[#38bdf8]" />售价 <span className="text-slate-600">($/M)</span></span>
           <span className="flex items-center gap-1"><span className="inline-block h-[3px] w-3.5 rounded bg-[#fb7185]" />生产成本 <span className="text-slate-600">($/M)</span></span>
           <span className="flex items-center gap-1"><span className="inline-block h-[3px] w-3.5 rounded bg-[#a78bfa]" />复合ROI <span className="text-slate-600">(右轴%)</span></span>
-          <span className="flex items-center gap-1"><span className="inline-block h-[3px] w-3.5 rounded bg-[#fbbf24]" />CapEx <span className="text-slate-600">(右轴$B)</span></span>
-          <span className="flex items-center gap-1"><span className="inline-block h-[3px] w-3.5 rounded bg-[#34d399]" />电网 <span className="text-slate-600">(右轴)</span></span>
+          <span className="flex items-center gap-1"><span className="inline-block h-[3px] w-3.5 rounded bg-[#fbbf24]" />CapEx <span className="text-slate-600">($B, 归一)</span></span>
+          <span className="flex items-center gap-1"><span className="inline-block h-[3px] w-3.5 rounded bg-[#34d399]" />电网 <span className="text-slate-600">(指数, 归一)</span></span>
           <span className="ml-auto text-slate-600">历史 2022-2026 · 预测 2027-2035</span>
         </div>
         {/* 主图 */}
