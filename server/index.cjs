@@ -10,6 +10,7 @@ const iconv = require("iconv-lite");
 const { execFile } = require("child_process");
 const crypto = require("crypto");
 const { num, changeOf, pctOf, fmtHHMM, toMarketCode6 } = require("./lib/format.cjs");
+const { parseCsvParam, chunked, safeRecord } = require("./lib/netutil.cjs");
 
 // 加载 .env
 try {
@@ -157,9 +158,9 @@ let vixInflight = null; // usVIX 新浪拉取的 inflight 去重(同上)
 async function handleQuotes(codes) {
   // 按代码独立缓存(报价中心请求集随面板订阅动态变化, 整串做 key 会每次 miss 直冲上游)
   const now = Date.now();
-  const out = Object.create(null); // 无原型对象: 上游 symbol 作为 key, 杜绝 __proto__ 污染
+  const out = safeRecord(); // 无原型对象: 上游 symbol 作为 key, 杜绝 __proto__ 污染
   const missing = [];
-  for (const c of codes.split(",").map((s) => s.trim()).filter(Boolean)) {
+  for (const c of parseCsvParam(codes)) {
     const hit = cache.get(`q:${c}`);
     if (hit && hit.data !== undefined && now - hit.ts < QUOTE_CACHE_TTL) {
       out[c] = hit.data;
@@ -173,8 +174,7 @@ async function handleQuotes(codes) {
   }
   if (missing.length) {
     // 按 60 个/块分块并发(报价中心全集可达数百, 单 URL 过长会被上游拒绝)
-    const chunks = [];
-    for (let i = 0; i < missing.length; i += 60) chunks.push(missing.slice(i, i + 60));
+    const chunks = chunked(missing, 60);
     const ts = Date.now();
     // 块级 inflight 去重: 缓存过期瞬间的并发 miss 共享同一次上游拉取。
     // 否则多用户同频轮询时, 每个过期窗口会爆发几十次重复请求(单用户场景不暴露)
@@ -188,7 +188,7 @@ async function handleQuotes(codes) {
           return;
         }
         const p = (async () => {
-          const rs = Object.create(null); // 无原型对象, 防 __proto__ 污染
+          const rs = safeRecord(); // 无原型对象, 防 __proto__ 污染
           try {
             const text = await fetchText(`https://qt.gtimg.cn/q=${encodeURIComponent(chunk.join(","))}`, { gbk: true });
             for (const line of text.split(";")) {
@@ -344,7 +344,7 @@ async function handleBoardStocks(code, dir, n) {
 
 /* ---------------- 外盘期货(金银铜油):腾讯主源 + 新浪兜底 ---------------- */
 function parseFutures(text) {
-  const out = Object.create(null); // 无原型对象: 上游 symbol 作为 key, 杜绝 __proto__ 污染
+  const out = safeRecord(); // 无原型对象: 上游 symbol 作为 key, 杜绝 __proto__ 污染
   const re = /(?:hq_str_|v_)(\w+)="([^"]*)"/g;
   let m;
   while ((m = re.exec(text))) {
@@ -485,7 +485,7 @@ async function handleMysterySelect(query, limit = "30", page = "1") {
 
 /* ---------------- 内盘期货(沪金等):新浪 nf_ ---------------- */
 function parseSinaDomestic(text) {
-  const out = Object.create(null); // 无原型对象: 上游 symbol 作为 key, 杜绝 __proto__ 污染
+  const out = safeRecord(); // 无原型对象: 上游 symbol 作为 key, 杜绝 __proto__ 污染
   const re = /hq_str_(nf_\w+)="([^"]*)"/g;
   let m;
   while ((m = re.exec(text))) {
@@ -1487,7 +1487,7 @@ async function handleOpenRouterUsage() {
       const rows = body?.data || [];
 
       // 按日期+厂商聚合 token
-      const byDV = Object.create(null); // 无原型对象, 防上游 slug 为 __proto__ 时污染
+      const byDV = safeRecord(); // 无原型对象, 防上游 slug 为 __proto__ 时污染
       for (const r of rows) {
         const dt = r.date, v = vendorSlug(r.model_permaslug);
         if (cachedDates.has(dt)) continue;
@@ -1975,7 +1975,7 @@ const routes = {
     cached(`minute:${q.get("code")}`, 5000, () => handleMinute(q.get("code") || "sh000001")),
   // 批量分钟线: 将 N 次单独请求合并为 1 次, 大幅降低冷启动爆发请求数
   "/api/batch-minute": async (q) => {
-    const codes = (q.get("codes") || "").split(",").filter(Boolean);
+    const codes = parseCsvParam(q.get("codes") || "");
     if (codes.length === 0) return {};
     if (codes.length > 30) codes.length = 30; // 上限防滥用
     const map = {};
@@ -2007,7 +2007,7 @@ const routes = {
     cached(`fmin:${q.get("code")}`, 60000, () => handleFutureMinute(q.get("code") || "")),
   // 批量期货分钟线
   "/api/batch-fmin": async (q) => {
-    const codes = (q.get("codes") || "").split(",").filter(Boolean);
+    const codes = parseCsvParam(q.get("codes") || "");
     if (codes.length === 0) return {};
     if (codes.length > 20) codes.length = 20;
     const map = {};
