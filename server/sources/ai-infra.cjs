@@ -4,7 +4,7 @@
 "use strict";
 
 module.exports = function createAiInfra(ctx) {
-  const { fetchText, fetchWithFallback, readHistory, writeHistory, bjToday } = ctx;
+  const { fetchText, fetchWithFallback, readHistory, writeHistory, bjToday, num, fs, path } = ctx;
 
   // 模型参数(集中在顶部, 调参只改这里)
   const MODEL = {
@@ -53,7 +53,7 @@ module.exports = function createAiInfra(ctx) {
           ? Math.round(dep[y - 1] * 1.15)
           : (depHist[y] ?? 0);
       price[y] = y === FORECAST_START - 1
-        ? +(price[y - 1] * (1 + MODEL.priceDecline)).toFixed(2)
+        ? (priceHist[y] ?? +(price[y - 1] * (1 + MODEL.priceDecline)).toFixed(2)) // 2026 优先 spend-index 实测
         : isForecast
           ? +(price[y - 1] * (1 + (y >= MODEL.priceStableFrom ? MODEL.priceStableDecline : MODEL.priceDecline))).toFixed(2)
           : (priceHist[y] ?? null);
@@ -107,16 +107,18 @@ module.exports = function createAiInfra(ctx) {
     }));
   }
 
-  /** 端点处理: 聚合三源数据 + 预测 */
+  /** 端点处理: 聚合四源数据 + 预测 */
   async function handleAiInfra() {
-    const [sec, token, ppi] = await Promise.allSettled([
+    const [sec, token, ppi, spend] = await Promise.allSettled([
       fetchSecCapex(),
       fetchTokenPrices(),
       fetchFredPpi(),
+      fetchSpendIndex(),
     ]);
     const secOk = sec.status === "fulfilled" ? sec.value : null;
     const tokenOk = token.status === "fulfilled" ? token.value : null;
     const ppiOk = ppi.status === "fulfilled" ? ppi.value : null;
+    const spendOk = spend.status === "fulfilled" ? spend.value : null;
 
     // 历史输入: SEC 实测 + 落盘历史兜底 + 锚点 fallback
     // (SEC 上游失败时用上次成功落盘的数据, 避免 ROI 全 0)
@@ -133,6 +135,19 @@ module.exports = function createAiInfra(ctx) {
     const priceHist = tokenOk?.priceSeries || {};
     const costHist = tokenOk?.costSeries || {};
 
+    // 2025/2026 售价用 spend-index closed 真实年度均值覆盖(与 LLM 价格趋势面板同源)
+    // spend 序列 2025-12 起, 2025 取 12 月均值, 2026 取全部均值
+    if (spendOk?.points?.length) {
+      const byYear = {};
+      for (const p of spendOk.points) {
+        const y = (p.date || "").slice(0, 4);
+        if (!p.closed) continue;
+        (byYear[y] = byYear[y] || []).push(p.closed);
+      }
+      if (byYear["2025"]?.length) priceHist["2025"] = +(byYear["2025"].reduce((a, b) => a + b, 0) / byYear["2025"].length).toFixed(2);
+      if (byYear["2026"]?.length) priceHist["2026"] = +(byYear["2026"].reduce((a, b) => a + b, 0) / byYear["2026"].length).toFixed(2);
+    }
+
     const series = computeSeries({ capexHist, depHist, priceHist, costHist, gridAnchors: MODEL.gridAnchors, cloudRevHist: computeRevenueHist(secOk), modelCoHist: computeModelCoHist() });
     return {
       generatedAt: new Date().toISOString(),
@@ -142,12 +157,13 @@ module.exports = function createAiInfra(ctx) {
         sec: secOk ? { ok: true, byCompany: secOk.byCompany } : { ok: false, err: sec.reason?.message },
         token: tokenOk ? { ok: true, marketInputPerM: tokenOk.live?.marketInputPerM, frontierInputPerM: tokenOk.live?.frontierInputPerM, vendorCount: tokenOk.live?.vendorCount } : { ok: false, err: token.reason?.message },
         ppi: ppiOk ? { ok: true, trend: ppiOk.trend, yoy12m: ppiOk.yoy12m } : { ok: false, err: ppi.reason?.message },
+        spend: spendOk?.points?.length ? { ok: true, days: spendOk.points.length } : { ok: false, err: spend.reason?.message },
       },
       notes: [
         "capex: SEC 10-K 实测(PaymentsToAcquire*), 预测为模型外推",
         "grid: LBNL 年度锚点 + 模型外推(合成指数, 非官方)",
         "costPerM: 厂商不披露, 公开研究估算",
-        "pricePerM: 2022-2024 定价史锚点, 2025+ OpenRouter 实时加权均价",
+        "pricePerM: 2022-2024 定价史锚点, 2025-2026 spend-index 闭源前沿实测, 2027+ 价格稳定外推",
         "roiPct: 年度AI专项ROI = (AI收入-AI capex)/AI capex; AI收入=云AI增量+模型公司(估算), AI capex=总capex×AI占比",
       ],
     };
@@ -165,6 +181,10 @@ module.exports = function createAiInfra(ctx) {
   async function fetchFredPpi() {
     const { handleFredPpi } = require("./fred-ppi.cjs")({ fetchText });
     return handleFredPpi();
+  }
+  async function fetchSpendIndex() {
+    const { handleSpendIndex } = require("./ai-models.cjs")({ fetchText, num, fs, path });
+    return handleSpendIndex();
   }
 
   // 云收入近似(四家云业务收入, 十亿美元): AWS+Azure+GCP — 保守真实锚点

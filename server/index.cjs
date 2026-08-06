@@ -76,7 +76,7 @@ const { handleTreasuries, handleTreasuryHistory } = srcTreasuries;
 const srcOpenRouter = require("./sources/openrouter.cjs")({ safeRecord, fs, path });
 const { handleOpenRouterUsage } = srcOpenRouter;
 
-const srcAiInfra = require("./sources/ai-infra.cjs")({ fetchText, fetchWithFallback, readHistory, writeHistory, bjToday });
+const srcAiInfra = require("./sources/ai-infra.cjs")({ fetchText, fetchWithFallback, readHistory, writeHistory, bjToday, num, fs, path });
 const { handleAiInfra } = srcAiInfra;
 
 const srcSunsirs = require("./sources/sunsirs.cjs")({ fetchText, num, UA, readHistory, writeHistory, bjToday, path, fs });
