@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useSyncExternalStore } from "react";
 import { api } from "@/lib/api";
 import { isTv } from "@/lib/tv";
+import { num } from "./format";
 
 /**
  * 统一报价中心(MarketHub)
@@ -48,11 +49,6 @@ function subscribe(l: () => void) {
 function getVersion() {
   return version;
 }
-
-const num = (v: unknown) => {
-  const n = parseFloat(String(v));
-  return Number.isFinite(n) ? n : 0;
-};
 
 async function tick() {
   if (!refCounts.size) return;

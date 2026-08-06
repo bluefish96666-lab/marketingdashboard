@@ -4,6 +4,8 @@
  */
 
 import { usePolling } from "@/hooks/usePolling";
+import { num } from "./format";
+import { POLL } from "@/lib/intervals";
 
 export interface Quote {
   symbol: string;
@@ -304,11 +306,6 @@ export interface FinanceForecast {
   items: FinForecastItem[];
 }
 
-const num = (v: unknown) => {
-  const n = parseFloat(String(v));
-  return Number.isFinite(n) ? n : 0;
-};
-
 /** AbortSignal.timeout 兼容封装(Safari <16 无此静态方法, 旧设备直接抛 TypeError) */
 function timeoutSignal(ms: number): AbortSignal {
   if (typeof AbortSignal.timeout === "function") return AbortSignal.timeout(ms);
@@ -531,7 +528,7 @@ export const api = {
 
 /** OpenRouter 用量轮询(1 小时) */
 export function useOpenRouterUsage() {
-  return usePolling(() => api.openRouterUsage(), 3600000);
+  return usePolling(() => api.openRouterUsage(), POLL.AA_MODELS);
 }
 
 /* ---------------- 大模型定价(Artificial Analysis + traktoken) ---------------- */

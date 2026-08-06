@@ -3,6 +3,12 @@
 /** 等宽数字样式片段, 各面板统一使用 */
 export const TNUM = { fontVariantNumeric: "tabular-nums" } as const;
 
+// 解析数值: 非法输入静默返回 0(与后端 num 同语义)
+export const num = (v: unknown) => {
+  const n = parseFloat(String(v));
+  return Number.isFinite(n) ? n : 0;
+};
+
 export const fmtPct = (v: number, digits = 2) => `${v > 0 ? "+" : ""}${v.toFixed(digits)}%`;
 
 export const clsChg = (v: number) =>

@@ -3,6 +3,7 @@ import { Zap } from "lucide-react";
 import { Panel, type PanelZoomProps } from "../Panel";
 import { usePolling } from "@/hooks/usePolling";
 import { api, type FinForecastItem } from "@/lib/api";
+import { POLL } from "@/lib/intervals";
 import { TNUM, fmtYi, forecastTone } from "./utils";
 import { QuoteRow } from "../QuoteRow";
 import { ToneChip } from "../SharedUI";
@@ -58,7 +59,7 @@ function Row({ it }: { it: FinForecastItem }) {
 export function FinForecastPanel({ className = "", ...zoomProps }: { className?: string } & PanelZoomProps) {
   const [retry, setRetry] = useState(0);
   const { period } = useFin();
-  const { data, error, loading } = usePolling(() => api.financeForecast(period), 1800000, [retry, period]);
+  const { data, error, loading } = usePolling(() => api.financeForecast(period), POLL.FIN, [retry, period]);
 
   const stats = data?.stats;
   const hasItems = (data?.items.length ?? 0) > 0;

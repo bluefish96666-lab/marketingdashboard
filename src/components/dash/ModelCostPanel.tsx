@@ -2,10 +2,11 @@ import { memo, useMemo, useState, type MouseEvent } from "react";
 import { Bell, Gauge, Table2, TrendingUp } from "lucide-react";
 import { Panel, type PanelZoomProps } from "./Panel";
 import { AsyncContent } from "./SharedUI";
-import { usePolling } from "@/hooks/usePolling";
+import { useRetryPolling } from "@/hooks/useRetryPolling";
 import { useElementSize } from "@/hooks/useElementSize";
 import { api, type AaModel, type SpendIndexResp } from "@/lib/api";
 import { TNUM } from "@/lib/format";
+import { POLL } from "@/lib/intervals";
 
 // 厂商分类色板(已验证: 深色 #070b12 表面, CVD ΔE≥8; 按模型数取前 8, 其余归"其他")
 const VENDOR_COLORS = ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#008300", "#9085e9", "#e66767"];
@@ -130,9 +131,8 @@ const RANGES = [
 ] as const;
 
 export const TtsiTrendPanel = memo(function TtsiTrendPanel({ className = "", ...zoomProps }: { className?: string } & PanelZoomProps) {
-  const [retry, setRetry] = useState(0);
   const [range, setRange] = useState<(typeof RANGES)[number]["key"]>("all");
-  const { data: si, loading, error } = usePolling(() => api.spendIndex(), 3600000, [retry]);
+  const { data: si, loading, error, retry } = useRetryPolling(() => api.spendIndex(), POLL.AA_MODELS);
   const points = useMemo(() => (si ? si.points.slice(-RANGES.find((r) => r.key === range)!.n) : []), [si, range]);
   const last = points[points.length - 1];
   return (
@@ -157,7 +157,7 @@ export const TtsiTrendPanel = memo(function TtsiTrendPanel({ className = "", ...
       }
     >
       <div className="flex h-full flex-col p-2 pt-1">
-        <AsyncContent loading={loading} error={error} empty={false} onRetry={() => setRetry((r) => r + 1)}>
+        <AsyncContent loading={loading} error={error} empty={false} onRetry={retry}>
           {si && (
             <div className="flex h-full min-h-0 flex-col gap-1">
               <div className="flex items-baseline gap-3 px-0.5 text-[10px] text-slate-400">
@@ -179,14 +179,13 @@ export const TtsiTrendPanel = memo(function TtsiTrendPanel({ className = "", ...
 
 /* ================ 事件: 降价/份额变动流 ================ */
 export const EventPanel = memo(function EventPanel({ className = "", ...zoomProps }: { className?: string } & PanelZoomProps) {
-  const [retry, setRetry] = useState(0);
-  const { data: si, loading, error } = usePolling(() => api.spendIndex(), 3600000, [retry]);
+  const { data: si, loading, error, retry } = useRetryPolling(() => api.spendIndex(), POLL.AA_MODELS);
   const events = si?.events ?? [];
   return (
     <Panel className={className} {...zoomProps} title="模型降价事件" icon={<Bell size={14} />} accent="#34d399"
       right={<span className="text-[9px] text-slate-500">{events.length} 条</span>}>
       <div className="flex h-full flex-col p-2 pt-1">
-        <AsyncContent loading={loading} error={error} empty={false} onRetry={() => setRetry((r) => r + 1)}>
+        <AsyncContent loading={loading} error={error} empty={false} onRetry={retry}>
           {events.length === 0 ? (
             <div className="flex h-full items-center justify-center text-[10px] text-slate-600">暂无价格事件</div>
           ) : (
@@ -260,13 +259,12 @@ function PriceTable({ models }: { models: AaModel[] }) {
 }
 
 export const ModelPricePanel = memo(function ModelPricePanel({ className = "", ...zoomProps }: { className?: string } & PanelZoomProps) {
-  const [retry, setRetry] = useState(0);
-  const { data: aa, loading, error } = usePolling(() => api.aaModels(), 3600000, [retry]);
+  const { data: aa, loading, error, retry } = useRetryPolling(() => api.aaModels(), POLL.AA_MODELS);
   return (
     <Panel className={className} {...zoomProps} title="大模型价格表" icon={<Table2 size={14} />} accent="#38bdf8"
       right={<span className="text-[9px] text-slate-500">{aa ? aa.models.filter((m) => m.output != null || m.input != null).length : "—"} 个</span>}>
       <div className="flex h-full flex-col p-2 pt-1">
-        <AsyncContent loading={loading} error={error} empty={false} onRetry={() => setRetry((r) => r + 1)}>
+        <AsyncContent loading={loading} error={error} empty={false} onRetry={retry}>
           {aa && <PriceTable models={aa.models} />}
         </AsyncContent>
         <div className="pt-1 text-right text-[9px] text-slate-600">{aa?.source ?? ""}</div>
@@ -355,14 +353,13 @@ function ValueScatter({ models, vendors }: { models: AaModel[]; vendors: string[
 }
 
 export const ValueScatterPanel = memo(function ValueScatterPanel({ className = "", ...zoomProps }: { className?: string } & PanelZoomProps) {
-  const [retry, setRetry] = useState(0);
-  const { data: aa, loading, error } = usePolling(() => api.aaModels(), 3600000, [retry]);
+  const { data: aa, loading, error, retry } = useRetryPolling(() => api.aaModels(), POLL.AA_MODELS);
   const vendors = useMemo(() => vendorsOf(aa), [aa]);
   return (
     <Panel className={className} {...zoomProps} title="智能 × 任务成本" icon={<Gauge size={14} />} accent="#f5c542"
       right={<span className="text-[9px] text-slate-500">{aa ? aa.models.filter((m) => m.intel != null && m.taskCost != null).length : "—"} 个</span>}>
       <div className="flex h-full flex-col p-2 pt-1">
-        <AsyncContent loading={loading} error={error} empty={false} onRetry={() => setRetry((r) => r + 1)}>
+        <AsyncContent loading={loading} error={error} empty={false} onRetry={retry}>
           {aa && <ValueScatter models={aa.models} vendors={vendors} />}
         </AsyncContent>
         <div className="pt-1 text-right text-[9px] text-slate-600">{aa?.source ?? ""}</div>

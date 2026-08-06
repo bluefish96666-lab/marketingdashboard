@@ -5,6 +5,7 @@ import { Landmark } from "lucide-react";
 import { useSharedPolling } from "@/hooks/useSharedPolling";
 import { api, type Treasury } from "@/lib/api";
 import { clsChg } from "@/lib/format";
+import { POLL } from "@/lib/intervals";
 import { useElementSize } from "@/hooks/useElementSize";
 
 const ORDER = ["US3M", "US6M", "US1Y", "US2Y", "US3Y", "US5Y", "US7Y", "US10Y", "US20Y", "US30Y"];
@@ -27,7 +28,7 @@ const HIGHLIGHT_COLORS: Record<string, string> = {
 /** 美债收益率曲线 */
 export function TreasuryPanel({ className = "", ...zoomProps }: { className?: string } & PanelZoomProps) {
   const { data, error } = useSharedPolling("treasuries", () => api.treasuries(), 60000); // 与顶部跑马灯共享
-  const { data: hist } = usePolling(() => api.treasuryHistory(), 3600000);
+  const { data: hist } = usePolling(() => api.treasuryHistory(), POLL.TREASURY);
 
   // 容器实际像素尺寸 — SVG 坐标按真实尺寸计算, 避免 viewBox 拉伸导致文字变形
   const { ref: boxRef, size } = useElementSize();

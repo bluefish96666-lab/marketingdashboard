@@ -5,6 +5,7 @@ import { QuoteRow } from "./QuoteRow";
 import { useSharedPolling } from "@/hooks/useSharedPolling";
 import { api, type SpotRow } from "@/lib/api";
 import { EXCH_SHORT } from "@/config/goods";
+import { POLL } from "@/lib/intervals";
 
 type SortKey = "name" | "spot" | "futures" | "basis" | "basisPct";
 /** 表头分组: 每组一列, 点击在该组字段间循环排序 */
@@ -16,7 +17,7 @@ const COLS: { keys: SortKey[]; label: string }[] = [
 
 /** 现期对照表(生意社): 默认按 |基差率| 降序, 点击表头分组循环切换字段排序 */
 export function BasisPanel({ className = "", ...zoomProps }: { className?: string } & PanelZoomProps) {
-  const { data } = useSharedPolling("spot:table", () => api.spotTable(), 3600000);
+  const { data } = useSharedPolling("spot:table", () => api.spotTable(), POLL.SPOT);
   const [colIdx, setColIdx] = useState<number | null>(null);
   const [keyIdx, setKeyIdx] = useState(0);
   const [sortDir, setSortDir] = useState<1 | -1>(-1);

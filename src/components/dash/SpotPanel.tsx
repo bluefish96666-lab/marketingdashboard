@@ -5,18 +5,19 @@ import { usePolling } from "@/hooks/usePolling";
 import { useSharedPolling } from "@/hooks/useSharedPolling";
 import { api, type ChemSpot } from "@/lib/api";
 import { CHEM_SPOTS, EXCH_SHORT } from "@/config/goods";
+import { POLL } from "@/lib/intervals";
 
 /** 现货价格面板: 化工现货(生意社报价中心) + 期货品种现货(生意社现期表), 统一行格式, 历史逐日积累 */
 export function SpotPanel({ className = "", ...zoomProps }: { className?: string } & PanelZoomProps) {
   // 与 BasisPanel 共享同 key 轮询(每小时, 服务端 8h 缓存)
-  const { data } = useSharedPolling("spot:table", () => api.spotTable(), 3600000);
+  const { data } = useSharedPolling("spot:table", () => api.spotTable(), POLL.SPOT);
   // 化工现货(生意社报价中心 plist 页)
   const { data: chems } = usePolling(
     async () => {
       const rs = await Promise.allSettled(CHEM_SPOTS.map((c) => api.chemSpot(c.id, c.name)));
       return rs.filter((r): r is PromiseFulfilledResult<ChemSpot> => r.status === "fulfilled").map((r) => r.value);
     },
-    3600000
+    POLL.SPOT
   );
 
   const dailyPct = (hist: { c: number }[]) =>

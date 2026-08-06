@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useSharedPolling } from "@/hooks/useSharedPolling";
 import { api, type FinanceBoard, type FinanceMain } from "@/lib/api";
+import { POLL } from "@/lib/intervals";
 
 /**
  * 共享 financeBoard: 同 period 的所有面板共享一个请求 + 缓存.
@@ -9,7 +10,7 @@ import { api, type FinanceBoard, type FinanceMain } from "@/lib/api";
 export function useFinBoard(period: string) {
   const [retry, setRetry] = useState(0);
   const key = `fb:${period}:r${retry}`;
-  const { data, error } = useSharedPolling<FinanceBoard>(key, () => api.financeBoard(period), 1800000);
+  const { data, error } = useSharedPolling<FinanceBoard>(key, () => api.financeBoard(period), POLL.FIN);
   return { data, error, loading: data === null && error === null, retry: () => setRetry((r) => r + 1) };
 }
 
