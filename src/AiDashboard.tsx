@@ -2,18 +2,20 @@ import { DashboardHeader } from "@/components/dash/DashboardHeader";
 import { AiGrid } from "@/components/dash/AiGrid";
 import { OpenRouterPanel } from "@/components/dash/OpenRouterPanel";
 import { TtsiTrendPanel, EventPanel, ModelPricePanel, ValueScatterPanel } from "@/components/dash/ModelCostPanel";
+import { InfraRoiPanel } from "@/components/dash/InfraRoiPanel";
 import { useFullscreen } from "@/hooks/useFullscreen";
 
-// 2×3 网格: 大模型 Token 消耗跨两行占第一列, 其余 4 面板各占一格
+// 3×2 网格: Token 消耗压缩为左上单格, 新面板(基础设施ROI)放左下空区
 const CELLS = [
   {
     id: "openrouter",
     component: OpenRouterPanel,
-    area: "lg:col-start-1 lg:row-start-1 lg:row-span-2",
-    mobileH: "h-[500px]",
+    area: "lg:col-start-1 lg:row-start-1",
+    mobileH: "h-[360px]",
   },
   { id: "ttsi-trend", component: TtsiTrendPanel, area: "lg:col-start-2 lg:row-start-1", mobileH: "h-[380px]" },
   { id: "price-events", component: EventPanel, area: "lg:col-start-3 lg:row-start-1", mobileH: "h-[380px]" },
+  { id: "ai-infra", component: InfraRoiPanel, area: "lg:col-start-1 lg:row-start-2", mobileH: "h-[340px]" },
   { id: "price-table", component: ModelPricePanel, area: "lg:col-start-2 lg:row-start-2", mobileH: "h-[380px]" },
   { id: "value-scatter", component: ValueScatterPanel, area: "lg:col-start-3 lg:row-start-2", mobileH: "h-[380px]" },
 ];

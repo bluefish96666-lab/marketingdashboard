@@ -76,6 +76,9 @@ const { handleTreasuries, handleTreasuryHistory } = srcTreasuries;
 const srcOpenRouter = require("./sources/openrouter.cjs")({ safeRecord, fs, path });
 const { handleOpenRouterUsage } = srcOpenRouter;
 
+const srcAiInfra = require("./sources/ai-infra.cjs")({ fetchText, readHistory, writeHistory });
+const { handleAiInfra } = srcAiInfra;
+
 const srcSunsirs = require("./sources/sunsirs.cjs")({ fetchText, num, UA, readHistory, writeHistory, bjToday, path, fs });
 const { handleSpotTable, handleChemSpot } = srcSunsirs;
 
@@ -216,6 +219,7 @@ const routes = {
   "/api/treasury-history": async () => cached("treasury-history", 6 * 3600 * 1000, () => handleTreasuryHistory()),
   "/api/health": async () => ({ status: "up", ts: Date.now(), cache: cache.size }),
   "/api/openrouter-usage": async () => cached("or-usage", 3600000, () => handleOpenRouterUsage()), // 1h cache
+  "/api/ai-infra": async () => cached("ai-infra", 24 * 3600 * 1000, () => handleAiInfra()), // 财报/定价日更, 24h 缓存
   "/api/mystery-select": async (q) =>
     cached(`ms:${q.get("query")}:${q.get("limit")}:${q.get("page")}`, 60000, () =>
       handleMysterySelect(q.get("query") || "", q.get("limit") || "30", q.get("page") || "1")

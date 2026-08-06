@@ -524,6 +524,8 @@ export const api = {
   aaModels: () => get<AaModelsResp>(`/api/aa-models`),
   /** traktoken 支出指数(60 天指数 + 降价事件) */
   spendIndex: () => get<SpendIndexResp>(`/api/spend-index`),
+  /** AI 基础设施资本出清与复合 ROI(2022-2035 历史+预测) */
+  aiInfra: () => get<AiInfraResp>(`/api/ai-infra`),
 };
 
 /** OpenRouter 用量轮询(1 小时) */
@@ -567,4 +569,30 @@ export interface SpendIndexResp {
   }[];
   events: { date: string; text: string }[];
   source: string;
+}
+
+/* ---------------- AI 基础设施资本出清与复合 ROI ---------------- */
+
+export interface AiInfraPoint {
+  year: number;
+  capexB: number;
+  depB: number;
+  pricePerM: number;
+  costPerM: number;
+  grid: number;
+  revenueB: number;
+  roiPct: number;
+  /** true=历史实测, false=预测 */
+  actual: boolean;
+}
+
+export interface AiInfraResp {
+  generatedAt: string;
+  series: AiInfraPoint[];
+  sources: {
+    sec: { ok: boolean; byCompany?: { name: string; capex: Record<string, number> }[]; err?: string };
+    token: { ok: boolean; marketInputPerM?: number | null; vendorCount?: number; err?: string };
+    ppi: { ok: boolean; trend?: string; yoy12m?: number; err?: string };
+  };
+  notes: string[];
 }

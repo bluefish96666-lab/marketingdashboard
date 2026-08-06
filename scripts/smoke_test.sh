@@ -78,6 +78,35 @@ check batch-fmin "/api/batch-fmin?codes=sh000001,sz399001"
 check_futures futures-hf "/api/futures?list=hf_GC,hf_XAU" "hf_GC,hf_XAU"
 check_futures futures-nf "/api/futures?list=nf_AU0,nf_AG0" "nf_AU0,nf_AG0"
 check_futures futures-mixed "/api/futures?list=hf_GC,hf_SI,nf_AU0,nf_CU0" "hf_GC,hf_SI,nf_AU0,nf_CU0"
+
+# ai-infra: 断言 series 14 年(2022-2035)且五字段齐全
+check_ai_infra() {
+  local name="$1" url="$2"
+  local body
+  body=$(curl -s --max-time 60 -o /tmp/smoke-body.json -w "%{http_code}" "$BASE$url" 2>/dev/null)
+  if [ "$body" = "200" ]; then
+    local ok
+    ok=$(python3 -c "
+import json
+d = json.load(open('/tmp/smoke-body.json')).get('data', {})
+s = d.get('series', [])
+years = [p.get('year') for p in s]
+fields = all(all(k in p for k in ('capexB','grid','costPerM','pricePerM','roiPct','actual')) for p in s)
+print('OK' if len(s) == 14 and years == list(range(2022, 2036)) and fields else 'BAD')
+" 2>/dev/null)
+    if [ "$ok" = "OK" ]; then
+      echo "PASS  $name  ($url) — 14年序列完整"
+      PASS=$((PASS + 1))
+    else
+      echo "FAIL  $name  ($url) — 序列异常: $ok"
+      FAIL=$((FAIL + 1))
+    fi
+  else
+    echo "FAIL  $name  ($url) — HTTP $body"
+    FAIL=$((FAIL + 1))
+  fi
+}
+check_ai_infra ai-infra "/api/ai-infra"
 check future-minute "/api/future-minute?code=hf_GC"
 check future-daily "/api/future-daily?code=hf_GC"
 check stock-boards "/api/stock-boards?code=sh600519"

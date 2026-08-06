@@ -9,7 +9,7 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "start": "node server/index.cjs",
-    "test": "vitest run"
+    "test": "vitest run && node --test server/*.test.cjs"
   },
   "dependencies": {
     "iconv-lite": "^0.7.3",
