@@ -46,10 +46,14 @@ module.exports = function createAiModels(ctx) {
       models = Object.entries(hist).map(([slug, h]) => {
         const pts = h?.points || [];
         const last = pts[pts.length - 1] || {};
-        // taskCost: 取最近一个有值的点(部分模型最后一天缺 task)
-        let task = null;
-        for (let i = pts.length - 1; i >= 0; i--) { if (pts[i].task != null) { task = pts[i].task; break; } }
-        return { slug, name: h?.name || slug, vendor: h?.vendor || "", release: "", intel: null, input: last.i ?? null, output: last.o ?? null, cacheHit: null, taskCost: task };
+        // taskCost: 取最近一个有值的点(部分模型最后一天缺 task); intel 同
+        let task = null, intel = null;
+        for (let i = pts.length - 1; i >= 0; i--) {
+          if (pts[i].task != null && task == null) task = pts[i].task;
+          if (pts[i].intel != null && intel == null) intel = pts[i].intel;
+          if (task != null && intel != null) break;
+        }
+        return { slug, name: h?.name || slug, vendor: h?.vendor || "", release: "", intel, input: last.i ?? null, output: last.o ?? null, cacheHit: null, taskCost: task };
       }).filter((m) => m.input != null || m.output != null);
       if (!models.length) throw e; // 历史也没有 → 抛原错
       return { models, history: hist, source: "local snapshot (AA upstream unavailable)" };
@@ -61,8 +65,8 @@ module.exports = function createAiModels(ctx) {
       if (m.input == null && m.output == null) continue;
       const arr = history[m.slug] || (history[m.slug] = { name: m.name, vendor: m.vendor, points: [] });
       const last = arr.points[arr.points.length - 1];
-      if (last && last.t === today) last.i = m.input, last.o = m.output, last.task = m.taskCost;
-      else arr.points.push({ t: today, i: m.input, o: m.output, task: m.taskCost });
+      if (last && last.t === today) last.i = m.input, last.o = m.output, last.task = m.taskCost, last.intel = m.intel;
+      else arr.points.push({ t: today, i: m.input, o: m.output, task: m.taskCost, intel: m.intel });
       if (arr.points.length > 730) arr.points.splice(0, arr.points.length - 730);
     }
     await writeHistory(MODEL_PRICES_FILE, history, "aa");

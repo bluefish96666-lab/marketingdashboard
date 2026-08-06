@@ -280,11 +280,17 @@ function ValueScatter({ models, vendors }: { models: AaModel[]; vendors: string[
   const W = size.w;
   const H = size.h;
   const PAD = { l: 46, r: 10, t: 8, b: 18 };
-  const pts = useMemo(() => models.filter((m) => m.intel != null && m.taskCost != null && m.taskCost > 0), [models]);
+  // 主用 intel×taskCost; AA API 不可用时 intel 缺失 → 降级为 input 价×taskCost(价格-价值关系仍成立)
+  const pts = useMemo(() => {
+    const withIntel = models.filter((m) => m.intel != null && m.taskCost != null && m.taskCost > 0);
+    if (withIntel.length) return withIntel;
+    return models.filter((m) => m.input != null && m.input > 0 && m.taskCost != null && m.taskCost > 0);
+  }, [models]);
+  const xKey = useMemo(() => (pts.length && pts[0].intel != null ? "intel" : "input"), [pts]);
   if (W < 120 || pts.length === 0) return <div ref={ref} className="h-full w-full" />;
 
-  const xMin = Math.min(...pts.map((p) => p.intel!)) * 0.95;
-  const xMax = Math.max(...pts.map((p) => p.intel!)) * 1.05;
+  const xMin = Math.min(...pts.map((p) => (xKey === "intel" ? p.intel! : p.input!))) * 0.95;
+  const xMax = Math.max(...pts.map((p) => (xKey === "intel" ? p.intel! : p.input!))) * 1.05;
   const yMinLog = Math.log10(Math.min(...pts.map((p) => p.taskCost!)));
   const yMaxLog = Math.log10(Math.max(...pts.map((p) => p.taskCost!)));
   const x = (v: number) => PAD.l + ((v - xMin) / (xMax - xMin)) * (W - PAD.l - PAD.r);
@@ -293,6 +299,7 @@ function ValueScatter({ models, vendors }: { models: AaModel[]; vendors: string[
     const i = vendors.indexOf(m.vendor);
     return i >= 0 ? VENDOR_COLORS[i] : CROSSHAIR;
   };
+  const xv = (m: AaModel) => (xKey === "intel" ? m.intel : m.input) as number;
   const yTicks: number[] = [];
   for (let k = Math.ceil(yMinLog); k <= Math.floor(yMaxLog); k++) yTicks.push(10 ** k);
   const xTicks = [0, 1, 2, 3].map((i) => xMin + ((xMax - xMin) * i) / 3);
@@ -303,7 +310,7 @@ function ValueScatter({ models, vendors }: { models: AaModel[]; vendors: string[
     let best: AaModel | null = null;
     let bestD = 25;
     for (const p of pts) {
-      const d = Math.hypot(x(p.intel!) - mx, y(p.taskCost!) - my);
+      const d = Math.hypot(x(xv(p)) - mx, y(p.taskCost!) - my);
       if (d < bestD) { bestD = d; best = p; }
     }
     setHover(best);
@@ -326,7 +333,7 @@ function ValueScatter({ models, vendors }: { models: AaModel[]; vendors: string[
             </g>
           ))}
           {pts.map((p) => (
-            <circle key={p.slug} cx={x(p.intel!)} cy={y(p.taskCost!)} r={hover === p ? 5 : 4} fill={colorOf(p)} fillOpacity={hover === p ? 1 : 0.85} stroke={hover === p ? "#fff" : "none"} strokeWidth={hover === p ? 1 : 0} />
+            <circle key={p.slug} cx={x(xv(p))} cy={y(p.taskCost!)} r={hover === p ? 5 : 4} fill={colorOf(p)} fillOpacity={hover === p ? 1 : 0.85} stroke={hover === p ? "#fff" : "none"} strokeWidth={hover === p ? 1 : 0} />
           ))}
         </svg>
         {hover && (
