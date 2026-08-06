@@ -54,6 +54,9 @@ const TOP_N = 15;
 function Chart({ allDays, days, mode, agg }: { allDays: OrUsageDay[]; days: OrUsageDay[]; mode: "vendor" | "country"; agg: "day" | "week" }) {
   const boxRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ w: 400, h: 200 });
+  const [hover, setHover] = useState<number | null>(null); // hover 数据点索引
+  const [hoverLayer, setHoverLayer] = useState<string | null>(null); // hover 面积层名
+  const svgRef = useRef<SVGSVGElement>(null);
   useEffect(() => {
     const el = boxRef.current;
     if (!el) return;
@@ -132,13 +135,13 @@ function Chart({ allDays, days, mode, agg }: { allDays: OrUsageDay[]; days: OrUs
     const dailyRate = dayCount > 0 && first ? ((last / first) ** (1 / dayCount) - 1) * 100 : 0;
     const avg7 = stacked.slice(-7).reduce((s, d) => s + d.total, 0) / Math.min(7, n);
     const avg = stacked.reduce((s, d) => s + d.total, 0) / n;
-    return { W, H, PL, PR, PT, PB, areas, yTicks, xLabels, last, chg, chgPct, dailyRate, avg7, avg, dayCount };
+    return { W, H, PL, PR, PT, PB, areas, yTicks, xLabels, last, chg, chgPct, dailyRate, avg7, avg, dayCount, stacked, ord, X, Y };
   }, [days, allDays, size, mode]);
 
   if (!chart) return <div className="flex h-full items-center justify-center text-[11px] text-slate-600">暂无数据</div>;
 
   return (
-    <div ref={boxRef} className="flex h-full min-h-0 w-full flex-col">
+    <div ref={boxRef} className="relative flex h-full min-h-0 w-full flex-col">
       <div className="flex shrink-0 flex-wrap gap-x-3 gap-y-0.5 pb-1 text-[9px]">
         {chart.areas.map((a) => (
           <span key={a.name} className="flex items-center gap-1">
@@ -156,12 +159,40 @@ function Chart({ allDays, days, mode, agg }: { allDays: OrUsageDay[]; days: OrUs
         <span className="text-slate-500">{agg === "week" ? "周增速" : "日增速"} {chart.dailyRate > 0.001 ? `+${chart.dailyRate.toFixed(2)}%` : `${chart.dailyRate.toFixed(2)}%`}</span>
         <span className="text-slate-500">近{agg === "week" ? "4周" : "7日"} {fmtT(Math.round(chart.avg7))}/{agg === "week" ? "周" : "日"}</span>
       </div>
-      <svg width={chart.W} height={chart.H - 36} className="block flex-1" style={{ overflow: "visible" }}>
+      <svg
+        ref={svgRef}
+        width={chart.W}
+        height={chart.H - 36}
+        className="block flex-1"
+        style={{ overflow: "visible" }}
+        onMouseLeave={() => { setHover(null); setHoverLayer(null); }}
+        onMouseMove={(e) => {
+          const rect = svgRef.current?.getBoundingClientRect();
+          if (!rect) return;
+          const mx = e.clientX - rect.left;
+          const n = chart.stacked.length;
+          const i = Math.round(((mx - chart.PL) / (chart.W - chart.PL - chart.PR)) * (n - 1));
+          setHover(i >= 0 && i < n ? i : null);
+        }}
+      >
+        {/* 网格 + 十字准线(优先于网格线) */}
         {chart.yTicks.map((t, i) => (
           <line key={i} x1={chart.PL} y1={t.y} x2={chart.W - chart.PR} y2={t.y} stroke="#1e293b" strokeWidth={0.5} />
         ))}
+        {hover != null && (
+          <line x1={chart.X(hover)} y1={8} x2={chart.X(hover)} y2={chart.H - 36 - 4} stroke="rgba(148,163,184,0.6)" strokeWidth={0.8} strokeDasharray="3 3" />
+        )}
+        {/* 面积层: hover 时高亮目标层, 其他层降透明 */}
         {chart.areas.map((a) => (
-          <path key={a.name} d={a.d} fill={vendorColor(a.name)} />
+          <path
+            key={a.name}
+            d={a.d}
+            fill={vendorColor(a.name)}
+            opacity={hoverLayer == null || hoverLayer === a.name ? 1 : 0.25}
+            style={{ transition: "opacity 0.15s", cursor: hoverLayer === a.name ? "pointer" : "default" }}
+            onMouseEnter={() => setHoverLayer(a.name)}
+            onMouseLeave={() => setHoverLayer(null)}
+          />
         ))}
         {chart.xLabels.map((xl, i) => (
           <Fragment key={i}>
@@ -172,7 +203,42 @@ function Chart({ allDays, days, mode, agg }: { allDays: OrUsageDay[]; days: OrUs
         {chart.yTicks.map((t, i) => (
           <text key={`y${i}`} x={chart.PL - 4} y={t.y + 3} textAnchor="end" fill="#64748b" fontSize={8} fontFamily="monospace">{fmtT(Math.round(t.v))}</text>
         ))}
+        {/* 数据点标记: hover 当天 */}
+        {hover != null && (
+          <circle cx={chart.X(hover)} cy={chart.Y(chart.stacked[hover].total)} r={2.5} fill="#a78bfa" />
+        )}
       </svg>
+      {/* tooltip: 十字准线对应的当日明细 */}
+      {hover != null && chart.stacked[hover] && (
+        <div
+          className="pointer-events-none absolute z-10 min-w-[150px] rounded border border-slate-700/60 bg-[#0a1220]/95 p-1.5 shadow-[0_4px_16px_rgba(0,0,0,0.5)]"
+          style={{
+            left: Math.min(Math.max(chart.X(hover) - 75, 4), chart.W - 160),
+            top: 4,
+          }}
+        >
+          <div className="mb-1 flex items-baseline justify-between gap-3 text-[10px]">
+            <span className="font-semibold text-slate-200">{chart.stacked[hover].date}</span>
+            <span className="font-mono text-slate-400">{fmtT(chart.stacked[hover].total)}</span>
+          </div>
+          <div className="max-h-[130px] space-y-px overflow-y-auto">
+            {chart.ord.map((v) => {
+              const s = chart.stacked[hover];
+              const val = v === "其他" ? s.other : (s.m[v] || 0);
+              if (val <= 0) return null;
+              const pct = s.total > 0 ? (val / s.total) * 100 : 0;
+              return (
+                <div key={v} className="flex items-center gap-1.5 text-[9px] leading-3">
+                  <span className="inline-block h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: vendorColor(v) }} />
+                  <span className="w-14 shrink-0 truncate text-slate-400">{v}</span>
+                  <span className="ml-auto font-mono text-slate-200">{fmtT(val)}</span>
+                  <span className="w-9 text-right font-mono text-slate-500">{pct.toFixed(1)}%</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
