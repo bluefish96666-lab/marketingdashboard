@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import type { BoardFlow } from "@/lib/api";
 import { TNUM } from "@/lib/format";
 import { useElementSize } from "@/hooks/useElementSize";
@@ -36,6 +36,8 @@ const AXIS_TEXT_X = 4;
  *  labelMode: "end" 端点标签+标线(默认) / "legend" 图下方图例 */
 export function BoardFlowChart({ flows, progress = 1, labelMode = "end" }: { flows: BoardFlow[]; progress?: number; labelMode?: "end" | "legend" }) {
   const { ref: boxRef, size } = useElementSize();
+  // 点击选中的板块 code(null = 全部显示)
+  const [sel, setSel] = useState<string | null>(null);
 
   const chart = useMemo(() => {
     const series = flows.filter((f) => f.points.length > 2);
@@ -102,20 +104,44 @@ export function BoardFlowChart({ flows, progress = 1, labelMode = "end" }: { flo
             {X_TICKS.map(([i, t, anchor]) => (
               <text key={t} x={chart.X(i)} y={chart.chartH - 8} fontSize={8} fill={AXIS} textAnchor={anchor}>{t}</text>
             ))}
-            {/* 板块曲线 */}
-            {chart.lines.map((l) => (
-              <polyline key={l.s.code} points={l.pts} fill="none" stroke={l.color} strokeWidth={1.4} strokeLinejoin="round" />
-            ))}
-            {/* 端点标签 + 标线(end 模式) */}
-            {labelMode === "end" &&
-              chart.labels.map((l) => (
-                <g key={l.line.s.code}>
-                  <line x1={chart.W - chart.labelW - PLOT_INSET} y1={l.line.lastY} x2={chart.W - chart.labelW} y2={l.labelY} stroke={l.line.color} strokeWidth={0.6} strokeOpacity={0.5} />
-                  <text x={chart.W - chart.labelW + 2} y={l.labelY + 3} fontSize={8.5} fill={l.line.color} style={TNUM}>
-                    {l.line.s.name} {l.line.lastV >= 0 ? "+" : ""}{(l.line.lastV / 1e8).toFixed(0)}
-                  </text>
+            {/* 板块曲线: 选中高亮, 未选中淡化; 透明加宽命中区承载点击 */}
+            {chart.lines.map((l) => {
+              const active = sel == null || sel === l.s.code;
+              return (
+                <g key={l.s.code}>
+                  <polyline
+                    points={l.pts}
+                    fill="none"
+                    stroke={l.color}
+                    strokeWidth={active ? 1.4 : 0.7}
+                    strokeOpacity={active ? 1 : 0.18}
+                    strokeLinejoin="round"
+                  />
+                  <polyline
+                    points={l.pts}
+                    fill="none"
+                    stroke="transparent"
+                    strokeWidth={12}
+                    strokeLinejoin="round"
+                    style={{ cursor: "pointer" }}
+                    onClick={(e) => { e.stopPropagation(); setSel(sel === l.s.code ? null : l.s.code); }}
+                  />
                 </g>
-              ))}
+              );
+            })}
+            {/* 端点标签 + 标线(end 模式): 可点击选中, 未选中淡化 */}
+            {labelMode === "end" &&
+              chart.labels.map((l) => {
+                const active = sel == null || sel === l.line.s.code;
+                return (
+                  <g key={l.line.s.code} opacity={active ? 1 : 0.2} style={{ cursor: "pointer" }} onClick={(e) => { e.stopPropagation(); setSel(sel === l.line.s.code ? null : l.line.s.code); }}>
+                    <line x1={chart.W - chart.labelW - PLOT_INSET} y1={l.line.lastY} x2={chart.W - chart.labelW} y2={l.labelY} stroke={l.line.color} strokeWidth={active ? 0.8 : 0.5} strokeOpacity={0.5} />
+                    <text x={chart.W - chart.labelW + 2} y={l.labelY + 3} fontSize={active ? 9 : 8.5} fill={l.line.color} style={TNUM} fontWeight={active ? 600 : 400}>
+                      {l.line.s.name} {l.line.lastV >= 0 ? "+" : ""}{(l.line.lastV / 1e8).toFixed(0)}
+                    </text>
+                  </g>
+                );
+              })}
             {/* 时间游标 */}
             {progress < 1 && (
               <g>
@@ -141,7 +167,12 @@ export function BoardFlowChart({ flows, progress = 1, labelMode = "end" }: { flo
               style={{ maxHeight: LEGEND_H }}
             >
               {chart.lines.map((l) => (
-                <span key={l.s.code} className="flex items-center gap-1 text-[9px] leading-none">
+                <span
+                  key={l.s.code}
+                  className="flex cursor-pointer items-center gap-1 text-[9px] leading-none"
+                  style={{ opacity: sel == null || sel === l.s.code ? 1 : 0.3 }}
+                  onClick={() => setSel(sel === l.s.code ? null : l.s.code)}
+                >
                   <span className="h-[5px] w-[10px] shrink-0 rounded-sm" style={{ background: l.color }} />
                   <span className="max-w-[86px] truncate text-slate-400">{l.s.name}</span>
                   <span className="font-semibold" style={{ color: l.color, fontVariantNumeric: "tabular-nums" }}>
