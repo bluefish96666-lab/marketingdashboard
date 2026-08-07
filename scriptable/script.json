@@ -16,7 +16,7 @@
     "ja" : ""
   },
   "runInApp" : false,
-  "color" : "#38bdf8",
+  "color" : "#070B12",
   "permissions" : null,
   "description" : "A股指数、板块资金流向与 AI Token 指数速览, 数据来自 mrd.hermes.cc.cd。",
   "remoteResource" : null,
