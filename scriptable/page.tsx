@@ -1,7 +1,7 @@
 // WebViewController 是全局类(官方文档: 无需 import), 直接用
 // ?tv=1 触发 mrd TV 模式; 无标题栏; TV风格开屏页; 右下角悬浮退出按钮
-// 结构回归完美版(863f2e9): 无ZStack叠加, 互斥渲染 loaded?WebView:Splash
-// 组件值全部在影视集合实证清单内: Text font ∈ caption..title3, foregroundStyle ∈ white/secondaryLabel/tertiaryLabel, background=black
+// 结构=完美版863f2e9: WebView始终挂载 + useEffect loadURL (互斥渲染会致WebView挂载时无加载→黑屏)
+// 开屏页=ZStack叠加层, 组件值全部影视集合实证
 import {
   WebView, Navigation, Script, Button, ZStack, Spacer, VStack,
   Text, ProgressView, useState, useEffect,
@@ -9,7 +9,7 @@ import {
 
 const BASE = "https://mrd.hermes.cc.cd/?tv=1"
 
-// 复刻 TV app 开屏: 深底 + logo(emoji替代,避未验证symbol) + 应用名 + 副标题 + 进度圈 + 连接提示
+// 复刻 TV app 开屏: 深底 + logo(emoji) + 应用名 + 副标题 + 进度圈 + 连接提示
 function SplashScreen() {
   return (
     <VStack
@@ -44,14 +44,14 @@ function FullScreenWebView() {
   const [loaded, setLoaded] = useState(false)
   const controller = new WebViewController()
 
+  // 完美版结构: WebView 常驻, 挂载后立即 loadURL (加载在 WebView 上进行)
   useEffect(() => {
+    controller.loadURL(BASE)
+    // waitForLoad 完成或 5s 超时后隐藏开屏
     let done = false
     const finish = () => { if (!done) { done = true; setLoaded(true) } }
-    // 加载 URL + 等待完成, 5s 超时兜底, 失败也放行
     const timer = setTimeout(finish, 5000)
-    controller.loadURL(BASE).then(() => {
-      return controller.waitForLoad()
-    }).then(finish).catch(finish).finally(() => {
+    controller.waitForLoad().then(finish).catch(finish).finally(() => {
       clearTimeout(timer)
     })
     return () => { clearTimeout(timer); controller.dispose() }
@@ -61,14 +61,11 @@ function FullScreenWebView() {
     <ZStack
       frame={{ maxWidth: "infinity", maxHeight: "infinity" }}
     >
-      {loaded
-        ? (
-          <WebView
-            controller={controller}
-            frame={{ maxWidth: "infinity", maxHeight: "infinity" }}
-          />
-        )
-        : <SplashScreen />}
+      <WebView
+        controller={controller}
+        frame={{ maxWidth: "infinity", maxHeight: "infinity" }}
+      />
+      {!loaded && <SplashScreen />}
       <VStack
         frame={{ maxWidth: "infinity", maxHeight: "infinity" }}
         alignment="trailing"
