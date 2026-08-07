@@ -95,6 +95,8 @@ function WebViewPage() {
           title="退出"
           systemImage="xmark"
           action={() => dismiss()}
+          buttonStyle="glass"
+          tint="white"
           padding={{ trailing: 16, bottom: 16 }}
         />
       </VStack>
