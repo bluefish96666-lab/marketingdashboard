@@ -1,61 +1,52 @@
 // MRD 大盘速览 — 脚本宝(Scripting)
-// 最简版: 直接打开 mrd 完整 Web 面板(无需 fetch/数据渲染, 零兼容风险)
+// 官方模式: Link 组件打开网页(与 App Store限免 同构), 无自定义 API, 零崩溃风险
 import {
   Navigation, NavigationStack, List, Section, VStack, HStack, Spacer,
-  Text, Button, Image, Script,
+  Text, Link, Script,
 } from "scripting"
 
 const BASE = "https://mrd.hermes.cc.cd"
 
-/* ───────── 主页面 ───────── */
 function MainPage() {
   return (
     <NavigationStack>
-      <List
-        navigationTitle="📊 MRD 大盘速览"
-        navigationSubtitle="实时行情 · 板块资金流 · AI 基建面板"
-      >
-        <Section header="打开方式">
-          <Button
-            title="打开完整面板"
-            action={async () => {
-              await Navigation.openURL(BASE + "/")
-            }}
-          />
-          <HStack spacing={8}>
-            <Image systemName="safari" foregroundStyle="systemBlue" />
-            <Text font="footnote" foregroundStyle="secondaryLabel">
-              在浏览器中打开 mrd.hermes.cc.cd 完整仪表盘
-            </Text>
-          </HStack>
+      <List navigationTitle="MRD 大盘速览">
+        <Section header="打开完整面板">
+          <Link url={BASE + "/"}>
+            <HStack spacing={12} padding={{ vertical: 6 }}>
+              <Text font="body" bold>打开 MRD 仪表盘</Text>
+              <Spacer />
+              <Text font="footnote" foregroundStyle="secondaryLabel">行情 · 板块资金流</Text>
+            </HStack>
+          </Link>
         </Section>
-
         <Section header="快速直达">
-          <Button
-            title="AI 基建面板"
-            action={async () => {
-              await Navigation.openURL(BASE + "/ai")
-            }}
-          />
-          <Button
-            title="商品行情"
-            action={async () => {
-              await Navigation.openURL(BASE + "/goods")
-            }}
-          />
-          <Button
-            title="财报窗口"
-            action={async () => {
-              await Navigation.openURL(BASE + "/fin")
-            }}
-          />
+          <Link url={BASE + "/ai"}>
+            <HStack spacing={12} padding={{ vertical: 6 }}>
+              <Text font="body">AI 基建面板</Text>
+              <Spacer />
+              <Text font="footnote" foregroundStyle="secondaryLabel">Token · ROI · 模型价格</Text>
+            </HStack>
+          </Link>
+          <Link url={BASE + "/goods"}>
+            <HStack spacing={12} padding={{ vertical: 6 }}>
+              <Text font="body">商品行情</Text>
+              <Spacer />
+              <Text font="footnote" foregroundStyle="secondaryLabel">期货 · 现货基差</Text>
+            </HStack>
+          </Link>
+          <Link url={BASE + "/fin"}>
+            <HStack spacing={12} padding={{ vertical: 6 }}>
+              <Text font="body">财报窗口</Text>
+              <Spacer />
+              <Text font="footnote" foregroundStyle="secondaryLabel">披露日历 · 业绩排行</Text>
+            </HStack>
+          </Link>
         </Section>
-
-        <Section footer={"数据: SEC / 东财 / OpenRouter / FRED · " + new Date().toLocaleDateString("zh-CN", { month: "numeric", day: "numeric" })}>
-          <VStack spacing={6}>
-            <Text font="caption2" foregroundStyle="tertiaryLabel">
-              点击上方按钮跳转 Safari 打开对应面板。全部数据由 mrd 服务端实时聚合。
-            </Text>
+        <Section>
+          <VStack spacing={4}>
+            <Text font="caption">数据: SEC / 东财 / OpenRouter / FRED</Text>
+            <Text font="caption">全部由 mrd 服务端实时聚合</Text>
           </VStack>
         </Section>
       </List>
