@@ -136,6 +136,11 @@ function onKeyDown(e: KeyboardEvent) {
     // 面板(带SEL)或放大浮层内的控件
     if (active.matches?.(SEL) || (zoomed && active !== zoomed && zoomed.contains(active))) {
       e.preventDefault();
+      // 放大态且焦点在面板本身: 不还原, 改为聚焦内部第一个控件(执行组件原始操作)
+      if (zoomed && active === zoomed) {
+        const first = focusables()[0];
+        if (first) { first.focus({ preventScroll: true }); return; }
+      }
       active.click();
     }
     return;

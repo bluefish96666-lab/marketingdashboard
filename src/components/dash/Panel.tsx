@@ -65,15 +65,42 @@ export function Panel({
         } ${tvOverlay ? "bg-[#0c1320]" : ""} ${className}`}
       {...(isTv && panelId && onToggleZoom
         ? {
-            // TV 模式: 面板整体可聚焦, OK 键 = 放大/还原(点击内部按钮/输入框时不触发)
+            // TV 模式: 面板整体可聚焦, OK 键 = 放大(还原仅通过缩小按钮/返回键)
+            // 放大态点击面板组件 = 执行组件原始操作, 不再触发缩小(防止误触还原)
             // data-tv-zoomed 供 TV 壳 App 返回键识别并还原已放大面板
             "data-tv-focusable": true,
             "data-tv-zoomed": isZoomed || undefined,
+            "data-panel-id": panelId,
             tabIndex: -1,
             onClick: (e: React.MouseEvent) => {
               if ((e.target as HTMLElement).closest("button, a, input, select, textarea")) return;
+              // 放大态: 点击空白区域不缩小(仅缩小按钮可还原)
+              if (isZoomed) return;
               onToggleZoom(panelId);
             },
+            onTouchStart: tvOverlay
+              ? (e: React.TouchEvent) => {
+                  const t = e.touches[0];
+                  if (t) (e.currentTarget as HTMLElement).dataset.tvSwipe = String(t.clientX);
+                }
+              : undefined,
+            onTouchEnd: tvOverlay
+              ? (e: React.TouchEvent) => {
+                  const el = e.currentTarget as HTMLElement;
+                  const x0 = Number(el.dataset.tvSwipe || 0);
+                  delete el.dataset.tvSwipe;
+                  if (!x0) return;
+                  const dx = e.changedTouches[0].clientX - x0;
+                  if (Math.abs(dx) < 60) return; // 阈值: 小于 60px 不算滑动(避免误触)
+                  // 触屏左右滑动切换相邻面板(放大态)
+                  const ids = Array.from(document.querySelectorAll<HTMLElement>("section[data-tv-focusable][data-panel-id]"))
+                    .map((s) => s.dataset.panelId || "");
+                  const i = ids.indexOf(panelId);
+                  if (i < 0) return;
+                  const next = ids[(i + (dx < 0 ? 1 : ids.length - 1)) % ids.length];
+                  if (next && next !== panelId) onToggleZoom(next);
+                }
+              : undefined,
           }
         : {})}
     >
