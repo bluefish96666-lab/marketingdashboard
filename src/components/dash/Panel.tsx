@@ -51,7 +51,11 @@ export function Panel({
         const k = natural ? Math.min(w / natural.w, h / natural.h) : 2;
         const z = Math.max(1, Math.min(k, 3));
         // zoom 会连元素自身盒模型一起放大, 宽高与偏移都按 1/z 预缩, 渲染后恰为 (24,24) w×h
-        return { position: "fixed" as const, left: 24 / z, top: 24 / z, width: w / z, height: h / z, zIndex: 60, zoom: z };
+        return {
+          position: "fixed" as const, left: 24 / z, top: 24 / z, width: w / z, height: h / z, zIndex: 60, zoom: z,
+          // 供内部组件换算事件坐标: getBoundingClientRect 在 zoom 下返回缩放后几何, 需除以 z
+          "--tv-zoom": String(z),
+        } as React.CSSProperties;
       })()
     : undefined;
   return (
@@ -73,10 +77,15 @@ export function Panel({
             "data-panel-id": panelId,
             tabIndex: -1,
             onClick: (e: React.MouseEvent) => {
+              // 非放大态: 点击面板任意处(含内部按钮/链接)一律放大全屏 — 与其他页一致
+              if (!isZoomed) {
+                // 表单控件保持原生交互(输入/选择不放大), 其余(按钮/链接/列表/SVG)都放大
+                if ((e.target as HTMLElement).closest("input, select, textarea")) return;
+                onToggleZoom(panelId);
+                return;
+              }
+              // 放大态: 点击面板组件执行原始操作(按钮/链接/列表选择), 空白区域不缩小(仅缩小按钮可还原)
               if ((e.target as HTMLElement).closest("button, a, input, select, textarea")) return;
-              // 放大态: 点击空白区域不缩小(仅缩小按钮可还原)
-              if (isZoomed) return;
-              onToggleZoom(panelId);
             },
             onTouchStart: tvOverlay
               ? (e: React.TouchEvent) => {

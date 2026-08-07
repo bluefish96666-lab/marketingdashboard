@@ -88,7 +88,9 @@ function Chart({ allDays, days, mode, agg }: { allDays: OrUsageDay[]; days: OrUs
         onMouseMove={(e) => {
           const rect = svgRef.current?.getBoundingClientRect();
           if (!rect) return;
-          const mx = e.clientX - rect.left;
+          // CSS zoom 浮层: getBoundingClientRect 返回缩放后几何, 坐标需按 zoom 逆变换回逻辑坐标
+          const z = parseFloat(getComputedStyle(e.currentTarget).getPropertyValue("--tv-zoom") || "1") || 1;
+          const mx = (e.clientX - rect.left) / z;
           const n = chart.stacked.length;
           const i = Math.round(((mx - chart.PL) / (chart.W - chart.PL - chart.PR)) * (n - 1));
           setHover(i >= 0 && i < n ? i : null);

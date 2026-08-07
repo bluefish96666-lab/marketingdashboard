@@ -119,8 +119,10 @@ export const InfraRoiPanel = memo(function InfraRoiPanel({ className, panelId, i
               onMouseMove={(e) => {
                 const rect = svgRef.current?.getBoundingClientRect();
                 if (!rect) return;
+                // CSS zoom 浮层(TV放大): 坐标需按 zoom 逆变换回逻辑坐标
+                const z = parseFloat(getComputedStyle(e.currentTarget).getPropertyValue("--tv-zoom") || "1") || 1;
                 const n = chart.pts.length;
-                const i = Math.round(((e.clientX - rect.left - chart.PL) / (size.w - chart.PL - chart.PR)) * (n - 1));
+                const i = Math.round((((e.clientX - rect.left) / z - chart.PL) / (size.w - chart.PL - chart.PR)) * (n - 1));
                 setHover(i >= 0 && i < n ? i : null);
               }}
             >

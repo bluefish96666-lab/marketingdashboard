@@ -134,7 +134,8 @@ function TrendChart({ reports, tab, mainopHistory }: { reports: FinanceReport[];
       <svg width={W} height={H} className="block"
         onMouseMove={(e) => {
           const rect = e.currentTarget.getBoundingClientRect();
-          const x = e.clientX - rect.left;
+          const z = parseFloat(getComputedStyle(e.currentTarget).getPropertyValue("--tv-zoom") || "1") || 1;
+          const x = (e.clientX - rect.left) / z;
           setHover(Math.max(0, Math.min(chart.n - 1, Math.floor((x - chart.L) / chart.slot))));
         }}
         onMouseLeave={() => setHover(-1)}>

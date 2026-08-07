@@ -69,7 +69,8 @@ function TtsiChart({ points }: { points: SpendIndexResp["points"] }) {
     <div className="flex h-full min-h-0 flex-col">
       <div ref={ref} className="relative min-h-0 flex-1">
         <svg width={W} height={H} className="block" onMouseMove={(e) => {
-          const i = Math.round(((e.nativeEvent.offsetX - PAD.l) / (W - PAD.l - PAD.r)) * (n - 1));
+          const z = parseFloat(getComputedStyle(e.currentTarget).getPropertyValue("--tv-zoom") || "1") || 1;
+          const i = Math.round((((e.nativeEvent.offsetX / z) - PAD.l) / (W - PAD.l - PAD.r)) * (n - 1));
           setHover(Math.max(0, Math.min(n - 1, i)));
         }} onMouseLeave={() => setHover(null)}>
           <defs>
@@ -306,8 +307,9 @@ function ValueScatter({ models, vendors }: { models: AaModel[]; vendors: string[
   const xTicks = [0, 1, 2, 3].map((i) => xMin + ((xMax - xMin) * i) / 3);
 
   const onMove = (e: MouseEvent<SVGSVGElement>) => {
-    const mx = e.nativeEvent.offsetX;
-    const my = e.nativeEvent.offsetY;
+    const z = parseFloat(getComputedStyle(e.currentTarget).getPropertyValue("--tv-zoom") || "1") || 1;
+    const mx = e.nativeEvent.offsetX / z;
+    const my = e.nativeEvent.offsetY / z;
     let best: AaModel | null = null;
     let bestD = 25;
     for (const p of pts) {
