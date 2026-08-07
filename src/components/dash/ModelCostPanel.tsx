@@ -320,8 +320,9 @@ function ValueScatter({ models, vendors }: { models: AaModel[]; vendors: string[
   };
 
   return (
-    <div ref={ref} className="flex h-full min-h-0 flex-col">
-      <div className="relative min-h-0 flex-1">
+    <div className="flex h-full min-h-0 flex-col">
+      {/* ref 绑在 flex-1 容器上: size.h 仅含 SVG 绘图区, 排除底部图例行, 避免图例遮横轴 */}
+      <div ref={ref} className="relative min-h-0 flex-1">
         <svg width={W} height={H} className="block" onMouseMove={onMove} onMouseLeave={() => setHover(null)}>
           {xTicks.map((t, i) => (
             <g key={`x${i}`}>
