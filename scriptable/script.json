@@ -1,0 +1,27 @@
+{
+  "name": "MRD 大盘速览",
+  "description": "A股指数 + 板块资金流Top5 + AI Token指数, 数据来自 mrd.hermes.cc.cd 实时聚合(东财/SEC/OpenRouter)",
+  "color": "rgba(56, 189, 248, 1)",
+  "author": {
+    "name": "theBigGavin",
+    "homepage": "https://github.com/theBigGavin",
+    "email": null
+  },
+  "version": "1.0.0",
+  "entry": "index.tsx",
+  "runInApp": true,
+  "remoteResource": null,
+  "permissions": null,
+  "contributors": [],
+  "intentInputTypes": [],
+  "icon": "chart.line.uptrend.xyaxis",
+  "iconImage": null,
+  "localizedNames": {
+    "zh": "MRD 大盘速览",
+    "en": "MRD Market Overview"
+  },
+  "localizedDescriptions": {
+    "zh": "A股指数、板块资金流向 Top5 与 AI Token 指数速览, 数据实时来自 mrd.hermes.cc.cd。",
+    "en": "A-share indices, top sector money flows and AI token index from mrd.hermes.cc.cd."
+  }
+}
