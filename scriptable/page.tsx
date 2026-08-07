@@ -1,52 +1,127 @@
 // MRD 大盘速览 — 页面组件
+// 组件集: Button/fetch/HStack/VStack/Spacer/Text/List/Section/NavigationStack/useState/useEffect
+// (与官方影视集合脚本验证过的组件一致, 不含 Link/Image)
 import {
   NavigationStack, List, Section, VStack, HStack, Spacer,
-  Text, Link,
+  Text, Button, fetch, useState, useEffect,
 } from "scripting"
 
 const BASE = "https://mrd.hermes.cc.cd"
+const CODES = ["sh000001", "sz399001", "sz399006", "sh000300"]
+
+interface Quote { symbol: string; name: string; price: number; pct: number }
+interface Board { code: string; name: string; netIn: number }
+
+/** fetch 超时保护: 用 AbortController(影视集合同源运行时能力), 防止无限加载 */
+async function getJson(path: string): Promise<any> {
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), 12)
+  try {
+    const r = await fetch(BASE + path, { signal: ctrl.signal })
+    const d = await r.json()
+    if (d && d.ok === false) throw new Error(path + " upstream fail")
+    return d
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+function pctTxt(v: number): string {
+  return (v >= 0 ? "+" : "") + v.toFixed(2) + "%"
+}
+function fmtYi(v: number): string {
+  return (v >= 0 ? "+" : "") + (v / 1e8).toFixed(0) + "亿"
+}
+function ColorOf(v: number): string {
+  return v >= 0 ? "systemRed" : "systemGreen"
+}
 
 export function MainPage() {
+  const [idx, setIdx] = useState<Quote[]>([])
+  const [boards, setBoards] = useState<Board[]>([])
+  const [spend, setSpend] = useState<number | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [reloadKey, setReloadKey] = useState(0)
+
+  useEffect(() => {
+    let active = true
+    const load = async () => {
+      try {
+        const q1 = await getJson("/api/quotes?codes=" + CODES.join(","))
+        if (!active) return
+        const q = q1.data || {}
+        setIdx(CODES.map((k) => q[k]).filter(Boolean))
+
+        const q2 = await getJson("/api/board-flow?n=6")
+        if (!active) return
+        setBoards((q2.data || []).slice(0, 5))
+
+        const q3 = await getJson("/api/spend-index")
+        if (!active) return
+        const pts = q3.data && q3.data.points
+        if (pts && pts.length) setSpend(pts[pts.length - 1].closed)
+
+        if (active) { setError(null); setLoading(false) }
+      } catch (e) {
+        if (active) { setError(e instanceof Error ? e.message : String(e)); setLoading(false) }
+      }
+    }
+    load()
+    return () => { active = false }
+  }, [reloadKey])
+
   return (
     <NavigationStack>
       <List navigationTitle="MRD 大盘速览">
-        <Section header="打开完整面板">
-          <Link url={BASE + "/"}>
-            <HStack spacing={12} padding={{ vertical: 6 }}>
-              <Text>打开 MRD 仪表盘</Text>
+        {loading && (
+          <Section header="加载中">
+            <HStack spacing={8}>
               <Spacer />
-              <Text font="footnote">行情 · 板块资金流</Text>
-            </HStack>
-          </Link>
-        </Section>
-        <Section header="快速直达">
-          <Link url={BASE + "/ai"}>
-            <HStack spacing={12} padding={{ vertical: 6 }}>
-              <Text>AI 基建面板</Text>
+              <Text font="footnote">数据加载中…</Text>
               <Spacer />
-              <Text font="footnote">Token · ROI · 模型价格</Text>
             </HStack>
-          </Link>
-          <Link url={BASE + "/goods"}>
-            <HStack spacing={12} padding={{ vertical: 6 }}>
-              <Text>商品行情</Text>
-              <Spacer />
-              <Text font="footnote">期货 · 现货基差</Text>
-            </HStack>
-          </Link>
-          <Link url={BASE + "/fin"}>
-            <HStack spacing={12} padding={{ vertical: 6 }}>
-              <Text>财报窗口</Text>
-              <Spacer />
-              <Text font="footnote">披露日历 · 业绩排行</Text>
-            </HStack>
-          </Link>
-        </Section>
+          </Section>
+        )}
+        {error && (
+          <Section header="数据获取失败">
+            <Text font="footnote">{error}</Text>
+          </Section>
+        )}
+        {!loading && !error && (
+          <>
+            <Section header="指数">
+              {idx.map((i) => (
+                <HStack key={i.symbol} spacing={10}>
+                  <Text font="subheadline">{i.name}</Text>
+                  <Spacer />
+                  <Text font="body">{i.price.toFixed(2)}</Text>
+                  <Text font="subheadline" foregroundStyle={ColorOf(i.pct)}>{pctTxt(i.pct)}</Text>
+                </HStack>
+              ))}
+            </Section>
+            <Section header="板块资金流向 Top5">
+              {boards.map((b) => (
+                <HStack key={b.code} spacing={10}>
+                  <Text font="subheadline">{b.name}</Text>
+                  <Spacer />
+                  <Text font="subheadline" foregroundStyle={ColorOf(b.netIn)}>{fmtYi(b.netIn)}</Text>
+                </HStack>
+              ))}
+            </Section>
+            {spend != null && (
+              <Section header="AI Token 指数">
+                <HStack spacing={10}>
+                  <Text font="subheadline">闭源前沿价</Text>
+                  <Spacer />
+                  <Text font="body">${spend.toFixed(1)}/M</Text>
+                </HStack>
+              </Section>
+            )}
+          </>
+        )}
         <Section>
-          <VStack spacing={4}>
-            <Text font="caption">数据: SEC / 东财 / OpenRouter / FRED</Text>
-            <Text font="caption">全部由 mrd 服务端实时聚合</Text>
-          </VStack>
+          <Button title="重新加载" action={() => setReloadKey((n) => n + 1)} />
         </Section>
       </List>
     </NavigationStack>
