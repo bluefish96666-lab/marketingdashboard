@@ -58,7 +58,7 @@ function createCache() {
     const now = Date.now();
     const hit = cache.get(key);
     if (hit) {
-      if (hit.data !== undefined && now - hit.ts < ttl) return hit.data;
+      if (hit.data !== undefined && now - hit.ts < (hit.ttl ?? ttl)) return hit.data;
       if (hit.inflight) return hit.inflight;
       // 失败退避窗口内: 有旧数据降级返回, 无旧数据直接抛错 — 都不再打上游(负缓存)
       if (hit.failAt != null && now - hit.failAt < backoffOf(hit.failCount)) {
@@ -68,8 +68,12 @@ function createCache() {
     }
     const inflight = fn()
       .then((data) => {
-        set(key, entry(data, ttl));
-        return data;
+        // fn 可返回 {__ttl, ...data} 覆盖缓存 TTL(降级/快照数据用短 TTL, 过期后重试上游)
+        const effTtl = data && typeof data === "object" && data.__ttl ? data.__ttl : ttl;
+        const store = data && typeof data === "object" && data.__ttl ? { ...data } : data;
+        if (store && typeof store === "object" && "__ttl" in store) delete store.__ttl;
+        set(key, entry(store, effTtl));
+        return store;
       })
       .catch((e) => {
         const c = cache.get(key);

@@ -56,7 +56,7 @@ module.exports = function createAiModels(ctx) {
         return { slug, name: h?.name || slug, vendor: h?.vendor || "", release: "", intel, input: last.i ?? null, output: last.o ?? null, cacheHit: null, taskCost: task };
       }).filter((m) => m.input != null || m.output != null);
       if (!models.length) throw e; // 历史也没有 → 抛原错
-      return { models, history: hist, source: "local snapshot (AA upstream unavailable)" };
+      return { __ttl: 5 * 60 * 1000, models, history: hist, source: "local snapshot (AA upstream unavailable)" }; // 短TTL: 5min后重试上游
     }
     // 每日快照积累(与 spot-history 同模式): 供价格趋势线使用, 按日去重
     let history = readHistory(MODEL_PRICES_FILE);
