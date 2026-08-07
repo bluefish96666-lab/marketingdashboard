@@ -9,7 +9,7 @@
   },
   "version": "1.0.0",
   "entry": "index.tsx",
-  "runInApp": true,
+  "runInApp": false,
   "remoteResource": null,
   "permissions": null,
   "contributors": [],
