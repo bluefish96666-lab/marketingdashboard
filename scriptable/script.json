@@ -1,27 +1,41 @@
 {
-  "name": "MRD 大盘速览",
-  "description": "一键打开 mrd.hermes.cc.cd 完整仪表盘(行情/板块资金流/AI基建), 数据服务端实时聚合",
-  "color": "rgba(56, 189, 248, 1)",
-  "author": {
-    "name": "theBigGavin",
-    "homepage": "https://github.com/theBigGavin",
-    "email": null
+  "author" : {
+    "name" : "theBigGavin",
+    "email" : null,
+    "homepage" : "https://github.com/theBigGavin"
   },
-  "version": "1.0.0",
-  "entry": "index.tsx",
-  "runInApp": false,
-  "remoteResource": null,
-  "permissions": null,
-  "contributors": [],
-  "intentInputTypes": [],
-  "icon": "square.2.layers.3d.fill",
-  "iconImage": "",
-  "localizedNames": {
-    "zh": "MRD 大盘速览",
-    "en": "MRD Market Overview"
+  "localizedNames" : {
+    "it" : "",
+    "en" : "MRD Market Overview",
+    "zh" : "MRD 大盘速览",
+    "es" : "",
+    "pt" : "",
+    "fr" : "",
+    "de" : "",
+    "ru" : "",
+    "ja" : ""
   },
-  "localizedDescriptions": {
-    "zh": "一键打开 mrd.hermes.cc.cd 完整仪表盘: A股行情、板块资金流向、AI 基建与 ROI 面板。",
-    "en": "One-tap open mrd.hermes.cc.cd dashboard: A-share quotes, sector flows, AI infra & ROI panels."
-  }
+  "runInApp" : false,
+  "color" : "rgba(56, 189, 248, 1)",
+  "permissions" : null,
+  "description" : "A股指数、板块资金流向与 AI Token 指数速览, 数据来自 mrd.hermes.cc.cd。",
+  "remoteResource" : null,
+  "localizedDescriptions" : {
+    "it" : "",
+    "en" : "A-share indices, sector money flows and AI token index from mrd.hermes.cc.cd.",
+    "zh" : "A股指数、板块资金流向与 AI Token 指数速览, 数据来自 mrd.hermes.cc.cd。",
+    "es" : "",
+    "pt" : "",
+    "fr" : "",
+    "de" : "",
+    "ru" : "",
+    "ja" : ""
+  },
+  "name" : "MRD 大盘速览",
+  "iconImage" : "",
+  "contributors" : [],
+  "intentInputTypes" : [],
+  "entry" : "index.tsx",
+  "icon" : "square.2.layers.3d.fill",
+  "version" : "1.0.0"
 }
