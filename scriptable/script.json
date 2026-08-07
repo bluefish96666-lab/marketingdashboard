@@ -1,41 +1,30 @@
 {
-  "author" : {
-    "name" : "theBigGavin",
-    "email" : null,
-    "homepage" : "https://github.com/theBigGavin"
-  },
-  "localizedNames" : {
-    "it" : "",
-    "en" : "Market Research Cockpit",
-    "zh" : "市场研究驾驶舱",
-    "es" : "",
-    "pt" : "",
-    "fr" : "",
-    "de" : "",
-    "ru" : "",
-    "ja" : ""
-  },
-  "runInApp" : false,
-  "color" : "#070B12",
-  "permissions" : null,
-  "description" : "A股指数、板块资金流向与 AI Token 指数速览, 数据来自 mrd.hermes.cc.cd。",
-  "remoteResource" : null,
   "localizedDescriptions" : {
-    "it" : "",
     "en" : "A-share indices, sector money flows and AI token index from mrd.hermes.cc.cd.",
-    "zh" : "A股指数、板块资金流向与 AI Token 指数速览, 数据来自 mrd.hermes.cc.cd。",
-    "es" : "",
-    "pt" : "",
-    "fr" : "",
-    "de" : "",
-    "ru" : "",
-    "ja" : ""
+    "zh" : "A股指数、板块资金流向与 AI Token 指数速览, 数据来自 mrd.hermes.cc.cd。"
   },
-  "name" : "市场研究驾驶舱",
-  "iconImage" : "icon.png",
-  "contributors" : [],
-  "intentInputTypes" : [],
+  "author" : {
+    "homepage" : "https:\/\/github.com\/theBigGavin\/mrd-scripting",
+    "name" : "theBigGavin",
+    "email" : null
+  },
+  "iconImage" : null,
+  "localizedNames" : {
+    "zh" : "市场研究驾驶舱",
+    "en" : "Market Research Cockpit"
+  },
+  "intentInputTypes" : [
+
+  ],
+  "runInApp" : false,
   "entry" : "index.tsx",
+  "color" : "rgba(30, 41, 59, 1)",
+  "name" : "市场研究驾驶舱",
+  "permissions" : null,
   "icon" : "chart.line.uptrend.xyaxis",
+  "contributors" : [
+
+  ],
+  "description" : "A股指数、板块资金流向与 AI Token 指数速览, 数据来自 mrd.hermes.cc.cd。",
   "version" : "1.0.0"
 }

@@ -84,6 +84,7 @@ function WebViewPage() {
       <WebView
         controller={controller}
         frame={{ maxWidth: "infinity", maxHeight: "infinity" }}
+        ignoresSafeArea
       />
       <VStack
         frame={{ maxWidth: "infinity", maxHeight: "infinity" }}
