@@ -36,6 +36,7 @@
 - **📰 7×24 快讯聚合** — 全球财经快讯滚动播报，宏观关键词与产业链关联新闻自动高亮
 - **🖥️ 可安装为桌面应用** — 内置 PWA 支持（Web Manifest + Service Worker），浏览器地址栏一键安装，独立窗口运行
 - **📺 Android TV 客户端** — 原生 WebView 壳（`android-tv/`），遥控器空间导航、面板全屏放大（比例缩放+幻灯片切换）、翻牌跑马灯，适配老内核与弱 GPU
+- **📱 iOS Scripting 脚本** — TypeScript/TSX 脚本（`scriptable/`，镜像至 `theBigGavin/mrd-scripting`），在 Scripting App 的 WebView 中呈现驾驶舱：`?tv=1` TV 模式、强制横屏、忽略安全区全屏、液态玻璃退出按钮、本地开屏页（mrd logo 呼吸动画）且无白屏无缝进入实时页面
 - **⚡ 零依赖数据服务** — 内置 Node 代理聚合公开行情接口，内存缓存减压，大部分接口无需 API Key，开箱即用
 
 ## 🏗️ 架构
@@ -134,6 +135,28 @@ docker run -p 3000:3000 market-cockpit
 1. 构建 APK：`cd android-tv && ./gradlew assembleDebug`，产物在 `app/build/outputs/apk/debug/app-debug.apk`
 2. 侧载安装到电视（adb：`adb install app-debug.apk`，或 U 盘拷贝安装）
 3. App 默认连接公网部署地址 `https://mrd.hermes.cc.cd`，开箱即用；按遥控器菜单键可随时改为局域网地址（电脑端 `npm start` 后填 `http://<电脑IP>:3000`）
+
+### iOS Scripting 脚本
+
+`scriptable/` 目录包含一个 **Scripting App**（scripting.fun）脚本，用原生 WebView 呈现驾驶舱；同时镜像为独立仓库 [`theBigGavin/mrd-scripting`](https://github.com/theBigGavin/mrd-scripting)，可直接导入。
+
+**特性**
+- 加载 `https://mrd.hermes.cc.cd/?tv=1`——TV 模式（D-pad 空间导航、点面板放大、触屏滑动切换）
+- 强制横屏、无标题栏、忽略安全区全屏（`ignoresSafeArea`）
+- 液态玻璃退出按钮（`buttonStyle="glass"`，需 iOS 26）
+- 本地开屏页：mrd logo 呼吸动画 + 进度圈，随后无缝深色过渡进入仪表盘（无白屏闪烁）
+
+**一键安装**
+
+iPhone 上打开导入链接（需已安装 Scripting App，iOS 26+）：
+
+```
+https://scripting.fun/import_scripts?urls=%5B%22https%3A%5C%2F%5C%2Fgithub.com%5C%2FtheBigGavin%5C%2Fmrd-scripting%5C%2Ftree%5C%2Fmain%22%5D
+```
+
+或直接分享 `scriptable/` 下的 `mrd-dashboard.scripting` 文件导入。若脚本宝中已存在同名脚本，请先删除再导入，避免缓存冲突。
+
+**重新打包**：`.scripting` 本质是 zip（STORE 存储、`flag_bits=2048` UTF-8 文件名、zip 版本 20、DOS 日期 2020），内含 `index.tsx`、`page.tsx`、`script.json`。用 `python3 scriptable/package.py` 重建。
 
 ## 📡 API 一览
 

@@ -37,6 +37,7 @@ A-shares / HK / US stocks · Commodities · US Treasury yields · Sector heat ·
 - **🖥️ Installable desktop app** — Built-in PWA support (Web Manifest + Service Worker); install from the browser address bar and run in a standalone window
 - **🍎 Native macOS app** — Swift WKWebView thin shell, follows the same pattern as Android TV
 - **📺 Android TV app** — Native WebView shell (`android-tv/`) with D-pad spatial navigation, fullscreen panel zoom (proportional scaling + slideshow), split-flap ticker, tuned for legacy engines and weak GPUs
+- **📱 iOS Scripting script** — TypeScript/TSX script (`scriptable/`, mirrored to `theBigGavin/mrd-scripting`) that wraps the cockpit in the Scripting app's WebView: TV mode via `?tv=1`, forced landscape, safe-area-free fullscreen, Liquid Glass exit button, local splash screen with the mrd logo (breathing animation) and a white-screen-free transition into the live dashboard
 - **⚡ Zero-dependency data service** — Built-in Node proxy aggregates public market-data endpoints with in-memory caching; most endpoints need no API key and work out of the box
 
 ## 🏗️ Architecture
@@ -148,6 +149,28 @@ The `android-tv/` directory contains a native WebView shell (zero third-party de
 1. Build the APK: `cd android-tv && ./gradlew assembleDebug` — output at `app/build/outputs/apk/debug/app-debug.apk`
 2. Sideload it onto the TV (`adb install app-debug.apk`, or copy via USB drive)
 3. The app connects to the public deployment `https://mrd.hermes.cc.cd` by default — works out of the box; press the remote's menu key anytime to switch to a LAN address (run `npm start` on a computer and enter `http://<computer-ip>:3000`)
+
+### iOS Scripting script
+
+The `scriptable/` directory contains a **Scripting app** (scripting.fun) script that presents the cockpit inside a native WebView. It is also mirrored as a standalone repository [`theBigGavin/mrd-scripting`](https://github.com/theBigGavin/mrd-scripting) so it can be imported directly.
+
+**Features**
+- Loads `https://mrd.hermes.cc.cd/?tv=1` — TV mode (D-pad spatial navigation, tap-to-zoom panels, touch swipe to switch)
+- Forced landscape, title-bar-free, safe-area-free fullscreen (`ignoresSafeArea`)
+- Liquid Glass exit button (`buttonStyle="glass"`, iOS 26)
+- Local splash screen: mrd logo with breathing animation + spinner, then a seamless dark transition into the dashboard (no white flash)
+
+**Install (one tap)**
+
+Open the import link on your iPhone (requires the Scripting app, iOS 26+):
+
+```
+https://scripting.fun/import_scripts?urls=%5B%22https%3A%5C%2F%5C%2Fgithub.com%5C%2FtheBigGavin%5C%2Fmrd-scripting%5C%2Ftree%5C%2Fmain%22%5D
+```
+
+Or share the `mrd-dashboard.scripting` file from `scriptable/`. If a script with the same name already exists, delete it before re-importing to avoid cache conflicts.
+
+**Repackaging**: `.scripting` is a zip (STORE method, `flag_bits=2048` for UTF-8 names, zip version 20, DOS date 2020) containing `index.tsx`, `page.tsx` and `script.json`. Rebuild with `python3 scriptable/package.py`.
 
 ## 📡 API overview
 
