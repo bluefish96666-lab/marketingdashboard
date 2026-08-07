@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import { ArrowLeft, Github, Maximize2, Minimize2 } from "lucide-react";
 import { Logo } from "@/components/Logo";
@@ -49,6 +50,19 @@ export function DashboardHeader({
   onToggleFullscreen: () => void;
 }) {
   const now = useClock(isTv ? 60000 : 1000); // TV 弱 GPU: 每秒重绘整个 Header 代价高, 降到每分钟
+  const [stars, setStars] = useState<number | null>(null);
+  useEffect(() => {
+    // GitHub star 数: 走自家 /api/repo-stats (1h 缓存, 防 GitHub API 限流); 失败静默隐藏
+    let alive = true;
+    fetch("/api/repo-stats")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        const s = d?.data?.stars ?? d?.stars;
+        if (alive && typeof s === "number" && s > 0) setStars(s);
+      })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, []);
   const hh = String(now.getHours()).padStart(2, "0");
   const mm = String(now.getMinutes()).padStart(2, "0");
   const ss = String(now.getSeconds()).padStart(2, "0");
@@ -100,10 +114,15 @@ export function DashboardHeader({
             href={githubUrl}
             target="_blank"
             rel="noopener noreferrer"
-            title="GitHub 仓库"
-            className="flex h-[22px] w-[22px] items-center justify-center rounded border border-slate-700/60 bg-slate-800/40 text-slate-400 transition-colors hover:border-cyan-500/60 hover:text-cyan-300"
+            title={`GitHub 仓库${stars ? ` · ${stars} stars` : ""}`}
+            className="flex h-[22px] items-center gap-1 rounded border border-slate-700/60 bg-slate-800/40 px-1.5 text-slate-400 transition-colors hover:border-cyan-500/60 hover:text-cyan-300"
           >
             <Github size={12} />
+            {stars !== null && (
+              <span className="font-mono text-[10px] font-bold tabular-nums text-slate-300">
+                {stars}
+              </span>
+            )}
           </a>
         )}
         <button

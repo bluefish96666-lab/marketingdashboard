@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { Routes, Route } from "react-router";
 import { TickerTape, type TapeItem } from "@/components/dash/TickerTape";
 import { DashboardHeader } from "@/components/dash/DashboardHeader";
+import { StarHint } from "@/components/dash/StarHint";
 import { DashboardLayout, type PanelRowDef } from "@/components/dash/DashboardLayout";
 import { IndexPanel } from "@/components/dash/IndexPanel";
 import { CommodityPanel } from "@/components/dash/CommodityPanel";
@@ -106,6 +107,7 @@ function Dashboard() {
         onToggleFullscreen={toggle}
       />
       <Tape />
+      <StarHint githubUrl="https://github.com/theBigGavin/marketingdashboard" />
       <DashboardLayout rows={PANEL_ROWS} />
     </div>
   );

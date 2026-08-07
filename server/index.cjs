@@ -218,6 +218,19 @@ const routes = {
   },
   "/api/treasury-history": async () => cached("treasury-history", 6 * 3600 * 1000, () => handleTreasuryHistory()),
   "/api/health": async () => ({ status: "up", ts: Date.now(), cache: cache.size }),
+  "/api/repo-stats": async () =>
+    cached("repo-stats", 3600000, async () => {
+      // GitHub repo 元数据(star/forks), 1h 缓存防限流; 失败返回 0 不阻断页面
+      try {
+        const txt = await fetchText("https://api.github.com/repos/theBigGavin/marketingdashboard", {
+          headers: { Accept: "application/vnd.github+json", "User-Agent": UA },
+        });
+        const d = JSON.parse(txt);
+        return { stars: d.stargazers_count ?? 0, forks: d.forks_count ?? 0, ts: Date.now() };
+      } catch (e) {
+        return { stars: 0, forks: 0, ts: Date.now() };
+      }
+    }),
   "/api/openrouter-usage": async () => cached("or-usage", 3600000, () => handleOpenRouterUsage()), // 1h cache
   "/api/ai-infra": async () => cached("ai-infra", 24 * 3600 * 1000, () => handleAiInfra()), // 财报/定价日更, 24h 缓存
   "/api/mystery-select": async (q) =>
