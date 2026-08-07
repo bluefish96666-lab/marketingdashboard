@@ -14,8 +14,8 @@
   "permissions": null,
   "contributors": [],
   "intentInputTypes": [],
-  "icon": "chart.line.uptrend.xyaxis",
-  "iconImage": null,
+  "icon": "square.2.layers.3d.fill",
+  "iconImage": "",
   "localizedNames": {
     "zh": "MRD 大盘速览",
     "en": "MRD Market Overview"
