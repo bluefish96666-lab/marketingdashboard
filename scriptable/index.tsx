@@ -13,8 +13,12 @@ interface Board { code: string; name: string; netIn: number }
 interface Spend { indexPoint: number; closed: number }
 
 async function getJson(path: string): Promise<any> {
-  const r = await fetch(BASE + path, { timeout: 15 })
-  const d = JSON.parse(await r.text())
+  const r = await fetch(BASE + path, {
+    timeout: 15,
+    headers: { "User-Agent": "Scripting/1.0 (MRD)" },
+  })
+  if (!r.ok) throw new Error(path + " -> HTTP " + r.status)
+  const d = await r.json()
   if (d && d.ok === false) throw new Error(path + " -> " + (d.error || "upstream fail"))
   return d
 }
@@ -55,10 +59,17 @@ function MainPage() {
   useEffect(() => {
     let alive = true
     setLoading(true)
-    fetchData()
-      .then((d) => { if (alive) { setData(d); setError(null) } })
-      .catch((e: unknown) => { if (alive) setError(e instanceof Error ? e.message : String(e)) })
-      .finally(() => { if (alive) setLoading(false) })
+    // 用 async IIFE + try/finally: 脚本宝运行时可能不支持 Promise.prototype.finally
+    ;(async () => {
+      try {
+        const d = await fetchData()
+        if (alive) { setData(d); setError(null) }
+      } catch (e) {
+        if (alive) setError(e instanceof Error ? e.message : String(e))
+      } finally {
+        if (alive) setLoading(false)
+      }
+    })()
     return () => { alive = false }
   }, [reload])
 
