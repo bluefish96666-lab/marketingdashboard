@@ -19,10 +19,7 @@
   "color" : "rgba(56, 189, 248, 1)",
   "permissions" : null,
   "description" : "A股指数、板块资金流向与 AI Token 指数速览, 数据来自 mrd.hermes.cc.cd。",
-  "remoteResource" : {
-    "url" : "https://github.com/theBigGavin/mrd-scripting",
-    "autoUpdateInterval" : 21600
-  },
+  "remoteResource" : null,
   "localizedDescriptions" : {
     "it" : "",
     "en" : "A-share indices, sector money flows and AI token index from mrd.hermes.cc.cd.",
