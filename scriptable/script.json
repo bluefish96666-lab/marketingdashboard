@@ -16,7 +16,7 @@
     "ja" : ""
   },
   "runInApp" : false,
-  "color" : "rgba(56, 189, 248, 1)",
+  "color" : "#38bdf8",
   "permissions" : null,
   "description" : "A股指数、板块资金流向与 AI Token 指数速览, 数据来自 mrd.hermes.cc.cd。",
   "remoteResource" : null,
@@ -32,10 +32,10 @@
     "ja" : ""
   },
   "name" : "市场研究驾驶舱",
-  "iconImage" : "",
+  "iconImage" : "icon.png",
   "contributors" : [],
   "intentInputTypes" : [],
   "entry" : "index.tsx",
-  "icon" : "square.2.layers.3d.fill",
+  "icon" : "chart.line.uptrend.xyaxis",
   "version" : "1.0.0"
 }

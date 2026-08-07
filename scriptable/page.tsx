@@ -1,12 +1,14 @@
 // WebViewController 是全局类(官方文档: 无需 import), 直接用
-// ?tv=1 触发 mrd TV 模式; 无标题栏; 开屏页(加载完成前); 右下角悬浮退出按钮
+// ?tv=1 触发 mrd TV 模式; 无标题栏; TV风格开屏页(加载完成前); 右下角悬浮退出按钮
 import {
   WebView, Navigation, Script, Button, ZStack, Spacer, VStack,
-  Text, ProgressView, useState, useEffect,
+  Text, ProgressView, useState, useEffect, Image,
 } from "scripting"
 
 const BASE = "https://mrd.hermes.cc.cd/?tv=1"
 
+// 完全复刻 TV app 开屏: 深色底 #070B12 + logo + 应用名 + 副标题 + 进度圈
+// (Ui.java buildSplash: BG rgb(7,11,18), TEXT #E2E8F0, ACCENT #0891B2, TEXT_DIM #94A3B8)
 function SplashScreen() {
   return (
     <ZStack
@@ -14,14 +16,34 @@ function SplashScreen() {
     >
       <VStack
         frame={{ maxWidth: "infinity", maxHeight: "infinity" }}
-        background={"systemBackground"}
+        background="#070B12"
         alignment="center"
-        spacing={12}
+        spacing={8}
       >
-        <Text font="largeTitle">📊</Text>
-        <Text font="title2">市场研究驾驶舱</Text>
-        <Text font="subheadline" foregroundStyle="secondaryLabel">MRD · 行情 · 资金流向 · AI 基建</Text>
-        <ProgressView />
+        <Image
+          systemName="chart.line.uptrend.xyaxis"
+          font={64}
+          foregroundStyle="#0891B2"
+        />
+        <Text
+          font="title"
+          foregroundStyle="#E2E8F0"
+          padding={{ top: 24 }}
+        >市场研究驾驶舱</Text>
+        <Text
+          font="caption"
+          foregroundStyle="#0891B2"
+          padding={{ top: 8 }}
+        >MARKET RESEARCH COCKPIT</Text>
+        <ProgressView
+          progressViewStyle="circular"
+          padding={{ top: 32 }}
+        />
+        <Text
+          font="caption"
+          foregroundStyle="#94A3B8"
+          padding={{ top: 16 }}
+        >正在连接 mrd.hermes.cc.cd …</Text>
       </VStack>
     </ZStack>
   )
