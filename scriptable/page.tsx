@@ -1,23 +1,41 @@
 // WebViewController 是全局类(官方文档: 无需 import), 直接用
-// ?tv=1 触发 mrd TV 模式: D-pad 空间导航 + 面板点击全屏放大 + 性能适配
-// 无 NavigationStack/标题栏: WebView 全屏铺满
-import { WebView, Navigation, Script } from "scripting"
+// ?tv=1 触发 mrd TV 模式; 无标题栏; 右下角悬浮退出按钮(官方 useDismiss)
+import { WebView, Navigation, Script, Button, ZStack, Spacer, VStack } from "scripting"
 
 const BASE = "https://mrd.hermes.cc.cd/?tv=1"
 
-export async function run() {
+function FullScreenWebView() {
+  const dismiss = Navigation.useDismiss()
   const controller = new WebViewController()
-  await controller.loadURL(BASE)
 
-  await Navigation.present({
-    element: (
+  return (
+    <ZStack
+      frame={{ maxWidth: "infinity", maxHeight: "infinity" }}
+    >
       <WebView
         controller={controller}
         frame={{ maxWidth: "infinity", maxHeight: "infinity" }}
       />
-    ),
+      <VStack
+        frame={{ maxWidth: "infinity", maxHeight: "infinity" }}
+        alignment="trailing"
+      >
+        <Spacer />
+        <Button
+          title="退出"
+          systemImage="xmark"
+          action={() => dismiss()}
+          padding={{ trailing: 16, bottom: 16 }}
+        />
+      </VStack>
+    </ZStack>
+  )
+}
+
+export async function run() {
+  await Navigation.present({
+    element: <FullScreenWebView />,
     modalPresentationStyle: "overFullScreen",
   })
-
-  controller.dispose()
+  Script.exit()
 }
