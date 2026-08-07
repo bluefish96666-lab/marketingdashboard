@@ -1,8 +1,5 @@
-// MRD 大盘速览 — 页面组件
-// 组件集: Button/fetch/HStack/VStack/Spacer/Text/List/Section/NavigationStack/useState/useEffect
-// (与官方影视集合脚本验证过的组件一致, 不含 Link/Image)
 import {
-  NavigationStack, List, Section, VStack, HStack, Spacer,
+  NavigationStack, VStack, HStack, Spacer,
   Text, Button, fetch, useState, useEffect,
 } from "scripting"
 
@@ -12,18 +9,11 @@ const CODES = ["sh000001", "sz399001", "sz399006", "sh000300"]
 interface Quote { symbol: string; name: string; price: number; pct: number }
 interface Board { code: string; name: string; netIn: number }
 
-/** fetch 超时保护: 用 AbortController(影视集合同源运行时能力), 防止无限加载 */
 async function getJson(path: string): Promise<any> {
-  const ctrl = new AbortController()
-  const timer = setTimeout(() => ctrl.abort(), 12)
-  try {
-    const r = await fetch(BASE + path, { signal: ctrl.signal })
-    const d = await r.json()
-    if (d && d.ok === false) throw new Error(path + " upstream fail")
-    return d
-  } finally {
-    clearTimeout(timer)
-  }
+  const r = await fetch(BASE + path, { timeout: 15 })
+  const d = await r.json()
+  if (d && d.ok === false) throw new Error(path + " upstream fail")
+  return d
 }
 
 function pctTxt(v: number): string {
@@ -73,57 +63,54 @@ export function MainPage() {
 
   return (
     <NavigationStack>
-      <List navigationTitle="MRD 大盘速览">
+      <VStack navigationTitle="MRD 大盘速览" navigationBarTitleDisplayMode="inline">
         {loading && (
-          <Section header="加载中">
-            <HStack spacing={8}>
-              <Spacer />
-              <Text font="footnote">数据加载中…</Text>
-              <Spacer />
-            </HStack>
-          </Section>
+          <HStack spacing={8} padding={16}>
+            <Spacer />
+            <Text font="footnote">数据加载中…</Text>
+            <Spacer />
+          </HStack>
         )}
         {error && (
-          <Section header="数据获取失败">
-            <Text font="footnote">{error}</Text>
-          </Section>
+          <VStack spacing={6} padding={16}>
+            <Text font="footnote">数据获取失败</Text>
+            <Text font="caption">{error}</Text>
+          </VStack>
         )}
         {!loading && !error && (
-          <>
-            <Section header="指数">
-              {idx.map((i) => (
-                <HStack key={i.symbol} spacing={10}>
-                  <Text font="subheadline">{i.name}</Text>
-                  <Spacer />
-                  <Text font="body">{i.price.toFixed(2)}</Text>
-                  <Text font="subheadline" foregroundStyle={ColorOf(i.pct)}>{pctTxt(i.pct)}</Text>
-                </HStack>
-              ))}
-            </Section>
-            <Section header="板块资金流向 Top5">
-              {boards.map((b) => (
-                <HStack key={b.code} spacing={10}>
-                  <Text font="subheadline">{b.name}</Text>
-                  <Spacer />
-                  <Text font="subheadline" foregroundStyle={ColorOf(b.netIn)}>{fmtYi(b.netIn)}</Text>
-                </HStack>
-              ))}
-            </Section>
+          <VStack spacing={6} padding={12}>
+            <Text font="headline">指数</Text>
+            {idx.map((i) => (
+              <HStack key={i.symbol} spacing={10}>
+                <Text font="subheadline">{i.name}</Text>
+                <Spacer />
+                <Text font="body">{i.price.toFixed(2)}</Text>
+                <Text font="subheadline" foregroundStyle={ColorOf(i.pct)}>{pctTxt(i.pct)}</Text>
+              </HStack>
+            ))}
+            <Text font="headline" padding={{ top: 12 }}>板块资金流向 Top5</Text>
+            {boards.map((b) => (
+              <HStack key={b.code} spacing={10}>
+                <Text font="subheadline">{b.name}</Text>
+                <Spacer />
+                <Text font="subheadline" foregroundStyle={ColorOf(b.netIn)}>{fmtYi(b.netIn)}</Text>
+              </HStack>
+            ))}
             {spend != null && (
-              <Section header="AI Token 指数">
+              <>
+                <Text font="headline" padding={{ top: 12 }}>AI Token 指数</Text>
                 <HStack spacing={10}>
                   <Text font="subheadline">闭源前沿价</Text>
                   <Spacer />
                   <Text font="body">${spend.toFixed(1)}/M</Text>
                 </HStack>
-              </Section>
+              </>
             )}
-          </>
+          </VStack>
         )}
-        <Section>
-          <Button title="重新加载" action={() => setReloadKey((n) => n + 1)} />
-        </Section>
-      </List>
+        <Spacer />
+        <Button title="重新加载" action={() => setReloadKey((n) => n + 1)} />
+      </VStack>
     </NavigationStack>
   )
 }
