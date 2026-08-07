@@ -6,8 +6,8 @@
   },
   "localizedNames" : {
     "it" : "",
-    "en" : "MRD Market Overview",
-    "zh" : "MRD 大盘速览",
+    "en" : "Market Research Cockpit",
+    "zh" : "市场研究驾驶舱",
     "es" : "",
     "pt" : "",
     "fr" : "",
@@ -31,7 +31,7 @@
     "ru" : "",
     "ja" : ""
   },
-  "name" : "MRD 大盘速览",
+  "name" : "市场研究驾驶舱",
   "iconImage" : "",
   "contributors" : [],
   "intentInputTypes" : [],
