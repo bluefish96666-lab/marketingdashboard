@@ -81,17 +81,20 @@ export function Panel({
             onTouchStart: tvOverlay
               ? (e: React.TouchEvent) => {
                   const t = e.touches[0];
-                  if (t) (e.currentTarget as HTMLElement).dataset.tvSwipe = String(t.clientX);
+                  if (t) (e.currentTarget as HTMLElement).dataset.tvSwipe = `${t.clientX},${t.clientY}`;
                 }
               : undefined,
             onTouchEnd: tvOverlay
               ? (e: React.TouchEvent) => {
                   const el = e.currentTarget as HTMLElement;
-                  const x0 = Number(el.dataset.tvSwipe || 0);
+                  const xy = (el.dataset.tvSwipe || "").split(",").map(Number);
                   delete el.dataset.tvSwipe;
-                  if (!x0) return;
-                  const dx = e.changedTouches[0].clientX - x0;
-                  if (Math.abs(dx) < 60) return; // 阈值: 小于 60px 不算滑动(避免误触)
+                  if (xy.length < 2 || !xy[0]) return;
+                  const t = e.changedTouches[0];
+                  const dx = t.clientX - xy[0];
+                  const dy = t.clientY - xy[1];
+                  // 主导方向判断: |dx|>60 且水平分量 > 垂直分量(上下滑动/斜向滑动不触发)
+                  if (Math.abs(dx) < 60 || Math.abs(dx) <= Math.abs(dy)) return;
                   // 触屏左右滑动切换相邻面板(放大态)
                   const ids = Array.from(document.querySelectorAll<HTMLElement>("section[data-tv-focusable][data-panel-id]"))
                     .map((s) => s.dataset.panelId || "");
