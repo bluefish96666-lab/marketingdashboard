@@ -1,6 +1,6 @@
 {
   "name": "MRD 大盘速览",
-  "description": "A股指数 + 板块资金流Top5 + AI Token指数, 数据来自 mrd.hermes.cc.cd 实时聚合(东财/SEC/OpenRouter)",
+  "description": "一键打开 mrd.hermes.cc.cd 完整仪表盘(行情/板块资金流/AI基建), 数据服务端实时聚合",
   "color": "rgba(56, 189, 248, 1)",
   "author": {
     "name": "theBigGavin",
@@ -21,7 +21,7 @@
     "en": "MRD Market Overview"
   },
   "localizedDescriptions": {
-    "zh": "A股指数、板块资金流向 Top5 与 AI Token 指数速览, 数据实时来自 mrd.hermes.cc.cd。",
-    "en": "A-share indices, top sector money flows and AI token index from mrd.hermes.cc.cd."
+    "zh": "一键打开 mrd.hermes.cc.cd 完整仪表盘: A股行情、板块资金流向、AI 基建与 ROI 面板。",
+    "en": "One-tap open mrd.hermes.cc.cd dashboard: A-share quotes, sector flows, AI infra & ROI panels."
   }
 }
