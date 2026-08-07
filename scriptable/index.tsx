@@ -1,19 +1,12 @@
-import { Navigation, Script } from "scripting"
-import { MainPage } from "./page"
+import { Script } from "scripting"
+import { run } from "./page"
 
 async function main() {
-  Script.enableMinimize()
-  const removeResumeListener = Script.onResume(() => {})
   try {
-    await Navigation.present({
-      element: <MainPage />,
-      modalPresentationStyle: "overFullScreen",
-    })
+    await run()
   } catch (error) {
     console.error(error)
-    await Navigation.present({ element: <MainPage /> })
   } finally {
-    removeResumeListener()
     Script.exit()
   }
 }
