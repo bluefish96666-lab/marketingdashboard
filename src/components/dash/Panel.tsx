@@ -1,6 +1,11 @@
-import { useState, type ReactNode } from "react";
+import { createContext, useContext, useState, type ReactNode } from "react";
 import { ZoomIn, ZoomOut } from "lucide-react";
 import { isTv } from "@/lib/tv";
+
+/** TV 放大 zoom 值上下文: 所有 Spark 从同一 context 读同一值, React 统一批量更新,
+ *  杜绝逐个读 CSS 变量/ResizeObserver 的异步时序导致的线宽不一致。 */
+export const ZoomCtx = createContext(1);
+export const useZoom = () => useContext(ZoomCtx);
 
 export interface PanelZoomProps {
   panelId?: string;
@@ -44,6 +49,9 @@ export function Panel({
   };
   // 老WebView缩放渲染下 fixed 的 bottom/right 锚的是布局视口(可能大于可视区域, 底边溢出屏幕),
   // 用实测可视区域给定宽高
+  const zoom = tvOverlay
+    ? Math.max(1, Math.min(natural ? Math.min((window.innerWidth - 48) / natural.w, (window.innerHeight - 48) / natural.h) : 2, 3))
+    : 1;
   const overlayStyle = tvOverlay
     ? (() => {
         const w = window.innerWidth - 48;
@@ -116,30 +124,32 @@ export function Panel({
           }
         : {})}
     >
-      <header className="flex h-8 shrink-0 items-center gap-2 border-b border-slate-700/40 px-2.5">
-        <span className="inline-block h-3.5 w-1 shrink-0 rounded-sm" style={{ background: accent }} />
-        {icon && <span className="shrink-0" style={{ color: accent, display: "inline-flex", alignItems: "center" }}>{icon}</span>}
-        {/* min-w-0 + truncate: 长标题收缩省略, 不再把右侧控件挤出面板 */}
-        <h2 className="min-w-0 flex-1 truncate text-[12px] font-semibold tracking-wide text-slate-200">{title}</h2>
-        <div className="flex shrink-0 items-center gap-2">
-          {right}
-          {panelId && onToggleZoom && (
-            <button
-              type="button"
-              onClick={() => onToggleZoom(panelId)}
-              title={isZoomed ? "缩小" : "放大"}
-              className={`flex h-[22px] w-[22px] items-center justify-center rounded border transition-colors ${
-                isZoomed
-                  ? "border-cyan-500/60 bg-cyan-500/10 text-cyan-300"
-                  : "border-slate-700/60 bg-slate-800/40 text-slate-400 hover:border-cyan-500/60 hover:text-cyan-300"
-              }`}
-            >
-              {isZoomed ? <ZoomOut size={12} /> : <ZoomIn size={12} />}
-            </button>
-          )}
-        </div>
-      </header>
-      <div className={`min-h-0 flex-1 ${bodyClassName}`}>{children}</div>
+      <ZoomCtx.Provider value={zoom}>
+        <header className="flex h-8 shrink-0 items-center gap-2 border-b border-slate-700/40 px-2.5">
+          <span className="inline-block h-3.5 w-1 shrink-0 rounded-sm" style={{ background: accent }} />
+          {icon && <span className="shrink-0" style={{ color: accent, display: "inline-flex", alignItems: "center" }}>{icon}</span>}
+          {/* min-w-0 + truncate: 长标题收缩省略, 不再把右侧控件挤出面板 */}
+          <h2 className="min-w-0 flex-1 truncate text-[12px] font-semibold tracking-wide text-slate-200">{title}</h2>
+          <div className="flex shrink-0 items-center gap-2">
+            {right}
+            {panelId && onToggleZoom && (
+              <button
+                type="button"
+                onClick={() => onToggleZoom(panelId)}
+                title={isZoomed ? "缩小" : "放大"}
+                className={`flex h-[22px] w-[22px] items-center justify-center rounded border transition-colors ${
+                  isZoomed
+                    ? "border-cyan-500/60 bg-cyan-500/10 text-cyan-300"
+                    : "border-slate-700/60 bg-slate-800/40 text-slate-400 hover:border-cyan-500/60 hover:text-cyan-300"
+                }`}
+              >
+                {isZoomed ? <ZoomOut size={12} /> : <ZoomIn size={12} />}
+              </button>
+            )}
+          </div>
+        </header>
+        <div className={`min-h-0 flex-1 ${bodyClassName}`}>{children}</div>
+      </ZoomCtx.Provider>
       </section>
     </>
   );

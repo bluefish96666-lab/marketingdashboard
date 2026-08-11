@@ -11,7 +11,11 @@ const DURATION_MS = 12000;
 const STEP_MS = 100;
 
 /** 板块实时资金流向图(流入/流出 TOP10 行业, 分钟级累计主力净流入) */
-export function BoardFlowPanel({ className = "", ...zoomProps }: { className?: string } & PanelZoomProps) {
+export function BoardFlowPanel({
+  className = "",
+  onSelectSector,
+  ...zoomProps
+}: { className?: string; onSelectSector?: (sel: { code: string; name: string } | null) => void } & PanelZoomProps) {
   const { data: flows, error, updated } = usePolling(() => api.boardFlow(20), POLL_MS);
   const [progress, setProgress] = useState(1);
   const [playing, setPlaying] = useState(false);
@@ -91,7 +95,7 @@ export function BoardFlowPanel({ className = "", ...zoomProps }: { className?: s
     >
       <div className="h-full min-h-0 p-1.5">
         {flows ? (
-          <BoardFlowChart flows={flows} progress={progress} labelMode={labelMode} />
+          <BoardFlowChart flows={flows} progress={progress} labelMode={labelMode} onSelect={onSelectSector} />
         ) : (
           <div className="flex h-full items-center justify-center text-[11px] text-slate-600">
             {error ? <span className="text-rose-400/80">板块资金流连接失败,自动重试中…</span> : "板块资金流加载中…"}

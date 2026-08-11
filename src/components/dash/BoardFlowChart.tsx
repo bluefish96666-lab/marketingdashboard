@@ -18,9 +18,6 @@ const X_TICKS: [number, string, "start" | "middle" | "end"][] = [
   [239, "15:00", "end"],
 ];
 
-/** 图例区最大高度(legend 模式, 超出滚动) */
-const LEGEND_H = 64;
-
 /** 端点标签模式预留的右侧标签宽度 */
 const END_LABEL_W = 86;
 
@@ -34,16 +31,21 @@ const AXIS_TEXT_X = 4;
 /** 板块实时资金流向图(分钟级累计主力净流入, 东财口径)
  *  progress: 0..1 播放进度(重放用), 1 = 全天
  *  labelMode: "end" 端点标签+标线(默认) / "legend" 图下方图例 */
-export function BoardFlowChart({ flows, progress = 1, labelMode = "end" }: { flows: BoardFlow[]; progress?: number; labelMode?: "end" | "legend" }) {
+export function BoardFlowChart({ flows, progress = 1, labelMode = "end", onSelect }: { flows: BoardFlow[]; progress?: number; labelMode?: "end" | "legend"; onSelect?: (sel: { code: string; name: string } | null) => void }) {
   const { ref: boxRef, size } = useElementSize();
   // 点击选中的板块 code(null = 全部显示)
   const [sel, setSel] = useState<string | null>(null);
+  // 图例最大高度: 用实测像素值而非百分比(百分比在 Panel body flex-1 不确定高度链中解析失效,
+  // 导致图例不限制高度、内容溢出滚动条)
+  const legendMaxH = labelMode === "legend" ? Math.max(Math.round((size?.h ?? 0) * 0.45), 48) : 0;
 
   const chart = useMemo(() => {
     const series = flows.filter((f) => f.points.length > 2);
     if (!series.length) return null;
     const { w: W, h: H } = size;
-    const chartH = Math.max(H - (labelMode === "legend" ? LEGEND_H : 0), 80);
+    // 图例模式: SVG flex-1 吃掉剩余空间(永不空白), 图例内容自适应高度(上限 45% 容器高)。
+    // viewBox 高度用 60% 基准, preserveAspectRatio=none 拉伸填充, 图例多时轻微拉伸可接受
+    const chartH = labelMode === "legend" ? Math.max(Math.round(H * 0.6), 80) : Math.max(H, 80);
     const labelW = labelMode === "end" ? END_LABEL_W : 0;
     const n = Math.max(...series.map((s) => s.points.length));
     // 重放进度: 只绘制前 idx 个点
@@ -91,7 +93,7 @@ export function BoardFlowChart({ flows, progress = 1, labelMode = "end" }: { flo
     <div ref={boxRef} className="flex h-full min-h-0 w-full flex-col">
       {chart ? (
         <>
-          <svg width={chart.W} height={chart.chartH} className="block shrink-0">
+          <svg width="100%" className="block min-h-0 w-full flex-1" viewBox={`0 0 ${chart.W} ${chart.chartH}`} preserveAspectRatio="none">
             {/* 网格与零轴 */}
             {chart.ticks.map((t, i) => (
               <g key={i}>
@@ -124,7 +126,7 @@ export function BoardFlowChart({ flows, progress = 1, labelMode = "end" }: { flo
                     strokeWidth={12}
                     strokeLinejoin="round"
                     style={{ cursor: "pointer" }}
-                    onClick={(e) => { e.stopPropagation(); setSel(sel === l.s.code ? null : l.s.code); }}
+                    onClick={(e) => { e.stopPropagation(); setSel(sel === l.s.code ? null : l.s.code); onSelect?.(sel === l.s.code ? null : { code: l.s.code, name: l.s.name }); }}
                   />
                 </g>
               );
@@ -134,7 +136,7 @@ export function BoardFlowChart({ flows, progress = 1, labelMode = "end" }: { flo
               chart.labels.map((l) => {
                 const active = sel == null || sel === l.line.s.code;
                 return (
-                  <g key={l.line.s.code} opacity={active ? 1 : 0.2} style={{ cursor: "pointer" }} onClick={(e) => { e.stopPropagation(); setSel(sel === l.line.s.code ? null : l.line.s.code); }}>
+                  <g key={l.line.s.code} opacity={active ? 1 : 0.2} style={{ cursor: "pointer" }} onClick={(e) => { e.stopPropagation(); setSel(sel === l.line.s.code ? null : l.line.s.code); onSelect?.(sel === l.line.s.code ? null : { code: l.line.s.code, name: l.line.s.name }); }}>
                     <line x1={chart.W - chart.labelW - PLOT_INSET} y1={l.line.lastY} x2={chart.W - chart.labelW} y2={l.labelY} stroke={l.line.color} strokeWidth={active ? 0.8 : 0.5} strokeOpacity={0.5} />
                     <text x={chart.W - chart.labelW + 2} y={l.labelY + 3} fontSize={active ? 9 : 8.5} fill={l.line.color} style={TNUM} fontWeight={active ? 600 : 400}>
                       {l.line.s.name} {l.line.lastV >= 0 ? "+" : ""}{(l.line.lastV / 1e8).toFixed(0)}
@@ -160,21 +162,21 @@ export function BoardFlowChart({ flows, progress = 1, labelMode = "end" }: { flo
               </g>
             )}
           </svg>
-          {/* 图例(legend 模式): 色块 + 板块名 + 净额, 超出滚动 */}
+          {/* 图例(legend 模式): 色块 + 板块名 + 净额; 高度自适应内容, 上限 45% 容器高(超出滚动) */}
           {labelMode === "legend" && (
             <div
               className="mt-1 flex shrink-0 flex-wrap content-start gap-x-3 gap-y-1 overflow-y-auto px-1"
-              style={{ maxHeight: LEGEND_H }}
+              style={{ maxHeight: legendMaxH }}
             >
               {chart.lines.map((l) => (
                 <span
                   key={l.s.code}
                   className="flex cursor-pointer items-center gap-1 text-[9px] leading-none"
                   style={{ opacity: sel == null || sel === l.s.code ? 1 : 0.3 }}
-                  onClick={() => setSel(sel === l.s.code ? null : l.s.code)}
+                  onClick={() => { setSel(sel === l.s.code ? null : l.s.code); onSelect?.(sel === l.s.code ? null : { code: l.s.code, name: l.s.name }); }}
                 >
                   <span className="h-[5px] w-[10px] shrink-0 rounded-sm" style={{ background: l.color }} />
-                  <span className="max-w-[86px] truncate text-slate-400">{l.s.name}</span>
+                  <span className="shrink-0 text-slate-400">{l.s.name}</span>
                   <span className="font-semibold" style={{ color: l.color, fontVariantNumeric: "tabular-nums" }}>
                     {l.lastV >= 0 ? "+" : ""}{(l.lastV / 1e8).toFixed(0)}
                   </span>

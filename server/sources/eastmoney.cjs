@@ -178,6 +178,29 @@ module.exports = function createEastmoney(ctx) {
     });
   }
 
+  /** 板块成分股主力净流入排行(clist, fs=b:板块代码, f62 降序) — 与 handleMoneyFlowEM 同映射 */
+  async function handleBoardMoneyFlow(code, n) {
+    if (!/^BK\d{4}$/.test(code)) return [];
+    return emEnqueue(async () => {
+      const fields = "f12,f14,f2,f3,f62,f184,f66,f6,f8";
+      const url = `https://push2delay.eastmoney.com/api/qt/clist/get?fid=f62&po=1&pz=${n}&pn=1&np=1&fltt=2&invt=2&fs=${encodeURIComponent(`b:${code}`)}&fields=${fields}`;
+      const diff = (await emGet(url))?.data?.diff || [];
+      return diff
+        .filter((s) => s.f14 && num(s.f2) > 0)
+        .map((s) => ({
+          symbol: emSymbol(s.f12),
+          name: s.f14,
+          price: num(s.f2),
+          pct: num(s.f3),
+          amount: num(s.f6),
+          netIn: num(s.f62),
+          netRatio: num(s.f184),
+          r0Net: num(s.f66),
+          turnover: num(s.f8),
+        }));
+    });
+  }
+
   /** 批量个股资金流(ulist 一次最多 50 只, 按 code 30s 缓存) */
   async function handleStockFlows(codesParam, flowInflight) {
     const list = String(codesParam || "")
@@ -264,5 +287,5 @@ module.exports = function createEastmoney(ctx) {
     });
   }
 
-  return { handleRank, handleMoneyFlow, handleStockBoards, handleMoneyFlowEM, handleStockFlows, handleBoardFlow, fetchSinaJson };
+  return { handleRank, handleMoneyFlow, handleStockBoards, handleMoneyFlowEM, handleBoardMoneyFlow, handleStockFlows, handleBoardFlow, fetchSinaJson };
 };

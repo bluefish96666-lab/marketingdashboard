@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { hexChg } from "@/lib/format";
+import { useZoom } from "./Panel";
 
 interface SparkProps {
   points: { t: string; p: number }[];
@@ -26,6 +26,10 @@ function toMinute(t: string): number {
 
 /** 日内分时迷你走势图 — X 轴按实际交易时间计算宽度 */
 export function Spark({ points, prec, width = 120, height = 36, fluid = false, emptyLabel = "休市", session = "ashare" }: SparkProps) {
+  // TV 放大补偿: 正常态固定 1.8px; 放大态在当前 √zoom 补偿基础上再乘 0.45(细 55%+),
+  // 满足用户"至少比现在细 50%"要求。
+  const zoom = useZoom();
+  const strokeW = zoom > 1 ? Math.min(1.8 * Math.sqrt(zoom) * 0.45, 1.8) : 1.8;
   const { line, area, refY, color } = useMemo(() => {
     if (!points || points.length < 2 || !prec) {
       return { line: "", area: "", refY: 0, color: "#64748b" };
@@ -76,7 +80,9 @@ export function Spark({ points, prec, width = 120, height = 36, fluid = false, e
     }
     const Y = (v: number) => height - 3 - ((v - min) / (max - min)) * (height - 6);
     const last = ps[ps.length - 1];
-    const color = hexChg(last - prec);
+    // mini 分时图专用亮度: 400 级在暗底偏暗, 提到 300 级 (rose-300/emerald-300/slate-300)
+    const color =
+      last - prec > 0 ? "#fda4af" : last - prec < 0 ? "#6ee7b7" : "#cbd5e1";
     const line = points.map((d, i) => `${xs[i].toFixed(1)},${Y(d.p).toFixed(1)}`).join(" ");
     const area = `${xs[0].toFixed(1)},${height - 1} ${line} ${xs[xs.length - 1].toFixed(1)},${height - 1}`;
     return { line, area, refY: Y(prec), color };
@@ -92,9 +98,9 @@ export function Spark({ points, prec, width = 120, height = 36, fluid = false, e
       preserveAspectRatio="none"
       className={fluid ? "block min-w-0" : "shrink-0"}
     >
-      <polygon points={area} fill={color} opacity={0.12} />
-      <line x1={1} y1={refY} x2={width - 1} y2={refY} stroke="#475569" strokeWidth={0.6} strokeDasharray="2,3" />
-      <polyline points={line} fill="none" stroke={color} strokeWidth={1.2} strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+      <polygon points={area} fill={color} opacity={0.18} />
+      <line x1={1} y1={refY} x2={width - 1} y2={refY} stroke="#64748b" strokeWidth={0.8} strokeDasharray="2,3" />
+      <polyline points={line} fill="none" stroke={color} strokeWidth={strokeW} strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
     </svg>
   );
 }

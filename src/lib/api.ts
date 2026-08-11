@@ -497,6 +497,8 @@ export const api = {
   rank: (sort: "changepercent" | "amount" | "turnoverratio", asc: 0 | 1, n = 30) =>
     get<RankStock[]>(`/api/rank?sort=${sort}&asc=${asc}&n=${n}`),
   moneyflow: (n = 15) => get<FlowStock[]>(`/api/moneyflow?n=${n}`),
+  /** 板块成分股主力净流入排行(东财 fs=b:板块代码, f62 降序) */
+  boardMoneyflow: (code: string, n = 15) => get<FlowStock[]>(`/api/board-moneyflow?code=${encodeURIComponent(code)}&n=${n}`),
   stockBoards: (code: string) => get<StockBoards>(`/api/stock-boards?code=${encodeURIComponent(code)}`),
   stockFlow: (code: string) => flowLoader(code),
   batchFutureMinute: (codes: string[]) =>

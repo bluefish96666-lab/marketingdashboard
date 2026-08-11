@@ -1,4 +1,4 @@
-import { memo, useMemo, type ComponentType } from "react";
+import { memo, useMemo, useState, type ComponentType } from "react";
 import { type PanelZoomProps } from "@/components/dash/Panel";
 import { usePanelZoom } from "@/hooks/usePanelZoom";
 import { isTv } from "@/lib/tv";
@@ -23,6 +23,8 @@ const MemoPanel = memo(function MemoPanel({
 /** 一屏式大屏: 行高与列宽按缩放状态动态分配 */
 export function DashboardLayout({ rows }: { rows: PanelRowDef[] }) {
   const { isZoomed, toggle: toggleZoom, layout } = usePanelZoom(rows);
+  // 板块资金流向 → 主力净流入排行 联动: 点击板块图选中板块(code+name), 排行面板拉该板块成分股主力净流入
+  const [sectorSel, setSectorSel] = useState<{ code: string; name: string } | null>(null);
 
   // TV: 缩放走全屏浮层(Panel.tsx), 兄弟面板尺寸保持默认不变 — 整屏重排在老电视上是卡顿主因
   const defaultLayout = useMemo(
@@ -52,6 +54,12 @@ export function DashboardLayout({ rows }: { rows: PanelRowDef[] }) {
                   panelId={panel.id}
                   isZoomed={isZoomed(panel.id)}
                   onToggleZoom={toggleZoom}
+                  {...(panel.id === "boardFlow"
+                    ? { onSelectSector: setSectorSel, selectedSector: sectorSel }
+                    : {})}
+                  {...(panel.id === "moneyFlow"
+                    ? { sectorFilter: sectorSel, onClearSector: () => setSectorSel(null) }
+                    : {})}
                 />
               </div>
             );
