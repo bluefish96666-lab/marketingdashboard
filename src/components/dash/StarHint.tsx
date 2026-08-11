@@ -12,27 +12,20 @@ const HINT_KEY = "mrd_star_hint";
  */
 export function StarHint({ githubUrl }: { githubUrl: string }) {
   const [visible, setVisible] = useState(false);
-  const [hinted, setHinted] = useState(false);
 
   useEffect(() => {
-    // 已提示过 / TV 模式 → 不显示
-    if (isTv) return;
-    try {
-      if (loadJson<boolean>(HINT_KEY, false)) return;
-    } catch { /* ignore */ }
-    setHinted(true);
+    // 已提示过 / TV 模式 → 不显示 (loadJson 内部已 try-catch)
+    if (isTv || loadJson<boolean>(HINT_KEY, false)) return;
     // 延迟出现, 等页面主体渲染完
     const t = setTimeout(() => setVisible(true), 4000);
     return () => clearTimeout(t);
   }, []);
 
-  if (!visible || !hinted) return null;
+  if (!visible) return null;
 
-  const dismiss = (persist: boolean) => {
+  const dismiss = () => {
     setVisible(false);
-    if (persist) {
-      try { saveJson(HINT_KEY, true); } catch { /* ignore */ }
-    }
+    saveJson(HINT_KEY, true); // saveJson 内部已 try-catch
   };
 
   return (
@@ -45,13 +38,13 @@ export function StarHint({ githubUrl }: { githubUrl: string }) {
         href={githubUrl}
         target="_blank"
         rel="noopener noreferrer"
-        onClick={() => dismiss(true)}
+        onClick={dismiss}
         className="rounded-md border border-cyan-500/50 bg-cyan-500/10 px-2.5 py-1 text-[12px] font-semibold text-cyan-300 transition-colors hover:bg-cyan-500/20"
       >
         去 Star
       </a>
       <button
-        onClick={() => dismiss(true)}
+        onClick={dismiss}
         title="关闭"
         aria-label="关闭"
         className="flex h-5 w-5 items-center justify-center rounded text-slate-500 transition-colors hover:text-slate-300"
