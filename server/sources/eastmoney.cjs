@@ -183,10 +183,16 @@ module.exports = function createEastmoney(ctx) {
     if (!/^BK\d{4}$/.test(code)) return [];
     return emEnqueue(async () => {
       const fields = "f12,f14,f2,f3,f62,f184,f66,f6,f8";
-      const url = `https://push2delay.eastmoney.com/api/qt/clist/get?fid=f62&po=1&pz=${n}&pn=1&np=1&fltt=2&invt=2&fs=${encodeURIComponent(`b:${code}`)}&fields=${fields}`;
+      const cnt = Math.min(Math.max(parseInt(n, 10) || 15, 1), 100); // 防呆: 非法/超限 n 收拢到 1..100
+      // 取数窗口放大到 max(cnt*3, 50): 上游按 f62 对全成分股排序, 本地再滤掉停牌股(f2=0)。
+      // 若不放大, 前 n 名中混入停牌股时返回行数 < n, 榜单也非严格"交易股净流入前 n"。
+      // 窗口内过滤后 slice 截断 → 语义: 交易中的股票按净流入前 n。
+      const win = Math.max(cnt * 3, 50);
+      const url = `https://push2delay.eastmoney.com/api/qt/clist/get?fid=f62&po=1&pz=${win}&pn=1&np=1&fltt=2&invt=2&fs=${encodeURIComponent(`b:${code}`)}&fields=${fields}`;
       const diff = (await emGet(url))?.data?.diff || [];
       return diff
         .filter((s) => s.f14 && num(s.f2) > 0)
+        .slice(0, cnt)
         .map((s) => ({
           symbol: emSymbol(s.f12),
           name: s.f14,
