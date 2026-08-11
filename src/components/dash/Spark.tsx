@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { useZoom } from "./Panel";
+import { useZoom } from "./ZoomCtx";
 
 interface SparkProps {
   points: { t: string; p: number }[];

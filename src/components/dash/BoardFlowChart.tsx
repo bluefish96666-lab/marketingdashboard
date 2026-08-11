@@ -31,10 +31,26 @@ const AXIS_TEXT_X = 4;
 /** 板块实时资金流向图(分钟级累计主力净流入, 东财口径)
  *  progress: 0..1 播放进度(重放用), 1 = 全天
  *  labelMode: "end" 端点标签+标线(默认) / "legend" 图下方图例 */
-export function BoardFlowChart({ flows, progress = 1, labelMode = "end", onSelect }: { flows: BoardFlow[]; progress?: number; labelMode?: "end" | "legend"; onSelect?: (sel: { code: string; name: string } | null) => void }) {
+export function BoardFlowChart({ flows, progress = 1, labelMode = "end", selected, onSelect }: {
+  flows: BoardFlow[];
+  progress?: number;
+  labelMode?: "end" | "legend";
+  /** 受控选中板块 code(undefined = 图表自管理; 传入 null/值 = 外部(资金流向面板)为唯一真源) */
+  selected?: string | null;
+  onSelect?: (sel: { code: string; name: string } | null) => void;
+}) {
   const { ref: boxRef, size } = useElementSize();
-  // 点击选中的板块 code(null = 全部显示)
-  const [sel, setSel] = useState<string | null>(null);
+  // 点击选中的板块 code(null = 全部显示); 受控模式(selected 已提供)时以外部为准
+  const [internalSel, setInternalSel] = useState<string | null>(null);
+  const sel = selected !== undefined ? selected : internalSel;
+  const toggle = (code: string, name: string) => {
+    const next = sel === code ? null : code;
+    if (selected !== undefined) {
+      onSelect?.(next === null ? null : { code, name });
+    } else {
+      setInternalSel(next);
+    }
+  };
   // 图例最大高度: 用实测像素值而非百分比(百分比在 Panel body flex-1 不确定高度链中解析失效,
   // 导致图例不限制高度、内容溢出滚动条)
   const legendMaxH = labelMode === "legend" ? Math.max(Math.round((size?.h ?? 0) * 0.45), 48) : 0;
@@ -126,7 +142,7 @@ export function BoardFlowChart({ flows, progress = 1, labelMode = "end", onSelec
                     strokeWidth={12}
                     strokeLinejoin="round"
                     style={{ cursor: "pointer" }}
-                    onClick={(e) => { e.stopPropagation(); setSel(sel === l.s.code ? null : l.s.code); onSelect?.(sel === l.s.code ? null : { code: l.s.code, name: l.s.name }); }}
+                    onClick={(e) => { e.stopPropagation(); toggle(l.s.code, l.s.name); }}
                   />
                 </g>
               );
@@ -136,7 +152,7 @@ export function BoardFlowChart({ flows, progress = 1, labelMode = "end", onSelec
               chart.labels.map((l) => {
                 const active = sel == null || sel === l.line.s.code;
                 return (
-                  <g key={l.line.s.code} opacity={active ? 1 : 0.2} style={{ cursor: "pointer" }} onClick={(e) => { e.stopPropagation(); setSel(sel === l.line.s.code ? null : l.line.s.code); onSelect?.(sel === l.line.s.code ? null : { code: l.line.s.code, name: l.line.s.name }); }}>
+                  <g key={l.line.s.code} opacity={active ? 1 : 0.2} style={{ cursor: "pointer" }} onClick={(e) => { e.stopPropagation(); toggle(l.line.s.code, l.line.s.name); }}>
                     <line x1={chart.W - chart.labelW - PLOT_INSET} y1={l.line.lastY} x2={chart.W - chart.labelW} y2={l.labelY} stroke={l.line.color} strokeWidth={active ? 0.8 : 0.5} strokeOpacity={0.5} />
                     <text x={chart.W - chart.labelW + 2} y={l.labelY + 3} fontSize={active ? 9 : 8.5} fill={l.line.color} style={TNUM} fontWeight={active ? 600 : 400}>
                       {l.line.s.name} {l.line.lastV >= 0 ? "+" : ""}{(l.line.lastV / 1e8).toFixed(0)}
@@ -173,7 +189,7 @@ export function BoardFlowChart({ flows, progress = 1, labelMode = "end", onSelec
                   key={l.s.code}
                   className="flex cursor-pointer items-center gap-1 text-[9px] leading-none"
                   style={{ opacity: sel == null || sel === l.s.code ? 1 : 0.3 }}
-                  onClick={() => { setSel(sel === l.s.code ? null : l.s.code); onSelect?.(sel === l.s.code ? null : { code: l.s.code, name: l.s.name }); }}
+                  onClick={() => toggle(l.s.code, l.s.name)}
                 >
                   <span className="h-[5px] w-[10px] shrink-0 rounded-sm" style={{ background: l.color }} />
                   <span className="shrink-0 text-slate-400">{l.s.name}</span>

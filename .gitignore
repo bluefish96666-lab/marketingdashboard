@@ -16,6 +16,9 @@ dist-ssr
 server/.env
 server/data/
 
+# 谈事 APP 调试日志接收 (POST /api/debuglog)
+debuglogs/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
