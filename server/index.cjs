@@ -398,26 +398,6 @@ function readBodyWithLimit(req, limit) {
 }
 
 const server = http.createServer(async (req, res) => {
-  // 谈事 APP 实时 Debug 日志 (POST /api/debuglog)
-  if (req.method === "POST" && req.url === "/api/debuglog") {
-    let body = "";
-    req.on("data", (c) => { body += c; if (body.length > 256 * 1024) req.destroy(); });
-    req.on("end", () => {
-      try {
-        const { device, lines } = JSON.parse(body || "{}");
-        if (!device || !Array.isArray(lines) || lines.length === 0) {
-          return send(res, 400, { ok: false, error: "bad payload" });
-        }
-        fs.mkdirSync(DEBUGLOG_DIR, { recursive: true });
-        const safe = String(device).replace(/[^a-zA-Z0-9_-]/g, "");
-        fs.appendFileSync(path.join(DEBUGLOG_DIR, safe + ".log"), lines.join("\n") + "\n", "utf8");
-        return send(res, 200, { ok: true });
-      } catch (e) {
-        return send(res, 400, { ok: false, error: e?.message || "bad" });
-      }
-    });
-    return;
-  }
   try {
     const u = new URL(req.url, "http://localhost");
     if (routes[u.pathname]) {
@@ -507,9 +487,5 @@ const server = http.createServer(async (req, res) => {
     send(res, 500, { ok: false, error: "internal error" });
   }
 });
-
-// ── 谈事 APP 实时 Debug 日志接收 (POST /api/debuglog) ──
-// 请求体: { device: string, lines: string[] } — 追加写入 debuglogs/<device>.log
-const DEBUGLOG_DIR = path.join(__dirname, "..", "debuglogs");
 
 server.listen(PORT, () => console.log(`[market-cockpit] listening on :${PORT}`));

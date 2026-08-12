@@ -1,11 +1,7 @@
-import { createContext, useContext, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { ZoomIn, ZoomOut } from "lucide-react";
 import { isTv } from "@/lib/tv";
-
-/** TV 放大 zoom 值上下文: 所有 Spark 从同一 context 读同一值, React 统一批量更新,
- *  杜绝逐个读 CSS 变量/ResizeObserver 的异步时序导致的线宽不一致。 */
-export const ZoomCtx = createContext(1);
-export const useZoom = () => useContext(ZoomCtx);
+import { ZoomCtx } from "./ZoomCtx";
 
 export interface PanelZoomProps {
   panelId?: string;

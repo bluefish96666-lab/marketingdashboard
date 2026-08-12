@@ -14,8 +14,14 @@ const STEP_MS = 100;
 export function BoardFlowPanel({
   className = "",
   onSelectSector,
+  selectedSector,
   ...zoomProps
-}: { className?: string; onSelectSector?: (sel: { code: string; name: string } | null) => void } & PanelZoomProps) {
+}: {
+  className?: string;
+  onSelectSector?: (sel: { code: string; name: string } | null) => void;
+  /** 受控选中板块: 外部(资金流向面板)清除筛选时同步清图表高亮 */
+  selectedSector?: { code: string; name: string } | null;
+} & PanelZoomProps) {
   const { data: flows, error, updated } = usePolling(() => api.boardFlow(20), POLL_MS);
   const [progress, setProgress] = useState(1);
   const [playing, setPlaying] = useState(false);
@@ -95,7 +101,7 @@ export function BoardFlowPanel({
     >
       <div className="h-full min-h-0 p-1.5">
         {flows ? (
-          <BoardFlowChart flows={flows} progress={progress} labelMode={labelMode} onSelect={onSelectSector} />
+          <BoardFlowChart flows={flows} progress={progress} labelMode={labelMode} selected={selectedSector?.code ?? null} onSelect={onSelectSector} />
         ) : (
           <div className="flex h-full items-center justify-center text-[11px] text-slate-600">
             {error ? <span className="text-rose-400/80">板块资金流连接失败,自动重试中…</span> : "板块资金流加载中…"}
