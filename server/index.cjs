@@ -864,6 +864,10 @@ function demoTaskView(s, id) {
 const DEMO_MEMBER = "潘明";
 const DEMO_DISPATCH_SCRIPT = "/home/gavin/.hermes/scripts/opc_demo_dispatch.py";
 
+// demo 事件流纯函数（提取至 lib/demo-stream.cjs，单测覆盖）
+const { makeFrame, demoStreamDiff } = require("./lib/demo-stream.cjs");
+const demoStreamFrame = makeFrame({ tasks: DEMO_TASKS, member: DEMO_MEMBER });
+
 let demoStreamWatcher = null;          // fs.watch 句柄: demo/status.json
 let demoStreamDebounceTimer = null;    // demo 事件防抖定时器(200ms, 复用 OPC_STREAM_DEBOUNCE_MS)
 let demoStreamFallbackTimer = null;    // 兜底轮询(5s): fs.watch 对原子替换(rename)可能丢事件, mtime 对比兜底
@@ -887,40 +891,8 @@ function demoStreamMarkSent(id, status) {
   return true;
 }
 
-// 组装事件帧: status.json 的 demo 状态 → 帧内 kanban 语义 status
-function demoStreamFrame(id, t, action, status, ts) {
-  return {
-    type: "demo",
-    demo_id: id,
-    task_id: t.task_id,
-    title: (DEMO_TASKS[t.task_id] && DEMO_TASKS[t.task_id].name) || t.task_id,
-    member: DEMO_MEMBER,
-    action, status, ts,
-  };
-}
-
-// 状态迁移 → 事件帧。只发迁移(状态无变化不重复推 = demo_id+status sig 去重);
-// dispatched→created 需 kanban_task_id 存在(卡真实建了才发)。
-function demoStreamDiff(prev, cur, nowIso) {
-  const frames = [];
-  const ids = new Set([...Object.keys(prev || {}), ...Object.keys(cur || {})]);
-  for (const id of ids) {
-    const p = prev[id];
-    const c = cur[id];
-    if (!p || !c || p.status === c.status) continue;
-    const ps = p.status, cs = c.status;
-    if (ps === "queued" && cs === "dispatched") {
-      if (c.kanban_task_id) frames.push(demoStreamFrame(id, c, "created", "todo", nowIso));
-    } else if (ps === "dispatched" && cs === "running") {
-      frames.push(demoStreamFrame(id, c, "claimed", "running", nowIso));
-    } else if (cs === "completed") { // 任意非终态 → completed
-      frames.push(demoStreamFrame(id, c, "completed", "done", nowIso));
-    } else if (cs === "failed") {    // 任意状态 → failed
-      frames.push(demoStreamFrame(id, c, "failed", "failed", nowIso));
-    }
-  }
-  return frames;
-}
+// 组装事件帧: status.json 的 demo 状态 → 帧内 kanban 语义 status（见 lib/demo-stream.cjs demoStreamFrame）
+// 状态迁移 → 事件帧（实现见 lib/demo-stream.cjs demoStreamDiff，18d 起含 prev 缺失任务补发 created 链）
 
 // 广播 demo 事件帧给所有全局流客户端(event: demo, 与 event: status 同流)。
 // sig 去重: 同一 demo_id+status 迁移只广播一次(catch-up 先发的, watcher 不再补发)。
