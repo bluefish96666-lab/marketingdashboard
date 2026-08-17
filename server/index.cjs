@@ -865,8 +865,12 @@ const DEMO_MEMBER = "潘明";
 const DEMO_DISPATCH_SCRIPT = "/home/gavin/.hermes/scripts/opc_demo_dispatch.py";
 
 // demo 事件流纯函数（提取至 lib/demo-stream.cjs，单测覆盖）
-const { makeFrame, demoStreamDiff } = require("./lib/demo-stream.cjs");
+const { makeFrame, demoStreamDiff: demoStreamDiffRaw } = require("./lib/demo-stream.cjs");
 const demoStreamFrame = makeFrame({ tasks: DEMO_TASKS, member: DEMO_MEMBER });
+// 绑定帧构造器(4 参签名: prev, cur, nowIso, frame) — lib 纯函数不持有 DEMO_TASKS/DEMO_MEMBER
+function demoStreamDiff(prev, cur, nowIso) {
+  return demoStreamDiffRaw(prev, cur, nowIso, demoStreamFrame);
+}
 
 let demoStreamWatcher = null;          // fs.watch 句柄: demo/status.json
 let demoStreamDebounceTimer = null;    // demo 事件防抖定时器(200ms, 复用 OPC_STREAM_DEBOUNCE_MS)
