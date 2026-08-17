@@ -138,6 +138,21 @@ const routes = {
       activeIps5m: active5m, visitors24h,
     };
   },
+  "/api/leads": async (_q, body) => {
+    // Pro landing 预注册: 收集付费意向线索, 落盘到 data/leads.json
+    const email = String(body?.email || "").trim().slice(0, 200);
+    const need = String(body?.need || "").trim().slice(0, 500);
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      const e = new Error("invalid email"); e.status = 400; throw e;
+    }
+    const rec = { email, need, plan: String(body?.plan || "").slice(0, 50), ts: new Date().toISOString() };
+    const file = path.join(__dirname, "data", "leads.json");
+    let arr = [];
+    try { arr = JSON.parse(fs.readFileSync(file, "utf-8")); } catch {}
+    arr.push(rec);
+    fs.writeFileSync(file, JSON.stringify(arr, null, 2));
+    return { received: true, count: arr.length };
+  },
   "/api/minute": async (q) =>
     cached(`minute:${q.get("code")}`, 5000, () => handleMinute(q.get("code") || "sh000001")),
   // 批量分钟线: 将 N 次单独请求合并为 1 次, 大幅降低冷启动爆发请求数
@@ -245,6 +260,60 @@ const routes = {
   "/api/stock-search": async (q) =>
     cached(`ssearch:${q.get("q")}`, 5000, () => handleStockSearch(q.get("q") || "")), // 前端击键触发, 短缓存防新浪WAF
   "/api/chain-parse": async (_q, body) => handleChainParse(body || {}),
+  // ---- OPC 透明办公室 demo 体验（12a）----
+  "/api/opc/demo": async (_q, body, req) => {
+    // a) 白名单校验: 只认 4 个预设 id, 其他字段一律忽略（防 prompt 注入/防外人驱动 agent）
+    const taskId = String(body?.task_id || "").trim();
+    if (!DEMO_TASKS[taskId]) { const e = new Error("unknown demo task"); e.status = 400; throw e; }
+    const ip = clientIp(req);
+    // b) 限流: 同 IP 1 次/60s（先于去重, 快速连点直接 429; 防刷/防烧钱）
+    if (!demoLimiter(ip)) { const e = new Error("demo rate limited"); e.status = 429; throw e; }
+    const s = demoReadStatus();
+    // c) 去重: 同 IP 同任务有缓存(completed)/在飞 → 直接返回现有状态; failed 允许重试
+    const existing = Object.values(s.tasks).find((t) => t.ip === ip && t.task_id === taskId);
+    if (existing && existing.status !== "failed") {
+      return { demo_id: existing.demo_id, status: existing.status, task_id: existing.task_id, cached: true };
+    }
+    // d) 全局并发上限: 在飞(queued/dispatched/running) ≤ DEMO_MAX_INFLIGHT
+    const inflight = Object.values(s.tasks)
+      .filter((t) => ["queued", "dispatched", "running"].includes(t.status)).length;
+    if (inflight >= DEMO_MAX_INFLIGHT) { const e = new Error("demo busy"); e.status = 429; throw e; }
+    // e) 写请求文件(派活 cron 扫描) + 更新 status.json → 返回 demo_id
+    const demoId = "d" + Date.now().toString(36) + "_" + crypto.randomBytes(4).toString("hex");
+    const now = new Date().toISOString();
+    fs.mkdirSync(DEMO_REQ_DIR, { recursive: true });
+    fs.writeFileSync(path.join(DEMO_REQ_DIR, `${demoId}.json`),
+      JSON.stringify({ demo_id: demoId, task_id: taskId, ip, ts: now }, null, 2));
+    s.tasks[demoId] = {
+      task_id: taskId, ip, status: "queued",
+      created_at: now, started_at: null, finished_at: null, kanban_task_id: null,
+    };
+    demoWriteStatus(s);
+    return { demo_id: demoId, status: "queued", task_id: taskId };
+  },
+  "/api/opc/demo/status": async (q) => {
+    const id = String(q.get("demo_id") || "").trim();
+    if (!id) { const e = new Error("demo_id required"); e.status = 400; throw e; }
+    const v = demoTaskView(demoReadStatus(), id);
+    if (!v) { const e = new Error("demo not found"); e.status = 404; throw e; }
+    return v;
+  },
+  "/api/opc/demo/history": async () => {
+    const s = demoReadStatus();
+    // history 由状态迁移写入; 空则从 tasks 派生终态条目兜底
+    let items = (s.history || []).slice(0, DEMO_HISTORY_MAX);
+    if (!items.length) {
+      items = Object.entries(s.tasks)
+        .filter(([, t]) => ["completed", "failed"].includes(t.status))
+        .map(([id, t]) => ({
+          demo_id: id, task_id: t.task_id, status: t.status,
+          created_at: t.created_at, finished_at: t.finished_at || null,
+        }))
+        .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))
+        .slice(0, DEMO_HISTORY_MAX);
+    }
+    return { items, count: items.length };
+  },
 };
 
 const MIME = {
@@ -273,6 +342,17 @@ const CSP = [
   "manifest-src 'self'",
   "worker-src 'self'",
   "frame-ancestors 'none'",
+  "base-uri 'self'",
+].join("; ");
+
+// 公司落地页专用 CSP: 独立静态页, 允许内联脚本(主题切换)与外部图(shields.io star badge)
+const COMPANY_CSP = [
+  "default-src 'self'",
+  "script-src 'self' 'unsafe-inline'",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: https:",
+  "font-src 'self' data:",
+  "connect-src 'self' https:",
   "base-uri 'self'",
 ].join("; ");
 
@@ -374,6 +454,147 @@ function makeLimiter(windowMs, max) {
 const apiLimiter = makeLimiter(60 * 1000, 2400);
 const protectedLimiter = makeLimiter(60 * 1000, 30); // 私有 key 端点: 每 IP 每分钟 30 次, 防脚本刷配额
 
+/* ---------------- SSE 公共设施（12a demo 流 + 15a 全局状态流共用） ----------------
+ * Gavin 明确要求: 避免两套 SSE 端点/两套订阅逻辑。所有 SSE 端点统一走以下三件套:
+ *   setSSEHeaders(res, extra) — 统一响应头(禁缓存 + 防 Nginx/Cloudflare 缓冲)
+ *   sendEvent(res, event, data) — 写 event:/data: 帧(帧格式逐字节一致; 两流统一 event: status)
+ *   sseHeartbeat(res, ms)      — 保活注释帧定时器(: ping, 浏览器忽略), 返回 timer 供断连清理
+ */
+function setSSEHeaders(res, extra = {}) {
+  const headers = {
+    "Content-Type": "text/event-stream; charset=utf-8",
+    // no-cache + no-transform: 禁止任何缓存层缓存, 并禁止代理改写(压缩/转码会破坏流)
+    "Cache-Control": "no-cache, no-transform",
+    Connection: "keep-alive",
+    "X-Accel-Buffering": "no", // 防 Nginx/Cloudflare 边缘缓冲
+    ...extra,
+  };
+  res.writeHead(200, headers);
+}
+function sendEvent(res, event, data) {
+  // SSE 帧: `event: <name>\ndata: <json>\n\n` —— demo 流与全局流共用, 契约逐字节一致
+  try { res.write(`event: ${event}\ndata: ${typeof data === "string" ? data : JSON.stringify(data)}\n\n`); } catch {}
+}
+function sseHeartbeat(res, ms) {
+  // 保活: 注释帧防 Cloudflare/反向代理空闲超时断连(CF ~100s), 25~30s 一帧
+  return setInterval(() => { try { res.write(": ping\n\n"); } catch {} }, ms);
+}
+
+/* ---------------- OPC 全局状态流（15a: 办公室实时状态推送, 持续不关闭） ----------------
+ * GET /api/opc/stream — 语义与 demo 流(任务生命周期, 终态后关闭)不同: 办公室状态没有终态,
+ * 连接建立推当前全量快照 → 生产 status.json 变更秒级推送 → 心跳保活, 客户端主动断才结束。
+ * 事件事实源: dist/company/opc/status.json —— 生产静态目录(mrd 静态服务实际读的就是这份;
+ * opc_collect.py 双写 public/ 种子 + dist/ 实时, public/ 仅 npm run build 时被拷贝, 运行时不读)。
+ */
+const OPC_STATUS_FILE = path.join(DIST, "company", "opc", "status.json");
+const OPC_STREAM_MAX_CLIENTS = 50;            // 并发上限: 超限新连接直接 503(防滥用), 可调
+const OPC_STREAM_DEBOUNCE_MS = 200;           // fs.watch 防抖: 写是整文件覆盖(open 'w' 截断+写), 立即读可能读到半截
+const OPC_STREAM_FALLBACK_POLL_MS = 30 * 1000; // 兜底轮询周期(非主路径, 见 opcStreamStartWatcher)
+const OPC_STREAM_HEARTBEAT_MS = 27 * 1000;    // 保活心跳(25~30s 区间取 27s, 防 CF ~100s 空闲超时)
+
+const opcStreamClients = new Set();  // 全局流客户端集合: {res, hb} — hb 心跳定时器随断连清理
+let opcStreamWatcher = null;         // fs.watch 句柄(无客户端时关闭, 首连懒启动)
+let opcStreamFallbackTimer = null;   // 兜底轮询定时器(同上)
+let opcStreamDebounceTimer = null;   // fs.watch 事件防抖定时器
+let opcStreamLastMtime = 0;          // 兜底轮询 mtime 对比基准
+
+// 读当前 status.json 全量快照; 失败(半截/不存在)返回 null, 调用方跳过, 绝不 crash
+function opcStreamReadSnapshot() {
+  try { return JSON.parse(fs.readFileSync(OPC_STATUS_FILE, "utf-8")); } catch { return null; }
+}
+// 广播当前全量快照给所有全局流客户端
+function opcStreamBroadcast() {
+  const snap = opcStreamReadSnapshot();
+  if (snap == null) return; // 写窗口半截/暂缺: 跳过, 等下一次 change
+  for (const c of opcStreamClients) sendEvent(c.res, "status", snap);
+}
+// 懒启动 watcher(首个客户端连接时): fs.watch 主路径 + 30s mtime 轮询兜底。
+// 兜底说明: fs.watch 在部分平台/文件系统(网络盘/容器/编辑器原子替换)不可靠可能丢事件,
+// 轮询每 30s 对比 mtimeMs, 变了才推——这是保险, 非主路径。
+function opcStreamStartWatcher() {
+  if (opcStreamWatcher || opcStreamFallbackTimer) return;
+  try { opcStreamLastMtime = fs.statSync(OPC_STATUS_FILE).mtimeMs; } catch { opcStreamLastMtime = 0; }
+  try {
+    opcStreamWatcher = fs.watch(OPC_STATUS_FILE, { persistent: false }, () => {
+      if (opcStreamDebounceTimer) clearTimeout(opcStreamDebounceTimer);
+      opcStreamDebounceTimer = setTimeout(() => { opcStreamDebounceTimer = null; opcStreamBroadcast(); }, OPC_STREAM_DEBOUNCE_MS);
+    });
+  } catch (e) {
+    console.error("[opc-stream] fs.watch unavailable, falling back to 30s poll:", e.message);
+    opcStreamWatcher = null;
+  }
+  opcStreamFallbackTimer = setInterval(() => {
+    let mtime = 0;
+    try { mtime = fs.statSync(OPC_STATUS_FILE).mtimeMs; } catch { return; }
+    if (mtime !== opcStreamLastMtime) { opcStreamLastMtime = mtime; opcStreamBroadcast(); }
+  }, OPC_STREAM_FALLBACK_POLL_MS);
+  opcStreamFallbackTimer.unref();
+}
+function opcStreamStopWatcher() {
+  if (opcStreamWatcher) { try { opcStreamWatcher.close(); } catch {} opcStreamWatcher = null; }
+  if (opcStreamFallbackTimer) { clearInterval(opcStreamFallbackTimer); opcStreamFallbackTimer = null; }
+  if (opcStreamDebounceTimer) { clearTimeout(opcStreamDebounceTimer); opcStreamDebounceTimer = null; }
+}
+
+/* ---------------- OPC 透明办公室 demo 体验（12a: 后端引擎） ----------------
+ * 访客在 /company/opc/ 点预设按钮 → 服务端白名单校验 → 写请求文件 → 庄子派活 cron
+ * (opc_demo_dispatch.py) 在 demo board 建卡 → 潘明执行 → 报告回传 results/<demo_id>.md。
+ * 安全设计（Gavin 拍板，硬约束）:
+ *   1. 只允许 4 个预设按钮, 服务端白名单校验, 访客文本一律忽略(防 prompt 注入/防外人驱动 agent 干任意事)
+ *   2. 防刷/限流: 同 IP 频控 + 全局并发上限(在飞 ≤2) + 同 IP 同任务去重(有缓存/在飞直接返回现有状态)
+ *   3. 任务隔离: demo 用独立 board(boards/demo/kanban.db) + priority=0, 排在正式任务后
+ *   4. 报告缓存 + 回看(history)
+ *   5. 数据隔离: demo 任务只查外部公开信息, 禁止读内部文件/凭据(约束写进任务 body)
+ *   6. 进展实时性: SSE 端点 /api/opc/demo/{id}/stream 推送状态变化(唯一秒级实时性场景, 不走轮询;
+ *      普通看板前端轮询 10s 即可——status.json 分钟级变化, 10s 已追平)
+ */
+const DEMO_TASKS = {
+  v2ex_hot:         { name: "V2EX 热帖",   prompt: "帮我收集一下 v2ex 十个热帖（标题+链接+热度）" },
+  gz_weather:       { name: "广州天气",     prompt: "帮我查一下广州未来 15 天的天气" },
+  gz_trip:          { name: "广州周边旅行", prompt: "给我一个广州周边旅行的计划（2-3 天行程）" },
+  niulai_boxoffice: { name: "牛来票房",     prompt: "帮我看看《牛来》这个电影的实时票房" },
+};
+const DEMO_DIR = path.join(__dirname, "data", "demo");
+const DEMO_REQ_DIR = path.join(DEMO_DIR, "requests");
+const DEMO_RES_DIR = path.join(DEMO_DIR, "results");
+const DEMO_STATUS_FILE = path.join(DEMO_DIR, "status.json");
+const DEMO_RATE_WINDOW_MS = 60 * 1000;   // 同 IP 频控窗口: 1 次/60s（防烧钱/防刷，可调）
+const DEMO_RATE_MAX = 1;                 // 同 IP 频控上限
+const DEMO_MAX_INFLIGHT = 2;             // 全局并发上限: 在飞(queued/dispatched/running) ≤2
+const DEMO_HISTORY_MAX = 20;             // 回看入口最多 20 条
+const DEMO_SSE_POLL_MS = 2000;           // SSE 内部状态轮询间隔（状态分钟级变化，2s 追平足够）
+const DEMO_SSE_MAX_MS = 15 * 60 * 1000;  // SSE 连接硬上限 15 分钟，防资源泄漏
+const demoLimiter = makeLimiter(DEMO_RATE_WINDOW_MS, DEMO_RATE_MAX);
+
+// 启动时把预设表同步成 presets.json（供 opc_demo_dispatch.py 读取，单一事实源；服务端仍是硬编码白名单）
+try {
+  fs.mkdirSync(DEMO_DIR, { recursive: true });
+  fs.writeFileSync(path.join(DEMO_DIR, "presets.json"), JSON.stringify(DEMO_TASKS, null, 2));
+} catch (e) { console.error("[demo] presets.json sync error:", e.message); }
+
+function demoReadStatus() {
+  try { return JSON.parse(fs.readFileSync(DEMO_STATUS_FILE, "utf-8")); } catch { return { tasks: {}, history: [] }; }
+}
+function demoWriteStatus(s) {
+  fs.mkdirSync(DEMO_DIR, { recursive: true });
+  fs.writeFileSync(DEMO_STATUS_FILE, JSON.stringify(s, null, 2));
+}
+// 对外视图: 不含 ip（隐私），completed 时附带报告 markdown（读结果文件）
+function demoTaskView(s, id) {
+  const t = s.tasks[id];
+  if (!t) return null;
+  const v = {
+    demo_id: id, task_id: t.task_id, status: t.status,
+    kanban_task_id: t.kanban_task_id || null,
+    created_at: t.created_at, started_at: t.started_at || null, finished_at: t.finished_at || null,
+  };
+  if (t.status === "completed") {
+    v.report_md = "";
+    try { v.report_md = fs.readFileSync(path.join(DEMO_RES_DIR, `${id}.md`), "utf-8"); } catch {}
+  }
+  return v;
+}
+
 // 读取 POST body, 超过 limit 字节即停止累积({ tooBig: true }), 防止无限读入
 function readBodyWithLimit(req, limit) {
   return new Promise((resolve) => {
@@ -400,6 +621,72 @@ function readBodyWithLimit(req, limit) {
 const server = http.createServer(async (req, res) => {
   try {
     const u = new URL(req.url, "http://localhost");
+    // ---- OPC 全局状态流 SSE: GET /api/opc/stream（15a, 持续推送不关闭）----
+    if (u.pathname === "/api/opc/stream" && req.method === "GET") {
+      stats.reqs++;
+      const ip = clientIp(req);
+      trackActiveIp(ip);
+      const cors = corsHeadersFor(req);
+      if (!apiLimiter(ip)) { stats.blocked++; send(res, 429, { ok: false, error: "too many requests" }, cors); return; }
+      // 并发上限: 超出直接 503, 客户端应退避重连(EventSource 原生支持断线自动重连)
+      if (opcStreamClients.size >= OPC_STREAM_MAX_CLIENTS) {
+        send(res, 503, { ok: false, error: "too many concurrent stream clients" }, cors);
+        return;
+      }
+      const headers = { ...cors };
+      if (headers["Access-Control-Allow-Origin"] == null) delete headers["Access-Control-Allow-Origin"];
+      setSSEHeaders(res, headers);
+      const client = { res, hb: sseHeartbeat(res, OPC_STREAM_HEARTBEAT_MS) };
+      res.on("error", () => {}); // 断连竞态下迟到 write 会 emit error, 吞掉防进程 crash
+      opcStreamClients.add(client);
+      // 1) 连接建立: 立即推当前 status.json 全量快照(前端首帧无需再 fetch)
+      const snap = opcStreamReadSnapshot();
+      if (snap) sendEvent(res, "status", snap);
+      opcStreamStartWatcher();
+      // 6) 断连清理: 移出集合 + 清心跳定时器(防内存泄漏); 无客户端时停 watcher
+      req.on("close", () => {
+        opcStreamClients.delete(client);
+        clearInterval(client.hb);
+        if (opcStreamClients.size === 0) opcStreamStopWatcher();
+      });
+      return;
+    }
+    // ---- OPC demo 进展 SSE: GET /api/opc/demo/{id}/stream（Gavin 拍板: 秒级实时性唯一场景走 SSE, 不用 WebSocket）----
+    // 状态变更推送; status.json 即事件事实源。终态推送后服务端关闭, 客户端据此断开 EventSource。
+    const demoStream = u.pathname.match(/^\/api\/opc\/demo\/([^/]{1,64})\/stream$/);
+    if (demoStream && req.method === "GET") {
+      stats.reqs++;
+      const ip = clientIp(req);
+      trackActiveIp(ip);
+      const cors = corsHeadersFor(req);
+      if (!apiLimiter(ip)) { stats.blocked++; send(res, 429, { ok: false, error: "too many requests" }, cors); return; }
+      const demoId = demoStream[1];
+      const s0 = demoReadStatus();
+      if (!s0.tasks[demoId]) { send(res, 404, { ok: false, error: "demo not found" }, cors); return; }
+      const headers = { ...cors };
+      if (headers["Access-Control-Allow-Origin"] == null) delete headers["Access-Control-Allow-Origin"];
+      setSSEHeaders(res, headers); // 15a: 与全局流共用公共设施; 帧格式/行为逐字节不变
+      let lastSig = "";
+      const push = (v) => {
+        if (!v) return;
+        const sig = `${v.status}|${v.kanban_task_id || ""}|${v.finished_at || ""}`;
+        if (sig === lastSig) return; // 去重: 状态无变化不重复推
+        lastSig = sig;
+        sendEvent(res, "status", v);
+      };
+      push(demoTaskView(s0, demoId));
+      const timer = setInterval(() => {
+        const v = demoTaskView(demoReadStatus(), demoId);
+        push(v);
+        if (v && (v.status === "completed" || v.status === "failed")) {
+          clearInterval(timer);
+          setTimeout(() => { try { res.end(); } catch {} }, 500); // 终态事件送达后 500ms 关闭
+        }
+      }, DEMO_SSE_POLL_MS);
+      const maxTimer = setTimeout(() => { clearInterval(timer); try { res.end(); } catch {} }, DEMO_SSE_MAX_MS);
+      req.on("close", () => { clearInterval(timer); clearTimeout(maxTimer); });
+      return;
+    }
     if (routes[u.pathname]) {
       stats.reqs++;
       const ip = clientIp(req);
@@ -435,7 +722,7 @@ const server = http.createServer(async (req, res) => {
           }
           try { body = JSON.parse(r.buf.toString()); } catch { send(res, 400, { ok: false, error: "invalid json body" }, cors); return; }
         }
-        const data = await routes[u.pathname](u.searchParams, body);
+        const data = await routes[u.pathname](u.searchParams, body, req);
         send(res, 200, { ok: true, data, ts: Date.now() }, cors);
       } catch (e) {
         // 错误回显契约: 内部细节只记日志; err.status 由可预期的业务错误(队列满/问财配额等)携带,
@@ -452,7 +739,7 @@ const server = http.createServer(async (req, res) => {
     }
     // 静态资源 + SPA fallback
     let p = decodeURIComponent(u.pathname);
-    if (p === "/") p = "/index.html";
+    if (p === "/" || p.endsWith("/")) p += "index.html";
     const file = path.join(DIST, path.normalize(p));
     if (file !== DIST && !file.startsWith(DIST + path.sep)) {
       send(res, 403, { ok: false });
@@ -462,14 +749,26 @@ const server = http.createServer(async (req, res) => {
       if (err) {
         // 带扩展名的资源未命中: 直接 404, 不回退 index.html(避免 200+HTML 伪装成 JS/CSS)
         if (path.extname(file)) return send(res, 404, { ok: false, error: "not found" });
-        fs.readFile(path.join(DIST, "index.html"), (e2, html) => {
-          if (e2) return send(res, 404, { ok: false });
-          res.writeHead(200, {
-            "Content-Type": "text/html; charset=utf-8",
-            "Content-Security-Policy": CSP,
-            ...STATIC_HEADERS,
+        // 目录路径(如 /company 不带尾斜杠): 先试目录内 index.html, 再 SPA fallback
+        fs.readFile(path.join(file, "index.html"), (e3, dirHtml) => {
+          if (!e3) {
+            const h = {
+              "Content-Type": "text/html; charset=utf-8",
+              ...STATIC_HEADERS,
+            };
+            h["Content-Security-Policy"] = u.pathname.startsWith("/company") ? COMPANY_CSP : CSP;
+            res.writeHead(200, h);
+            return res.end(dirHtml);
+          }
+          fs.readFile(path.join(DIST, "index.html"), (e2, html) => {
+            if (e2) return send(res, 404, { ok: false });
+            res.writeHead(200, {
+              "Content-Type": "text/html; charset=utf-8",
+              "Content-Security-Policy": CSP,
+              ...STATIC_HEADERS,
+            });
+            res.end(html);
           });
-          res.end(html);
         });
         return;
       }
@@ -478,7 +777,15 @@ const server = http.createServer(async (req, res) => {
         "Cache-Control": file.includes("/assets/") ? "public, max-age=31536000, immutable" : "no-cache",
         ...STATIC_HEADERS,
       };
-      if (file.endsWith(".html")) headers["Content-Security-Policy"] = CSP;
+      if (file.endsWith(".html")) headers["Content-Security-Policy"] = u.pathname.startsWith("/company") ? COMPANY_CSP : CSP;
+      // OPC 透明办公室数据跨域读: 仅 www.hermes.cc.cd(Pages 独立站)可读
+      if (u.pathname === "/company/opc/status.json") {
+        headers["Access-Control-Allow-Origin"] = "https://www.hermes.cc.cd";
+        headers["Vary"] = "Origin";
+        // 13a 安全加固: CF 边缘短缓存 10s 吸收前端 10s 轮询刷新量(回源率降 ~90%);
+        // 浏览器侧同样 10s(2 分钟级数据, 10s 旧无感); s-maxage 对共享缓存生效
+        headers["Cache-Control"] = "public, max-age=10, s-maxage=10";
+      }
       res.writeHead(200, headers);
       res.end(buf);
     });
