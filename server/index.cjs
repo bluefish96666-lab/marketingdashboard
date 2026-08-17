@@ -270,9 +270,11 @@ const routes = {
     if (!demoLimiter(ip)) { const e = new Error("demo rate limited"); e.status = 429; throw e; }
     const s = demoReadStatus();
     // c) 去重: 同 IP 同任务有缓存(completed)/在飞 → 直接返回现有状态; failed 允许重试
-    const existing = Object.values(s.tasks).find((t) => t.ip === ip && t.task_id === taskId);
-    if (existing && existing.status !== "failed") {
-      return { demo_id: existing.demo_id, status: existing.status, task_id: existing.task_id, cached: true };
+    //    注意: tasks 的 value 不含 demo_id, 必须从 key 取(旧版用 existing.demo_id 恒为 undefined,
+    //    JSON 序列化丢弃 → 前端拿不到 demo_id → 误报「体验服务暂不可用」, 12c 实测发现并修复)
+    const existing = Object.entries(s.tasks).find(([, t]) => t.ip === ip && t.task_id === taskId);
+    if (existing && existing[1].status !== "failed") {
+      return { demo_id: existing[0], status: existing[1].status, task_id: existing[1].task_id, cached: true };
     }
     // d) 全局并发上限: 在飞(queued/dispatched/running) ≤ DEMO_MAX_INFLIGHT
     const inflight = Object.values(s.tasks)
