@@ -675,7 +675,7 @@ function opcStreamStopWatcher() {
 const DEMO_TASKS = {
   v2ex_hot:         { name: "V2EX 热帖",   prompt: "帮我收集一下 v2ex 十个热帖（标题+链接+热度）" },
   gz_weather:       { name: "广州天气",     prompt: "帮我查一下广州未来 15 天的天气。请使用国内天气数据源（中国天气网/中国气象局数据）：通过服务端天气代理接口获取数据（GET http://localhost:3000/api/opc/demo/weather/gz，本机服务；如不可用可尝试公网 https://mrd.hermes.cc.cd/api/opc/demo/weather/gz），该接口返回广州未来 15 天预报 JSON（含 data_source/fetched_at/days）。报告中必须标注「数据来源：中国天气网（中国气象局）」和抓取时间。" },
-  gz_trip:          { name: "广州周边旅行", prompt: "给我一个广州周边旅行的计划（2-3 天行程）" },
+  gz_trip:          { name: "广州周边旅行", prompt: "给我一个广州周边旅行的计划（2-3 天行程）。行程涉及天气，请使用国内天气数据源（中国天气网/中国气象局数据）：通过服务端天气代理接口获取数据（GET http://localhost:3000/api/opc/demo/weather/gz，本机服务；如不可用可尝试公网 https://mrd.hermes.cc.cd/api/opc/demo/weather/gz），报告中必须标注「数据来源：中国天气网（中国气象局）」和抓取时间。" },
   niulai_boxoffice: { name: "牛来票房",     prompt: "帮我看看《牛来》这个电影的实时票房" },
 };
 const DEMO_DIR = path.join(__dirname, "data", "demo");
