@@ -16,6 +16,12 @@ dist-ssr
 server/.env
 server/data/
 
+# 每日备份快照(不入库)
+backups/
+
+# 透明办公室运行时状态(分钟级变化, 与 dist 同理不入库)
+public/company/opc/status.json
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

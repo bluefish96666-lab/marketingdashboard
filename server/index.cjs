@@ -170,6 +170,9 @@ const { handleChainParse } = require("./lib/chain-parse.cjs");
 const GITHUB_STARS_OWNER = "theBigGavin";
 const GITHUB_STARS_WHITELIST = ["marketingdashboard", "mylauncher"];
 
+// OPC token 监控(Gavin 指令 2/4): 读上游 cron(每小时)产出的 token-stats.json, 供公司落地页 fetch
+const TOKEN_STATS_PATH = "/home/gavin/.hermes/opc/token-stats.json";
+
 /* ---------------- 主机路由表 ---------------- */
 const routes = {
   "/api/quotes": async (q) => handleQuotes(q.get("codes") || ""), // 内部按代码独立缓存(TTL 5s)
@@ -320,6 +323,25 @@ const routes = {
       return { total: picked.reduce((s, r) => s + r.stars, 0), repos: picked, ts: Date.now() };
     }),
   "/api/openrouter-usage": async () => cached("or-usage", 3600000, () => handleOpenRouterUsage()), // 1h cache
+  // OPC token 监控: 透传 token-stats.json(上游小时级刷新, 60s 缓存足够); 文件缺失/坏 JSON 抛可预期错误(外层回显 ok:false), 绝不伪造数字
+  "/api/token-stats": async () =>
+    cached("token-stats", 60000, async () => {
+      let raw;
+      try {
+        raw = fs.readFileSync(TOKEN_STATS_PATH, "utf8");
+      } catch {
+        const e = new Error("token-stats 数据未就绪");
+        e.status = 503;
+        throw e;
+      }
+      try {
+        return JSON.parse(raw);
+      } catch {
+        const e = new Error("token-stats 数据未就绪");
+        e.status = 503;
+        throw e;
+      }
+    }),
   "/api/ai-infra": async () => cached("ai-infra", 24 * 3600 * 1000, () => handleAiInfra()), // 财报/定价日更, 24h 缓存
   "/api/mystery-select": async (q) =>
     cached(`ms:${q.get("query")}:${q.get("limit")}:${q.get("page")}`, 60000, () =>
@@ -395,6 +417,9 @@ const routes = {
     }
     return { items, count: items.length };
   },
+  // gz_weather 国内天气数据代理（12d）: 服务端持上游(中国天气网/中国气象局), agent 只经此端点取数
+  "/api/opc/demo/weather/gz": async () =>
+    cached("gz-weather", GZ_WEATHER_TTL_MS, () => handleGzWeather()),
 };
 
 const MIME = {
@@ -645,7 +670,7 @@ function opcStreamStopWatcher() {
  */
 const DEMO_TASKS = {
   v2ex_hot:         { name: "V2EX 热帖",   prompt: "帮我收集一下 v2ex 十个热帖（标题+链接+热度）" },
-  gz_weather:       { name: "广州天气",     prompt: "帮我查一下广州未来 15 天的天气" },
+  gz_weather:       { name: "广州天气",     prompt: "帮我查一下广州未来 15 天的天气。请使用国内天气数据源（中国天气网/中国气象局数据）：通过服务端天气代理接口获取数据（GET http://localhost:3000/api/opc/demo/weather/gz，本机服务；如不可用可尝试公网 https://mrd.hermes.cc.cd/api/opc/demo/weather/gz），该接口返回广州未来 15 天预报 JSON（含 data_source/fetched_at/days）。报告中必须标注「数据来源：中国天气网（中国气象局）」和抓取时间。" },
   gz_trip:          { name: "广州周边旅行", prompt: "给我一个广州周边旅行的计划（2-3 天行程）" },
   niulai_boxoffice: { name: "牛来票房",     prompt: "帮我看看《牛来》这个电影的实时票房" },
 };
@@ -672,6 +697,133 @@ try {
   fs.mkdirSync(DEMO_DIR, { recursive: true });
   fs.writeFileSync(path.join(DEMO_DIR, "presets.json"), JSON.stringify(DEMO_TASKS, null, 2));
 } catch (e) { console.error("[demo] presets.json sync error:", e.message); }
+
+/* ---------------- gz_weather 数据源整改（12d）: 国内 API 天气代理 ----------------
+ * Gavin 拍板: demo「广州天气」弃用国际 API(Open-Meteo 对中国城市数据不准), 改国内数据源。
+ * 首选和风天气 QWeather(devapi.qweather.com, 中国气象局数据源), 但本机 IP 被和风 API/
+ * 控制台 403 拦截(Invalid Host, 直连+本地代理均被拒) → 按任务预案降级到
+ * 中国天气网/中国气象局 公开接口(免 key, 国内官方数据源)。
+ * 安全架构(Gavin 硬约束): 上游调用只在服务端, agent 仅经本代理端点取数;
+ * 凭据绝不进任务 body/访客报告/前端(本实现免 key, 无密钥可泄漏)。
+ */
+const GZ_WEATHER_CITY = "101280101"; // 广州(中国天气网城市码)
+const GZ_WEATHER_STATION = "59287";  // 广州(中国气象局站号)
+const GZ_WEATHER_7D_URL = `https://www.weather.com.cn/weather/${GZ_WEATHER_CITY}.shtml`;     // 第 1-7 天
+const GZ_WEATHER_15D_URL = `https://www.weather.com.cn/weather15d/${GZ_WEATHER_CITY}.shtml`; // 第 8-15 天
+const GZ_WEATHER_CMA_URL = `https://weather.cma.cn/api/weather/${GZ_WEATHER_STATION}`;       // 气象局 JSON 兜底(第 1-7 天)
+const GZ_WEATHER_REFERER = "https://www.weather.com.cn/";
+const GZ_WEATHER_TTL_MS = 30 * 60 * 1000;        // 预报 4 次/天更新, 30 分钟缓存足够
+const GZ_WEATHER_DEGRADE_TTL_MS = 5 * 60 * 1000; // 降级(仅 1-7 天)短缓存, 尽快重试上游
+
+function gzWeatherDate(offsetDays) { // 北京时 今天 + N 天 → "YYYY-MM-DD"
+  return new Date(Date.now() + 8 * 3600e3 + offsetDays * 86400e3).toISOString().slice(0, 10);
+}
+function gzWeatherNow() { // 北京时 → "YYYY-MM-DD HH:mm (UTC+8)"
+  return `${new Date(Date.now() + 8 * 3600e3).toISOString().replace("T", " ").slice(0, 16)} (UTC+8)`;
+}
+
+// 中国天气网 7 天页: <li class="sky ..."><h1>17日（今天）</h1>...<p title="中雨" class="wea">..</p>
+//   <p class="tem"><span>35</span>/<i>26℃</i></p><p class="win">...<span title="无持续风向" class="NNW"></span><i><3级</i></p>
+function parseWeather7dHtml(html, start) {
+  const rows = [];
+  const liRe = /<li\s+class="sky[^"]*"[^>]*>([\s\S]*?)<\/li>/g;
+  let m;
+  while ((m = liRe.exec(html))) {
+    const b = m[1];
+    if (!/<h1>\s*\d{1,2}日（(?:今天|明天|后天|周.)）\s*<\/h1>/.test(b)) continue;
+    const tem = b.match(/<p\s+class="tem">\s*<span>([^<]+)<\/span>\s*\/\s*<i>([^<]+)<\/i>/);
+    const win = b.match(/<p\s+class="win">([\s\S]*?)<\/p>/);
+    const winDir = win && (win[1].match(/<span\s+title="([^"]*)"\s+class="[^"]*"><\/span>/) || [])[1];
+    const winScale = win && (win[1].match(/<i>([\s\S]*?)<\/i>/) || [])[1];
+    rows.push({
+      date: gzWeatherDate(start + rows.length),
+      dayText: ((b.match(/<p\s+title="([^"]*)"\s+class="wea">/) || [])[1] || "").trim(),
+      high: tem ? parseInt(tem[1], 10) : null,
+      low: tem ? parseInt(tem[2].replace("℃", ""), 10) : null,
+      windDir: winDir ? winDir.trim() : "",
+      windScale: winScale ? winScale.trim() : "",
+    });
+  }
+  return rows;
+}
+
+// 中国天气网 15 天页第 8-15 天: <li ...><span class="time">周一（24日）</span>...
+//   <span class="wea">雨</span><span class="tem"><em>30℃</em>/25℃</span><span class="wind">东风</span><span class="wind1"><3级</span>
+function parseWeather15dHtml(html, start) {
+  const rows = [];
+  const ulM = html.match(/<ul\s+class="t clearfix">([\s\S]*?)<\/ul>/);
+  if (!ulM) return rows;
+  const liRe = /<li[^>]*>([\s\S]*?)<\/li>/g;
+  let m;
+  while ((m = liRe.exec(ulM[1]))) {
+    const b = m[1];
+    if (!/<span\s+class="time">周.（(\d{1,2})日）<\/span>/.test(b)) continue;
+    const tem = b.match(/<span\s+class="tem"><em>(\d+)℃<\/em>\s*\/\s*(\d+)℃<\/span>/);
+    rows.push({
+      date: gzWeatherDate(start + rows.length),
+      dayText: ((b.match(/<span\s+class="wea">([\s\S]*?)<\/span>/) || [])[1] || "").trim(),
+      high: tem ? parseInt(tem[1], 10) : null,
+      low: tem ? parseInt(tem[2], 10) : null,
+      windDir: ((b.match(/<span\s+class="wind">([\s\S]*?)<\/span>/) || [])[1] || "").trim(),
+      windScale: ((b.match(/<span\s+class="wind1">([\s\S]*?)<\/span>/) || [])[1] || "").trim(),
+    });
+  }
+  return rows;
+}
+
+// 中国气象局(weather.cma.cn) JSON 兜底: daily[{date,high,low,dayText,nightText,dayWindDirection,dayWindScale}]
+function parseWeatherCmaDaily(txt) {
+  const d = JSON.parse(txt);
+  const daily = d?.data?.daily;
+  if (!Array.isArray(daily)) return [];
+  return daily.map((x, i) => ({
+    date: String(x.date || "").replace(/\//g, "-") || gzWeatherDate(i),
+    dayText: x.dayText || x.nightText || "",
+    high: x.high != null ? Math.round(x.high) : null,
+    low: x.low != null ? Math.round(x.low) : null,
+    windDir: x.dayWindDirection || "",
+    windScale: x.dayWindScale || "",
+  }));
+}
+
+// 上游: 1-7 天(中国天气网 7 天页 → 兜底中国气象局 JSON) + 8-15 天(中国天气网 15 天页)
+async function handleGzWeather() {
+  let days = [];
+  let updateTime = null;
+  let note = null;
+  try {
+    const h7 = await fetchWithFallback(GZ_WEATHER_7D_URL, { referer: GZ_WEATHER_REFERER, retries: 1 });
+    days = parseWeather7dHtml(h7, 0);
+    const um = h7.match(/id="hidden_title"[^>]*value="([^"]*)"/);
+    if (um) updateTime = um[1].trim();
+  } catch {}
+  if (!days.length) {
+    // 7 天页失败 → 中国气象局 JSON 兜底
+    try {
+      const cma = await fetchWithFallback(GZ_WEATHER_CMA_URL, { retries: 1 });
+      days = parseWeatherCmaDaily(cma);
+      try { const du = JSON.parse(cma)?.data?.lastUpdate; if (du) updateTime = du; } catch {}
+    } catch {}
+  }
+  if (!days.length) { const e = new Error("weather upstream unavailable"); e.status = 502; throw e; }
+  try {
+    const h15 = await fetchWithFallback(GZ_WEATHER_15D_URL, { referer: GZ_WEATHER_REFERER, retries: 1 });
+    const tail = parseWeather15dHtml(h15, days.length);
+    if (tail.length) days = days.concat(tail);
+    else note = "15 天预报页未取到第 8-15 天数据，仅含第 1-7 天";
+  } catch { note = "15 天预报上游暂不可用，仅含第 1-7 天"; }
+  const out = {
+    city: "广州",
+    data_source: "中国天气网（中国气象局）",
+    fetched_at: gzWeatherNow(),
+    update_time: updateTime,
+    day_count: days.length,
+    days,
+  };
+  if (note) out.note = note;
+  // 降级(不满 15 天)用短 TTL 尽快重试上游; 完整 15 天用常规 TTL
+  return days.length >= 15 ? out : { ...out, __ttl: GZ_WEATHER_DEGRADE_TTL_MS };
+}
 
 function demoReadStatus() {
   try { return JSON.parse(fs.readFileSync(DEMO_STATUS_FILE, "utf-8")); } catch { return { tasks: {}, history: [] }; }
@@ -792,7 +944,7 @@ const server = http.createServer(async (req, res) => {
     // 触发 preflight, 现返回 400 导致浏览器拦截; 这里放行白名单来源并返回完整 CORS 头。
     // status/history/SSE 流为简单 GET(无自定义头)不触发 preflight, 由响应 ACAO 放行。
     // 官网合作咨询(改版5): /api/contact 同走 www.hermes.cc.cd 白名单(落地页表单跨源提交)。
-    if (req.method === "OPTIONS" && (u.pathname.startsWith("/api/opc/") || u.pathname === "/api/contact" || u.pathname === "/api/visits")) {
+    if (req.method === "OPTIONS" && (u.pathname.startsWith("/api/opc/") || u.pathname === "/api/contact" || u.pathname === "/api/visits" || u.pathname === "/api/token-stats")) {
       const cors = opcCorsHeaders(req);
       if (cors["Access-Control-Allow-Origin"] == null) {
         send(res, 403, { ok: false, error: "forbidden" }, cors);
@@ -810,7 +962,7 @@ const server = http.createServer(async (req, res) => {
       stats.reqs++;
       const ip = clientIp(req);
       trackActiveIp(ip);
-      const cors = u.pathname.startsWith("/api/opc/") || u.pathname === "/api/contact" || u.pathname === "/api/visits"
+      const cors = u.pathname.startsWith("/api/opc/") || u.pathname === "/api/contact" || u.pathname === "/api/visits" || u.pathname === "/api/token-stats"
         ? opcCorsHeaders(req)
         : corsHeadersFor(req);
       // 按 IP 限流(先于缓存命中判断, 防唯一 key 旋转造成的上游请求放大)
