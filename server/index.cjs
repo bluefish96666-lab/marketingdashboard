@@ -390,6 +390,20 @@ function corsHeadersFor(req) {
   return { "Access-Control-Allow-Origin": origin && isSameOrigin(req) ? origin : null };
 }
 
+// OPC 透明办公室/demo API 跨源白名单(12c): 仅 www.hermes.cc.cd(CF Pages 静态站, 无后端)允许跨源
+// 读写 demo 链路; 其余跨源 origin 一律不下发 ACAO(维持"默认不授权任何跨源浏览器读取"基线)
+const OPC_CORS_ORIGINS = new Set(["https://www.hermes.cc.cd"]);
+
+// /api/opc/* 专用: 同源(或环回开发)反射 Origin; 跨源仅白名单放行; 其余不下发
+function opcCorsHeaders(req) {
+  const origin = req.headers.origin;
+  if (!origin) return { "Access-Control-Allow-Origin": null };
+  if (isSameOrigin(req) || OPC_CORS_ORIGINS.has(origin)) {
+    return { "Access-Control-Allow-Origin": origin, Vary: "Origin" };
+  }
+  return { "Access-Control-Allow-Origin": null };
+}
+
 /* ---------------- 按客户端 IP 限流(CF Tunnel 后真实 IP 取 CF-Connecting-IP 头) ---------------- */
 // 仅当连接来自可信代理(Cloudflare 边缘网段或本机环回)时采信代理头, 否则用 socket 地址,
 // 防止绕过 Tunnel 直连时伪造 cf-connecting-ip/x-forwarded-for 刷穿限流
@@ -626,7 +640,7 @@ const server = http.createServer(async (req, res) => {
       stats.reqs++;
       const ip = clientIp(req);
       trackActiveIp(ip);
-      const cors = corsHeadersFor(req);
+      const cors = opcCorsHeaders(req);
       if (!apiLimiter(ip)) { stats.blocked++; send(res, 429, { ok: false, error: "too many requests" }, cors); return; }
       // 并发上限: 超出直接 503, 客户端应退避重连(EventSource 原生支持断线自动重连)
       if (opcStreamClients.size >= OPC_STREAM_MAX_CLIENTS) {
@@ -658,7 +672,7 @@ const server = http.createServer(async (req, res) => {
       stats.reqs++;
       const ip = clientIp(req);
       trackActiveIp(ip);
-      const cors = corsHeadersFor(req);
+      const cors = opcCorsHeaders(req);
       if (!apiLimiter(ip)) { stats.blocked++; send(res, 429, { ok: false, error: "too many requests" }, cors); return; }
       const demoId = demoStream[1];
       const s0 = demoReadStatus();
@@ -687,11 +701,28 @@ const server = http.createServer(async (req, res) => {
       req.on("close", () => { clearInterval(timer); clearTimeout(maxTimer); });
       return;
     }
+    // ---- OPC demo/透明办公室 API 跨域预检(12c): www Pages 站跨源 POST(content-type: application/json)
+    // 触发 preflight, 现返回 400 导致浏览器拦截; 这里放行白名单来源并返回完整 CORS 头。
+    // status/history/SSE 流为简单 GET(无自定义头)不触发 preflight, 由响应 ACAO 放行。
+    if (req.method === "OPTIONS" && u.pathname.startsWith("/api/opc/")) {
+      const cors = opcCorsHeaders(req);
+      if (cors["Access-Control-Allow-Origin"] == null) {
+        send(res, 403, { ok: false, error: "forbidden" }, cors);
+      } else {
+        send(res, 200, { ok: true }, {
+          ...cors,
+          "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+          "Access-Control-Allow-Headers": "Content-Type",
+          "Access-Control-Max-Age": "600",
+        });
+      }
+      return;
+    }
     if (routes[u.pathname]) {
       stats.reqs++;
       const ip = clientIp(req);
       trackActiveIp(ip);
-      const cors = corsHeadersFor(req);
+      const cors = u.pathname.startsWith("/api/opc/") ? opcCorsHeaders(req) : corsHeadersFor(req);
       // 按 IP 限流(先于缓存命中判断, 防唯一 key 旋转造成的上游请求放大)
       const allowed = (PROTECTED_ROUTES.has(u.pathname) ? protectedLimiter : apiLimiter)(clientIp(req));
       if (!allowed) {
