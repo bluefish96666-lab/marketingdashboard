@@ -7,6 +7,7 @@ const http = require("http");
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
+const { spawn } = require("child_process");
 const { num, changeOf, pctOf, fmtHHMM, toMarketCode6 } = require("./lib/format.cjs");
 const { parseCsvParam, chunked, safeRecord } = require("./lib/netutil.cjs");
 const { bjToday, readHistory, writeHistory } = require("./lib/persist.cjs");
@@ -392,6 +393,7 @@ const routes = {
       created_at: now, started_at: null, finished_at: null, kanban_task_id: null,
     };
     demoWriteStatus(s);
+    spawnDispatchScript(); // 派活提速: 写请求文件成功后立即 spawn dispatch, 不等 1 分钟 cron(失败静默, cron 兜底)
     return { demo_id: demoId, status: "queued", task_id: taskId };
   },
   "/api/opc/demo/status": async (q) => {
@@ -649,11 +651,13 @@ function opcStreamStartWatcher() {
     if (mtime !== opcStreamLastMtime) { opcStreamLastMtime = mtime; opcStreamBroadcast(); }
   }, OPC_STREAM_FALLBACK_POLL_MS);
   opcStreamFallbackTimer.unref();
+  demoStreamStartWatcher(); // demo/status.json 同生命周期: 有客户端才盯, 无客户端即关
 }
 function opcStreamStopWatcher() {
   if (opcStreamWatcher) { try { opcStreamWatcher.close(); } catch {} opcStreamWatcher = null; }
   if (opcStreamFallbackTimer) { clearInterval(opcStreamFallbackTimer); opcStreamFallbackTimer = null; }
   if (opcStreamDebounceTimer) { clearTimeout(opcStreamDebounceTimer); opcStreamDebounceTimer = null; }
+  demoStreamStopWatcher();
 }
 
 /* ---------------- OPC 透明办公室 demo 体验（12a: 后端引擎） ----------------
@@ -848,6 +852,163 @@ function demoTaskView(s, id) {
   return v;
 }
 
+/* ---------------- OPC demo 事件管道（16b: demo 卡流转/认领/完成 秒级广播） ----------------
+ * demo 状态事实源: server/data/demo/status.json（opc_demo_dispatch.py cron/服务器 spawn + 潘明 worker 写入）。
+ * 与正式状态流同一条 SSE(/api/opc/stream, event: demo), 复用 opcStreamClients 集合/心跳/断连清理,
+ * 客户端集合共享, demo 事件与 status 事件同流, 事件类型区分。
+ * 事件帧契约(与前端卡 t_efc6a93d 完全一致):
+ *   {type:"demo", demo_id, task_id, title, member:"潘明", action, status, ts}
+ *   action: created(dispatched 建卡成功) | claimed(running) | completed | failed
+ *   status: todo | running | done | failed（帧内用 kanban 语义, 与 status.json 的 queued/dispatched/... 区分）
+ */
+const DEMO_MEMBER = "潘明";
+const DEMO_DISPATCH_SCRIPT = "/home/gavin/.hermes/scripts/opc_demo_dispatch.py";
+
+let demoStreamWatcher = null;          // fs.watch 句柄: demo/status.json
+let demoStreamDebounceTimer = null;    // demo 事件防抖定时器(200ms, 复用 OPC_STREAM_DEBOUNCE_MS)
+let demoStreamFallbackTimer = null;    // 兜底轮询(5s): fs.watch 对原子替换(rename)可能丢事件, mtime 对比兜底
+let demoStreamLastMtime = 0;           // 兜底轮询 mtime 基准
+let demoStreamPrevTasks = null;        // 上一帧 tasks 快照(迁移检测基准; 启动时建基线)
+const demoStreamSentSigs = new Set();  // 全局已发 sig(demo_id|status): 同一迁移只广播一次,
+                                       // catch-up 与 watcher 迁移检测互不重复(上限清理防无界增长)
+
+function demoStreamReadStatus() {
+  try { return JSON.parse(fs.readFileSync(DEMO_STATUS_FILE, "utf-8")); } catch { return null; }
+}
+
+function demoStreamSig(id, status) { return `${id}|${status}`; }
+
+// 登记 sig 并返回是否首次: 首次(true)才广播; 已发过则跳过(同一迁移不重复推)
+function demoStreamMarkSent(id, status) {
+  const sig = demoStreamSig(id, status);
+  if (demoStreamSentSigs.has(sig)) return false;
+  demoStreamSentSigs.add(sig);
+  if (demoStreamSentSigs.size > 1000) demoStreamSentSigs.clear(); // 防无界增长(旧任务早已终态)
+  return true;
+}
+
+// 组装事件帧: status.json 的 demo 状态 → 帧内 kanban 语义 status
+function demoStreamFrame(id, t, action, status, ts) {
+  return {
+    type: "demo",
+    demo_id: id,
+    task_id: t.task_id,
+    title: (DEMO_TASKS[t.task_id] && DEMO_TASKS[t.task_id].name) || t.task_id,
+    member: DEMO_MEMBER,
+    action, status, ts,
+  };
+}
+
+// 状态迁移 → 事件帧。只发迁移(状态无变化不重复推 = demo_id+status sig 去重);
+// dispatched→created 需 kanban_task_id 存在(卡真实建了才发)。
+function demoStreamDiff(prev, cur, nowIso) {
+  const frames = [];
+  const ids = new Set([...Object.keys(prev || {}), ...Object.keys(cur || {})]);
+  for (const id of ids) {
+    const p = prev[id];
+    const c = cur[id];
+    if (!p || !c || p.status === c.status) continue;
+    const ps = p.status, cs = c.status;
+    if (ps === "queued" && cs === "dispatched") {
+      if (c.kanban_task_id) frames.push(demoStreamFrame(id, c, "created", "todo", nowIso));
+    } else if (ps === "dispatched" && cs === "running") {
+      frames.push(demoStreamFrame(id, c, "claimed", "running", nowIso));
+    } else if (cs === "completed") { // 任意非终态 → completed
+      frames.push(demoStreamFrame(id, c, "completed", "done", nowIso));
+    } else if (cs === "failed") {    // 任意状态 → failed
+      frames.push(demoStreamFrame(id, c, "failed", "failed", nowIso));
+    }
+  }
+  return frames;
+}
+
+// 广播 demo 事件帧给所有全局流客户端(event: demo, 与 event: status 同流)。
+// sig 去重: 同一 demo_id+status 迁移只广播一次(catch-up 先发的, watcher 不再补发)。
+function demoStreamBroadcast() {
+  const snap = demoStreamReadStatus();
+  if (!snap || !snap.tasks) return; // 半写/暂缺: 跳过本轮, 下轮 change 再读(基线不动)
+  const nowIso = new Date().toISOString();
+  if (demoStreamPrevTasks == null) { demoStreamPrevTasks = snap.tasks; return; } // 基线缺失兜底
+  const frames = demoStreamDiff(demoStreamPrevTasks, snap.tasks, nowIso);
+  demoStreamPrevTasks = snap.tasks;
+  if (!frames.length) return;
+  const fresh = frames.filter((f) => demoStreamMarkSent(f.demo_id, f.status));
+  if (!fresh.length) return;
+  for (const c of opcStreamClients) for (const f of fresh) sendEvent(c.res, "demo", f);
+}
+
+function demoStreamStartWatcher() {
+  if (demoStreamWatcher || demoStreamFallbackTimer) return;
+  try { demoStreamLastMtime = fs.statSync(DEMO_STATUS_FILE).mtimeMs; } catch { demoStreamLastMtime = 0; }
+  try {
+    demoStreamWatcher = fs.watch(DEMO_STATUS_FILE, { persistent: false }, () => {
+      if (demoStreamDebounceTimer) clearTimeout(demoStreamDebounceTimer);
+      demoStreamDebounceTimer = setTimeout(() => { demoStreamDebounceTimer = null; demoStreamBroadcast(); }, OPC_STREAM_DEBOUNCE_MS);
+    });
+  } catch (e) {
+    console.error("[demo-stream] fs.watch unavailable for demo status:", e.message);
+    demoStreamWatcher = null;
+  }
+  // 兜底轮询(5s): fs.watch 对部分写入方式(如 agent 的原子替换)可能丢事件, mtime 对比兜底。
+  // 实测(16b 验收): dispatch 脚本/POST 的写入 fs.watch 能捕获, 潘明 worker 的写入 fs.watch 捕获不到,
+  // 必须靠轮询 —— 与 opcStream 的 30s 兜底同款设计, demo 秒级体验用 5s 更紧。
+  demoStreamFallbackTimer = setInterval(() => {
+    let mtime = 0;
+    try { mtime = fs.statSync(DEMO_STATUS_FILE).mtimeMs; } catch { return; }
+    if (mtime !== demoStreamLastMtime) { demoStreamLastMtime = mtime; demoStreamBroadcast(); }
+  }, 5000);
+  demoStreamFallbackTimer.unref();
+}
+
+function demoStreamStopWatcher() {
+  if (demoStreamWatcher) { try { demoStreamWatcher.close(); } catch {} demoStreamWatcher = null; }
+  if (demoStreamFallbackTimer) { clearInterval(demoStreamFallbackTimer); demoStreamFallbackTimer = null; }
+  if (demoStreamDebounceTimer) { clearTimeout(demoStreamDebounceTimer); demoStreamDebounceTimer = null; }
+}
+
+// 派活提速(16b): POST /api/opc/demo 写请求文件成功后 spawn 一次 dispatch, 不等 1 分钟 cron。
+// 失败静默(不阻塞响应, cron 兜底); 脚本内 flock 与 cron 互斥, 不重复建卡。
+// 子进程 stderr/退出码捕获到服务日志: 静默失败可定位(脚本自身 err() 走 stderr)。
+// env 清理: pm2 守护进程继承自 delegate 上下文, 会带 HERMES_DELEGATED_CHILD_CONTEXT=1,
+// 使 hermes CLI 拒改 kanban —— 传给子进程前剥掉(脚本内亦有兜底 pop)。
+function spawnDispatchScript() {
+  try {
+    const env = { ...process.env };
+    delete env.HERMES_DELEGATED_CHILD_CONTEXT;
+    const child = spawn("python3", [DEMO_DISPATCH_SCRIPT], { stdio: ["ignore", "ignore", "pipe"], env });
+    let cerr = "";
+    child.stderr.on("data", (d) => { cerr += d.toString(); });
+    child.on("error", (e) => console.error("[demo] dispatch spawn error:", e.message));
+    child.on("close", (code) => {
+      if (code !== 0 || cerr.trim()) console.error(`[demo] dispatch exit=${code} stderr: ${cerr.trim().slice(0, 400)}`);
+    });
+    child.unref();
+  } catch (e) {
+    console.error("[demo] dispatch spawn failed:", e?.message || e);
+  }
+}
+
+// 连接 catch up: 在飞(dispatched/running)任务补推当前状态帧(服务器重启后访客刷新能接上)。
+// queued 尚无卡不发; 帧内 ts 用任务自身时间戳(created_at/started_at), 比检测时间真实。
+// 同时登记 sig: 后续 watcher 不会对该迁移再广播(同一连接不重复)。
+function demoStreamCatchUp(res) {
+  const snap = demoStreamReadStatus();
+  if (!snap || !snap.tasks) return;
+  const nowIso = new Date().toISOString();
+  for (const [id, t] of Object.entries(snap.tasks)) {
+    if (t.status === "dispatched" && t.kanban_task_id) {
+      sendEvent(res, "demo", demoStreamFrame(id, t, "created", "todo", t.created_at || nowIso));
+      demoStreamMarkSent(id, "todo");
+    } else if (t.status === "running") {
+      sendEvent(res, "demo", demoStreamFrame(id, t, "claimed", "running", t.started_at || nowIso));
+      demoStreamMarkSent(id, "running");
+    }
+  }
+}
+
+// 启动即建基线: 之后所有迁移都能被检测到(避免重启后首个事件被基线吞掉)
+try { demoStreamPrevTasks = (demoStreamReadStatus() || { tasks: {} }).tasks || {}; } catch { demoStreamPrevTasks = {}; }
+
 // 读取 POST body, 超过 limit 字节即停止累积({ tooBig: true }), 防止无限读入
 function readBodyWithLimit(req, limit) {
   return new Promise((resolve) => {
@@ -895,6 +1056,8 @@ const server = http.createServer(async (req, res) => {
       // 1) 连接建立: 立即推当前 status.json 全量快照(前端首帧无需再 fetch)
       const snap = opcStreamReadSnapshot();
       if (snap) sendEvent(res, "status", snap);
+      // 2) demo 事件 catch up: 在飞(dispatched/running)任务补推当前状态帧, 服务器重启后访客刷新能接上
+      demoStreamCatchUp(res);
       opcStreamStartWatcher();
       // 6) 断连清理: 移出集合 + 清心跳定时器(防内存泄漏); 无客户端时停 watcher
       req.on("close", () => {
