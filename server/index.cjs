@@ -1010,6 +1010,28 @@ const server = http.createServer(async (req, res) => {
       send(res, 404, { ok: false, error: "not found" });
       return;
     }
+    // ---- /company/* 公司站 HTML 副本清理(单一事实源 = www.hermes.cc.cd)----
+    // Gavin 拍板: mrd 域 /company/ 不再 serve 公司站 HTML, 一律 301 到官网对应路径(保 SEO/书签跳转)。
+    // 映射: /company/ → https://www.hermes.cc.cd/ 、 /company/opc/ → https://www.hermes.cc.cd/opc/ 、
+    //       /company/blog/ → https://www.hermes.cc.cd/blog/ (去掉 /company 前缀, index.html 归一为目录)。
+    // 红线: /company/opc/status.json 绝对保留 —— 官网成员数 fetch 数据源, 继续走下方静态服务(CORS + CF 短缓存)。
+    if (req.method === "GET" || req.method === "HEAD") {
+      if (u.pathname === "/company" || u.pathname.startsWith("/company/")) {
+        if (u.pathname !== "/company/opc/status.json") {
+          let rest = u.pathname === "/company" ? "" : u.pathname.slice("/company".length);
+          if (!rest.startsWith("/")) rest = "/" + rest;
+          if (rest.endsWith("/index.html")) rest = rest.slice(0, -"index.html".length);
+          if (rest === "/") rest = ""; // 根路径不带尾斜杠, www Pages 能处理
+          const loc = "https://www.hermes.cc.cd" + rest + (u.search || "");
+          res.writeHead(301, {
+            Location: loc,
+            "Cache-Control": "public, max-age=3600",
+            ...STATIC_HEADERS,
+          });
+          return res.end();
+        }
+      }
+    }
     // 静态资源 + SPA fallback
     let p = decodeURIComponent(u.pathname);
     if (p === "/" || p.endsWith("/")) p += "index.html";
