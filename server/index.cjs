@@ -118,6 +118,11 @@ function send(res, code, obj, extra = {}) {
 
 const { handleChainParse } = require("./lib/chain-parse.cjs");
 
+/* ---------------- GitHub stars 汇总配置（公司产品仓库白名单）----------------
+   加产品仓库：只改 GITHUB_STARS_WHITELIST 数组，无需改代码 */
+const GITHUB_STARS_OWNER = "theBigGavin";
+const GITHUB_STARS_WHITELIST = ["marketingdashboard", "mylauncher"];
+
 /* ---------------- 主机路由表 ---------------- */
 const routes = {
   "/api/quotes": async (q) => handleQuotes(q.get("codes") || ""), // 内部按代码独立缓存(TTL 5s)
@@ -250,6 +255,20 @@ const routes = {
       } catch (e) {
         return { stars: 0, forks: 0, ts: Date.now() };
       }
+    }),
+  "/api/github/stars": async () =>
+    cached("github-stars", 3600000, async () => {
+      // 公司产品仓库 star 汇总: users/{owner}/repos 一次拉全, 过滤 fork + 白名单后求和。
+      // 1h 缓存防 GitHub 匿名限流(60/h/IP), 限流由服务端单点吸收; 失败时 cached() 降级返回上次成功值
+      const txt = await fetchText(
+        `https://api.github.com/users/${GITHUB_STARS_OWNER}/repos?per_page=100&type=owner`,
+        { headers: { Accept: "application/vnd.github+json", "User-Agent": UA } }
+      );
+      const repos = JSON.parse(txt);
+      const picked = (Array.isArray(repos) ? repos : [])
+        .filter((r) => !r.fork && GITHUB_STARS_WHITELIST.includes(r.name))
+        .map((r) => ({ name: r.name, stars: r.stargazers_count ?? 0 }));
+      return { total: picked.reduce((s, r) => s + r.stars, 0), repos: picked, ts: Date.now() };
     }),
   "/api/openrouter-usage": async () => cached("or-usage", 3600000, () => handleOpenRouterUsage()), // 1h cache
   "/api/ai-infra": async () => cached("ai-infra", 24 * 3600 * 1000, () => handleAiInfra()), // 财报/定价日更, 24h 缓存
