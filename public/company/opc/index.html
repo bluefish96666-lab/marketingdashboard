@@ -1,0 +1,1454 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>OPC 透明办公室 — Gavin's Lab</title>
+<style>
+:root {
+  --bg: #f7f7f8; --fg: #1a1a1e; --muted: #6b6b73;
+  --card: #ffffff; --border: #e4e4e8; --accent: #1a1a1e;
+  --green: #16a34a; --gray: #9ca3af;
+  --demo-border: #ddd3f5; --demo-card-bg: #fdfbff;
+}
+[data-theme="dark"] {
+  --bg: #141417; --fg: #ececef; --muted: #9a9aa3;
+  --card: #1d1d22; --border: #2a2a31; --accent: #ececef;
+  --green: #22c55e; --gray: #52525b;
+  --demo-border: #4c3d7a; --demo-card-bg: #221c33;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); color: var(--fg); font-family: -apple-system, "PingFang SC", "Segoe UI", sans-serif; }
+.wrap { max-width: 1280px; margin: 0 auto; padding: 8px 24px 32px; }
+header { display: flex; align-items: center; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
+.logo { display: flex; align-items: center; gap: 10px; font-weight: 600; }
+.logo svg { width: 26px; height: 26px; color: var(--accent); }
+.logo .sub { color: var(--muted); font-weight: 400; font-size: 13px; margin-left: 4px; }
+.hdr-actions { display: flex; align-items: center; gap: 12px; }
+.back { font-size: 13px; color: var(--muted); text-decoration: none; }
+.back:hover { color: var(--fg); }
+.theme-btn { background: var(--card); border: 1px solid var(--border); color: var(--fg); border-radius: 8px; padding: 6px 12px; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 7px; }
+.layout { display: grid; grid-template-columns: 1fr 320px; gap: 20px; }
+.panel { background: var(--card); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; }
+.panel-head { padding: 14px 18px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+.panel-head h2 { font-size: 15px; font-weight: 600; }
+.panel-head .hint { font-size: 12px; color: var(--muted); }
+#office { width: 100%; display: block; }
+.canvas-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.feed { max-height: 560px; overflow-y: auto; }
+.feed-item { display: flex; align-items: flex-start; gap: 10px; padding: 10px 18px; border-bottom: 1px solid var(--border); font-size: 13px; }
+.feed-item:last-child { border-bottom: none; }
+.feed-item .t { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.feed-item .dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 4px; flex-shrink: 0; }
+.feed-item .dot.active { background: var(--green); }
+.feed-item .dot.idle { background: var(--gray); }
+.feed-item .who { font-weight: 600; white-space: nowrap; }
+.feed-item .what { color: var(--muted); }
+.feed-item .what.fail { color: #dc2626; }
+.feed-item .act-tag { font-size: 11px; padding: 1px 6px; border-radius: 4px; background: var(--border); color: var(--muted); white-space: nowrap; flex-shrink: 0; }
+.feed-item .act-tag.done { background: rgba(22, 163, 74, .14); color: var(--green); }
+.feed-item .dot.fail { background: #dc2626; }
+.legend { display: flex; gap: 16px; padding: 10px 18px; border-top: 1px solid var(--border); font-size: 12px; color: var(--muted); flex-wrap: wrap; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend i { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+
+/* ===== Tab 导航 ===== */
+.tabs { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 16px; border-bottom: 1px solid var(--border); }
+.tab-btn { display: inline-flex; align-items: center; gap: 7px; padding: 9px 16px; background: none; border: none; box-shadow: inset 0 -2px 0 transparent; color: var(--muted); font-size: 13px; font-weight: 500; cursor: pointer; transition: color .15s, box-shadow .15s; }
+.tab-btn svg { width: 15px; height: 15px; }
+.tab-btn:hover { color: var(--fg); }
+.tab-btn.active { color: var(--fg); box-shadow: inset 0 -2px 0 var(--accent); font-weight: 600; }
+.tab-pane { display: none; }
+.tab-pane.active { display: block; }
+
+/* ===== Kanban 看板 ===== */
+.kb-members { display: grid; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: 10px; padding: 14px 18px; }
+.kb-member { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; }
+.kb-member .nm { font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 6px; }
+.kb-member .nm .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--gray); }
+.kb-member .nm .dot.run { background: var(--green); }
+.kb-member .nm .dot.blk { background: #dc2626; }
+.kb-member .cnt { font-size: 12px; color: var(--muted); margin-top: 3px; font-variant-numeric: tabular-nums; }
+.kb-member .latest { font-size: 11.5px; color: var(--muted); margin-top: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kb-member .latest::before { content: "最近 · "; color: var(--muted); }
+.kb-cols { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; padding: 14px 18px; }
+.kb-col { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; min-height: 90px; }
+.kb-col-head { padding: 8px 12px; font-size: 12px; font-weight: 600; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 6px; color: var(--muted); }
+.kb-col-head .n { margin-left: auto; font-variant-numeric: tabular-nums; font-weight: 500; }
+.kb-col-head .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--gray); flex-shrink: 0; }
+.kb-col-head .dot.run { background: var(--green); }
+.kb-col-head .dot.blk { background: #dc2626; }
+.kb-card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; margin: 8px; padding: 10px 12px; }
+.kb-card .tt { font-weight: 600; font-size: 12.5px; line-height: 1.45; }
+.kb-card .meta { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; margin-top: 7px; font-size: 11.5px; color: var(--muted); }
+.kb-card .meta .who { font-weight: 600; color: var(--fg); display: inline-flex; align-items: center; gap: 4px; }
+.kb-card .meta .who svg, .kb-card .meta .tm svg { width: 12px; height: 12px; }
+.kb-card .meta .tm { display: inline-flex; align-items: center; gap: 4px; font-variant-numeric: tabular-nums; }
+.kb-card .prio { font-size: 10.5px; padding: 1px 6px; border-radius: 4px; background: var(--border); color: var(--muted); font-variant-numeric: tabular-nums; }
+.kb-card .why { display: flex; align-items: center; gap: 4px; margin-top: 6px; font-size: 11.5px; color: #b45309; }
+.kb-card .why svg { width: 12px; height: 12px; flex-shrink: 0; }
+.kb-summary { display: flex; flex-wrap: wrap; gap: 8px 18px; padding: 12px 18px; border-top: 1px solid var(--border); font-size: 12px; color: var(--muted); }
+.kb-summary b { color: var(--fg); font-variant-numeric: tabular-nums; font-weight: 600; }
+.kb-empty { padding: 26px 18px; text-align: center; color: var(--muted); font-size: 12px; }
+
+/* ===== Kanban demo 分区（22-4：访客体验任务，独立隔离板，视觉区分）===== */
+.kb-demo-panel { border: 1px solid var(--demo-border); }
+.kb-demo-panel .panel-head { background: linear-gradient(90deg, rgba(124, 58, 237, .06), transparent 55%); }
+.kb-demo-panel .panel-head h2 { display: inline-flex; align-items: center; gap: 8px; }
+.kb-demo-badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 11px; font-weight: 700; letter-spacing: .04em;
+  padding: 2px 8px; border-radius: 999px;
+  color: #fff; background: linear-gradient(135deg, #7c3aed, #a855f7);
+  box-shadow: 0 1px 3px rgba(124, 58, 237, .35);
+}
+.kb-demo-badge svg { width: 10px; height: 10px; }
+.kb-demo-note { font-size: 12px; color: var(--muted); }
+.kb-card.demo { border-color: var(--demo-border); border-left: 3px solid #a855f7; background: var(--demo-card-bg); }
+.kb-card.demo .tt { display: flex; align-items: flex-start; gap: 6px; }
+.kb-card.demo .tt .tt-text { min-width: 0; }
+.kb-demo-tag {
+  flex-shrink: 0; display: inline-flex; align-items: center;
+  font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 4px;
+  color: #a855f7; background: rgba(124, 58, 237, .1); border: 1px solid rgba(124, 58, 237, .28);
+}
+.kb-col-head .dot.demo { background: #a855f7; }
+
+
+/* ===== Demo 体验（12b）===== */
+.tabs .demo-btn {
+  margin-left: auto;
+  margin-bottom: 13px;
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 9px 14px; /* 上下 9px 与 .tab-btn 一致；去掉负 margin，margin box = border box，align-items:center 即内容居中 */
+  background: var(--card); color: var(--fg);
+  border: 1px solid var(--border); border-radius: 8px;
+  font-family: inherit; font-size: 13px; font-weight: 500; cursor: pointer;
+  transition: border-color .15s, color .15s, background .15s;
+}
+.tabs .demo-btn svg { width: 15px; height: 15px; }
+.tabs .demo-btn:hover { border-color: var(--accent); }
+.modal-mask {
+  position: fixed; inset: 0; background: rgba(20, 20, 23, .45);
+  display: none; align-items: center; justify-content: center;
+  z-index: 100; padding: 24px;
+}
+.modal-mask.show { display: flex; }
+/* 22-7: pop 面板打开时锁定背景滚动（桌面滚轮 + 移动触摸），关闭恢复且不丢位置 */
+html.scroll-lock, body.scroll-lock { overflow: hidden; }
+.modal-body, .report-pane, #histList, .report-cols { overscroll-behavior: contain; }
+.modal {
+  background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+  width: 100%; max-width: 580px; max-height: 86vh; overflow: hidden;
+  display: flex; flex-direction: column;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, .18);
+}
+.modal-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 18px; border-bottom: 1px solid var(--border);
+}
+.modal-head h3 { font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+.modal-head h3 svg { width: 16px; height: 16px; }
+.modal-close {
+  background: none; border: none; color: var(--muted); cursor: pointer;
+  display: inline-flex; padding: 4px; border-radius: 6px;
+}
+.modal-close:hover { color: var(--fg); background: var(--bg); }
+.modal-close svg { width: 16px; height: 16px; }
+.modal-body { padding: 16px 18px; overflow-y: auto; }
+.modal-foot { padding: 12px 18px; border-top: 1px solid var(--border); font-size: 12px; color: var(--muted); display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.demo-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.demo-card {
+  display: flex; gap: 10px; align-items: flex-start;
+  border: 1px solid var(--border); border-radius: 10px; padding: 12px;
+  cursor: pointer; background: var(--card); font-family: inherit; text-align: left;
+  transition: border-color .15s, background .15s;
+}
+.demo-card:hover { border-color: var(--accent); background: var(--bg); }
+.demo-card:disabled { opacity: .55; cursor: not-allowed; }
+.demo-card .ic {
+  width: 34px; height: 34px; flex-shrink: 0; border-radius: 8px;
+  background: var(--bg); border: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+}
+.demo-card .ic svg { width: 17px; height: 17px; }
+.demo-card .tx { min-width: 0; }
+.demo-card .tx .t { display: block; font-size: 13px; font-weight: 600; }
+.demo-card .tx .d { display: block; font-size: 12px; color: var(--muted); margin-top: 3px; line-height: 1.5; }
+@media (max-width: 520px) { .demo-grid { grid-template-columns: 1fr; } }
+.modal-note { font-size: 12.5px; margin-top: 12px; border-radius: 8px; padding: 8px 12px; display: none; line-height: 1.5; }
+.modal-note.err { display: block; color: #b91c1c; background: rgba(220, 38, 38, .08); border: 1px solid rgba(220, 38, 38, .25); }
+.modal-note.ok { display: block; color: var(--green); background: rgba(22, 163, 74, .08); border: 1px solid rgba(22, 163, 74, .25); }
+
+/* demo 进度条（看板 tab 头部） */
+.demo-progress { margin-bottom: 16px; display: none; }
+.demo-progress.show { display: block; }
+.demo-steps { display: flex; align-items: flex-start; padding: 18px 22px 8px; }
+.demo-step { display: flex; flex-direction: column; align-items: center; gap: 6px; flex: 1; position: relative; }
+.demo-step .dot { width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--border); background: var(--card); }
+.demo-step.done .dot { background: var(--green); border-color: var(--green); }
+.demo-step.cur .dot { background: var(--accent); border-color: var(--accent); box-shadow: 0 0 0 3px var(--border); animation: demo-pulse 1.6s ease-in-out infinite; }
+.demo-step.fail .dot { background: #dc2626; border-color: #dc2626; }
+.demo-step .lbl { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.demo-step.done .lbl, .demo-step.cur .lbl { color: var(--fg); font-weight: 600; }
+.demo-step::after { content: ""; position: absolute; top: 5px; left: calc(50% + 8px); width: calc(100% - 16px); height: 2px; background: var(--border); }
+.demo-step:last-child::after { display: none; }
+.demo-step.done::after { background: var(--green); }
+@keyframes demo-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .4; } }
+.demo-meta { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 18px 16px; font-size: 12px; flex-wrap: wrap; }
+.demo-meta .row { display: inline-flex; align-items: center; gap: 6px; }
+.demo-meta .row svg { width: 13px; height: 13px; flex-shrink: 0; }
+.demo-meta .muted { color: var(--muted); }
+.demo-meta .muted::before { content: " · "; color: var(--muted); }
+
+/* 报告弹窗 markdown 渲染 + 历史回看（22-6 左右分栏：左历史列表 + 右报告内容） */
+.report-body { font-size: 13.5px; line-height: 1.7; }
+.report-body h1, .report-body h2, .report-body h3 { margin: 14px 0 8px; line-height: 1.4; font-weight: 600; }
+.report-body h1 { font-size: 17px; border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+.report-body h2 { font-size: 15px; }
+.report-body h3 { font-size: 13.5px; }
+.report-body p { margin: 6px 0; }
+.report-body ul, .report-body ol { margin: 6px 0; padding-left: 20px; }
+.report-body li { margin: 3px 0; }
+.report-body a { color: var(--fg); text-decoration: underline; text-underline-offset: 3px; }
+.report-body code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; }
+.report-body pre { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; overflow-x: auto; margin: 8px 0; }
+.report-body pre code { background: none; border: none; padding: 0; }
+.report-body table { border-collapse: collapse; margin: 8px 0; width: 100%; font-size: 12.5px; }
+.report-body th, .report-body td { border: 1px solid var(--border); padding: 5px 9px; text-align: left; }
+.report-body th { background: var(--bg); font-weight: 600; }
+.report-body blockquote { border-left: 3px solid var(--border); padding-left: 10px; color: var(--muted); margin: 8px 0; }
+.report-body hr { border: none; border-top: 1px solid var(--border); margin: 12px 0; }
+.report-loading, .report-empty { padding: 28px 18px; text-align: center; color: var(--muted); font-size: 12.5px; }
+/* 22-6：报告弹窗加宽以容纳左右分栏（仅报告弹窗，demoModal 不受影响） */
+#reportModal .modal { max-width: 860px; }
+.report-cols { display: flex; flex: 1; min-height: 0; overflow: hidden; }
+.hist-pane {
+  width: 250px; flex-shrink: 0; min-height: 0;
+  border-right: 1px solid var(--border);
+  display: flex; flex-direction: column;
+}
+.hist-pane .hist-head {
+  padding: 12px 16px 8px; font-size: 12px; font-weight: 600; color: var(--muted);
+  display: flex; align-items: center; gap: 6px; flex-shrink: 0;
+}
+.hist-pane .hist-head svg { width: 13px; height: 13px; }
+#histList { overflow-y: auto; min-height: 0; flex: 1; padding-bottom: 8px; }
+.hist-item { display: flex; align-items: center; gap: 8px; padding: 9px 16px; font-size: 12.5px; border-top: 1px solid var(--border); cursor: pointer; }
+.hist-item:hover { background: var(--bg); }
+.hist-item.selected { background: var(--bg); box-shadow: inset 3px 0 0 var(--accent); }
+.hist-item.selected .hist-lbl { font-weight: 600; }
+.hist-item svg { width: 13px; height: 13px; flex-shrink: 0; color: var(--muted); }
+.hist-item .hist-lbl { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hist-item .tm { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 11.5px; flex-shrink: 0; margin-left: auto; }
+.hist-item .st { font-size: 11px; padding: 1px 7px; border-radius: 4px; background: var(--border); color: var(--muted); flex-shrink: 0; }
+.hist-item .st.ok { background: rgba(22, 163, 74, .14); color: var(--green); }
+.hist-item .st.fail { background: rgba(220, 38, 38, .12); color: #dc2626; }
+.report-pane { flex: 1; min-width: 0; overflow-y: auto; padding: 16px 18px; }
+
+/* 全局轻提示 */
+.toast {
+  position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%) translateY(10px);
+  background: var(--fg); color: var(--bg); font-size: 12.5px;
+  padding: 9px 16px; border-radius: 8px; z-index: 200; opacity: 0;
+  pointer-events: none; transition: opacity .2s, transform .2s;
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+/* 连接提示条（SSE 断线/降级时显示，页面不白屏） */
+.conn-bar {
+  display: none; align-items: center; gap: 8px;
+  padding: 8px 14px; margin-bottom: 12px;
+  border: 1px solid rgba(220, 38, 38, .25); border-radius: 10px;
+  background: rgba(220, 38, 38, .06); color: #b91c1c; font-size: 12.5px;
+}
+.conn-bar.show { display: flex; }
+.conn-bar svg { width: 14px; height: 14px; flex-shrink: 0; }
+@media (max-width: 1100px) { .kb-cols { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 620px) { .kb-cols { grid-template-columns: 1fr; } }
+@media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+
+/* ===== 移动端适配（17b）===== */
+/* canvas 保持可读比例：窄屏下 1180 位图等比缩放到 560px 宽（不再 100% 压缩到 310px 不可读），
+   外层 .canvas-scroll 横向滚动查看，页面本身无横向滚动 */
+@media (max-width: 900px) {
+  #office { width: 560px; }
+}
+@media (max-width: 620px) {
+  /* header 单行：隐藏副标题（移动端空间有限），返回链接/按钮可点区域 ≥44px */
+  .logo .sub { display: none; }
+  header { flex-wrap: wrap; gap: 4px 12px; }
+  .back { display: inline-flex; align-items: center; min-height: 44px; }
+  .hdr-actions { margin-left: auto; }
+  .theme-btn { min-height: 44px; }
+  .tab-btn { min-height: 44px; }
+  .tabs .demo-btn { min-height: 44px; }
+  /* 弹窗关闭按钮可点区域 ≥44px */
+  .modal-close { min-width: 44px; min-height: 44px; align-items: center; justify-content: center; }
+  /* 活动流：时间戳/动作标签不再强制不换行，避免窄屏挤压 */
+  .feed-item { flex-wrap: wrap; }
+  .feed-item .t { white-space: nowrap; }
+  .feed-item .what { min-width: 0; flex: 1 1 auto; }
+  /* 22-6：报告弹窗窄屏改上下堆叠——历史列表在上（限高滚动），报告在下，不横向溢出 */
+  #reportModal .modal { max-width: 100%; }
+  .report-cols { flex-direction: column; overflow-y: auto; }
+  .hist-pane { width: 100%; border-right: none; border-bottom: 1px solid var(--border); max-height: 200px; }
+  #histList { overflow-y: auto; }
+  .report-pane { overflow-y: visible; }
+}
+/* tab 栏窄屏单行（21b）：压缩间距/字号 + 隐藏 tab 后缀文字，375px 下三按钮一行不换行 */
+@media (max-width: 520px) {
+  .tabs { gap: 4px; }
+  .tab-btn { padding: 9px 8px; font-size: 12.5px; gap: 5px; }
+  .tab-btn svg { width: 13px; height: 13px; }
+  .tab-btn .ts { display: none; }
+  .tabs .demo-btn { padding: 8px 10px; font-size: 12.5px; gap: 5px; }
+  .tabs .demo-btn svg { width: 13px; height: 13px; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="conn-bar" id="connBar" role="status">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+    <span>实时连接已断开，正在重连…</span>
+  </div>
+  <header>
+    <div class="logo">
+      <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><line x1="16" y1="16" x2="16" y2="6"/><line x1="16" y1="16" x2="24.7" y2="11"/><line x1="16" y1="16" x2="24.7" y2="21"/><line x1="16" y1="16" x2="16" y2="26"/><line x1="16" y1="16" x2="7.3" y2="21"/><line x1="16" y1="16" x2="7.3" y2="11"/><circle cx="16" cy="16" r="3.2" fill="currentColor" stroke="none"/><circle cx="16" cy="6" r="1.8" fill="currentColor" stroke="none"/><circle cx="24.7" cy="11" r="1.8" fill="currentColor" stroke="none"/><circle cx="24.7" cy="21" r="1.8" fill="currentColor" stroke="none"/><circle cx="16" cy="26" r="1.8" fill="currentColor" stroke="none"/><circle cx="7.3" cy="21" r="1.8" fill="currentColor" stroke="none"/><circle cx="7.3" cy="11" r="1.8" fill="currentColor" stroke="none"/></svg>
+      OPC 透明办公室<span class="sub">one-person company · live</span>
+    </div>
+    <div class="hdr-actions">
+      <a class="back" href="/company/">← 返回公司页</a>
+      <button class="theme-btn" id="themeBtn" aria-label="切换主题"></button>
+    </div>
+  </header>
+
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="office" aria-selected="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+      办公室<span class="ts">实时状态</span>
+    </button>
+    <button class="tab-btn" data-tab="kanban" aria-selected="false">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>
+      任务看板<span class="ts"> Kanban</span>
+    </button>
+    <button class="demo-btn" id="demoBtn" aria-label="体验一下">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/></svg>
+      体验一下
+    </button>
+  </div>
+
+  <div class="tab-pane active" id="pane-office">
+  <div class="layout">
+    <div class="panel">
+      <div class="panel-head">
+        <h2>办公室实时状态</h2>
+        <span class="hint" id="updateHint">实时推送</span>
+      </div>
+      <div class="canvas-scroll"><canvas id="office" width="1180" height="700"></canvas></div>
+      <div class="legend">
+        <span><i style="background:var(--green)"></i>活跃中</span>
+        <span><i style="background:var(--gray)"></i>空闲</span>
+        <span>工位 · 会议室 · 会客区</span>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head"><h2>今日活动流</h2><span class="hint" id="feedCount"></span></div>
+      <div class="feed" id="feed"></div>
+    </div>
+  </div>
+  </div>
+
+  <div class="tab-pane" id="pane-kanban">
+    <div class="panel demo-progress" id="demoProgress">
+      <div class="panel-head"><h2>体验任务进度</h2><span class="hint">实时推送 · 秒级更新</span></div>
+      <div class="demo-steps" id="demoSteps"></div>
+      <div class="demo-meta">
+        <span class="row" id="demoMetaTask"></span>
+        <span class="row">
+          <button class="theme-btn" id="demoViewReport"></button>
+        </span>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head"><h2>各成员在干什么</h2><span class="hint">实时同步 kanban board</span></div>
+      <div class="kb-members" id="kbMembers"></div>
+    </div>
+
+    <div class="panel" style="margin-top:16px">
+      <div class="panel-head"><h2>任务看板</h2><span class="hint" id="kbHint"></span></div>
+      <div class="kb-cols" id="kbCols"></div>
+      <div class="kb-summary" id="kbSummary"></div>
+    </div>
+
+    <div class="panel kb-demo-panel" style="margin-top:16px">
+      <div class="panel-head">
+        <h2><span class="kb-demo-badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>DEMO</span>访客体验任务</h2>
+        <span class="hint kb-demo-note" id="kbDemoHint"></span>
+      </div>
+      <div class="kb-cols" id="kbDemoCols"></div>
+      <div class="kb-summary" id="kbDemoSummary"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Demo 体验：任务选择弹窗（无自由文本输入，仅预设任务） -->
+<div class="modal-mask" id="demoModal">
+  <div class="modal" role="dialog" aria-modal="true" aria-label="体验一下">
+    <div class="modal-head">
+      <h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/></svg>体验一下</h3>
+      <button class="modal-close" id="demoClose" aria-label="关闭"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+    </div>
+    <div class="modal-body">
+      <div class="demo-grid" id="demoGrid"></div>
+      <div class="modal-note" id="demoNote"></div>
+    </div>
+    <div class="modal-foot">
+      <span>选择一个任务，AI 团队成员将真实执行</span>
+      <span class="hist-entry"><button class="theme-btn" id="demoHistoryBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px;vertical-align:-2px"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>历史体验</button></span>
+    </div>
+  </div>
+</div>
+
+<!-- Demo 体验：报告弹窗 + 历史回看（22-6 左右分栏：左历史列表 + 右报告内容） -->
+<div class="modal-mask" id="reportModal">
+  <div class="modal" role="dialog" aria-modal="true" aria-label="体验报告">
+    <div class="modal-head">
+      <h3 id="reportTitle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>体验报告</h3>
+      <button class="modal-close" id="reportClose" aria-label="关闭"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+    </div>
+    <div class="report-cols">
+      <div class="hist-pane">
+        <div class="hist-head"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>历史体验</div>
+        <div id="histList"></div>
+      </div>
+      <div class="report-pane" id="reportBody">
+        <div class="report-loading">报告加载中…</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function () {
+  // ===== 主题 =====
+  var KEY = 'gavinlab-theme-v2';
+  var root = document.documentElement;
+  var btn = document.getElementById('themeBtn');
+  var saved; try { saved = localStorage.getItem(KEY); } catch (e) {}
+  function apply(t) { root.setAttribute('data-theme', t); }
+  if (saved) apply(saved);
+  else apply(window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+  function icon(isDark) {
+    return isDark
+      ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px;vertical-align:-2px"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>'
+      : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px;vertical-align:-2px"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>';
+  }
+  function syncBtn() {
+    var t = root.getAttribute('data-theme');
+    btn.innerHTML = (t === 'dark' ? icon(false) + ' 亮色' : icon(true) + ' 暗色');
+  }
+  btn.addEventListener('click', function () {
+    var t = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+    apply(t); try { localStorage.setItem(KEY, t); } catch (e) {} syncBtn();
+  });
+  syncBtn();
+
+  // ===== 素材 =====
+  var canvas = document.getElementById('office');
+  var ctx = canvas.getContext('2d');
+  var CW = canvas.width, CH = canvas.height;
+  var BASE = '/company/opc/img/';
+
+  var floorImg = new Image(); floorImg.src = BASE + 'floor.png';
+  var loungeImg = new Image(); loungeImg.src = BASE + 'lounge.png';
+  var meetingImg = new Image(); meetingImg.src = BASE + 'meeting.png';
+  var deskImgs = [new Image(), new Image(), new Image()];
+  deskImgs[0].src = BASE + 'desk-1.png'; deskImgs[1].src = BASE + 'desk-2.png'; deskImgs[2].src = BASE + 'desk-3.png';
+  var avatars = {};
+
+
+  // ===== 静态布局：办公室家具（位置锁定，不随人的状态变化）=====
+  var LOUNGE = { x: 0, y: 0, w: 462, h: 220 };
+  var WALL_H = 70;           // 办公室上部墙高度（会客室左边距也用它）
+  var MEETING = { x: 718, y: 0, w: 462, h: 251 };
+  var DW = 140, DH = 117;   // 工位缩小 10%（原 155×130）
+  var ZZ_W = 117, ZZ_H = 140; // 庄子桌旋转90度后尺寸（竖放）
+
+  // 工位桌固定位置（无论人是什么状态，桌子永远在此，不随人移动/消失）
+  var DESKS = [
+    { id: 'zhuangzi', x: 118, y: 395 },
+    { id: 'make',     x: 375, y: 338 },
+    { id: 'anran',    x: 515, y: 338 },
+    { id: 'linjing',  x: 655, y: 338 },
+    { id: 'ada',      x: 795, y: 338 },
+    { id: 'wenwen',   x: 375, y: 475 },
+    { id: 'qianli',   x: 515, y: 475 },
+    { id: 'panming',  x: 655, y: 475 },
+  ];
+
+  // ===== 成员状态持久化 =====
+  // 每个人在不同「状态」下有不同头像位置，ax/ay = 头像中心 canvas 坐标。
+  // 人与家具完全解耦：人按状态移动，工位桌等家具始终锁定原位。
+  // 未来新增状态（如 away/idle）只需在 states 加坐标；未定义回退 working 默认。
+  var MEMBER_STATES = {
+    zhuangzi: { name: '庄子', role: 'CEO',  states: {
+      working: { ax: 142.5, ay: 463.8 },
+      meeting: { ax: 809,   ay: 152 }       // 会议桌左端桌头(主位)
+    } },
+    make:     { name: '马克', role: '开发', states: {
+      working: { ax: 445, ay: 367.94 },
+      meeting: { ax: 874, ay: 86 }          // 会议桌上排左
+    } },
+    anran:    { name: '安然', role: '运维', states: {
+      working: { ax: 585, ay: 367.94 },
+      meeting: { ax: 949, ay: 86 }          // 会议桌上排中
+    } },
+    linjing:  { name: '林静', role: '营销', states: {
+      working: { ax: 725, ay: 367.94 },
+      meeting: { ax: 1024, ay: 86 }         // 会议桌上排右
+    } },
+    wenwen:   { name: '温雯', role: '客服', states: {
+      working: { ax: 445, ay: 557.94 },
+      meeting: { ax: 874, ay: 217 }         // 会议桌下排左
+    } },
+    qianli:   { name: '钱莉', role: '财务', states: {
+      working: { ax: 585, ay: 557.94 },
+      meeting: { ax: 949, ay: 217 }         // 会议桌下排中
+    } },
+    panming:  { name: '潘明', role: '竞品', states: {
+      working: { ax: 725, ay: 557.94 },
+      meeting: { ax: 1024, ay: 217 }        // 会议桌下排右
+    } },
+    ada:      { name: '蔡婉', role: '测试', states: {
+      working: { ax: 865, ay: 367.94 },     // 上排右侧延伸（对齐上排工位中心）
+      meeting: { ax: 1100, ay: 152 }        // 会议桌右侧空位（避开桌右缘 1073）
+    } },
+  };
+
+  // status.json 成员 → 状态键：meet→开会、active→工作中、其余→空闲
+  var DEBUG_STATE = null;   // 预览参数：?state=meeting 强制所有人为指定状态（微调坐标用）
+  try { DEBUG_STATE = new URLSearchParams(location.search).get('state'); } catch (e) {}
+  function resolveState(m) {
+    if (m && m.status === 'active') {
+      return (m.action === 'meet') ? 'meeting' : 'working';   // 活跃：开会→meeting，其他→working
+    }
+    return 'idle';   // 不活跃：一律 idle（不管 action，避免"开完会仍钉在会议室"）
+  }
+  function stateOf(id) {
+    if (DEBUG_STATE) return DEBUG_STATE;   // 预览参数优先（微调坐标时不被会议聚合干扰）
+    if (!data) return 'working';
+    // 会议聚合（v1.0.63，14b）：status.json 顶层 meeting.active=true 时，
+    // attendees（被召集成员）目标状态强制=meeting——任何真实状态（含 idle）都进会议室；
+    // 非 attendees 维持下方 resolveState 独立判断（绝不一律进会议室）。
+    // 会议解散（active=false 或字段消失）→ 覆盖失效 → 自动恢复各自真实状态解析。
+    var mt = data.meeting;
+    if (mt && mt.active === true && Array.isArray(mt.attendees) && mt.attendees.indexOf(id) >= 0) {
+      return 'meeting';
+    }
+    var m = data.members && data.members.find(function (x) { return x.id === id; });
+    return resolveState(m);
+  }
+  // ===== 会客区座位（静态，与人物解耦）=====
+  // 4 个座位坐标固定；idle 成员按顺序抢占空位，超出 4 人者留工位。
+  // 座位是家具的一部分，绝不随人物状态移动/消失。
+  var LOUNGE_SEATS = [
+    { id: 'lounge-s1', ax: 153, ay: 95 },   // 长条沙发1（靠墙横条）
+    { id: 'lounge-s2', ax: 213, ay: 95 },   // 长条沙发2（面对面）
+    { id: 'lounge-s3', ax: 110, ay: 162 },  // 小沙发1（左下）
+    { id: 'lounge-s4', ax: 270, ay: 162 },  // 小沙发2（右下）
+  ];
+  var idleSeatAssign = {};   // memberId -> { ax, ay }（每帧重算）
+  var NO_LOUNGE_IDS = ['zhuangzi', 'ada'];   // 这些人 idle 时不去会客区，留工位
+  function computeSeats() {
+    idleSeatAssign = {};
+    var seatIdx = 0;
+    Object.keys(MEMBER_STATES).forEach(function (id) {
+      if (NO_LOUNGE_IDS.indexOf(id) >= 0) return;
+      if (stateOf(id) !== 'idle') return;
+      if (seatIdx < LOUNGE_SEATS.length) idleSeatAssign[id] = LOUNGE_SEATS[seatIdx++];
+    });
+  }
+  // 取成员当前状态的头像中心坐标：查状态表，未定义回退 working 默认
+  function memberPos(id) {
+    var st = MEMBER_STATES[id] && MEMBER_STATES[id].states;
+    if (!st) return null;
+    var s = stateOf(id);
+    if (s === 'idle') {
+      var seat = idleSeatAssign[id];
+      return seat ? { ax: seat.ax, ay: seat.ay } : (st.working || null);   // 有座位坐会客区，没空位留工位
+    }
+    return st[s] || st.working || null;
+  }
+
+  // ===== 移动动画（v1.0.60：状态切换沿折线路径平滑移动，杜绝瞬移）=====
+  // 每个成员维护 currentPos(动画实际位置) + targetPos(状态目标坐标) + 移动状态。
+  // 状态/座位变化只更新 targetPos → 从 currentPos 重规划路径（不重置位置，天然抗抖动横跳）。
+  // 家具（工位桌/会议桌/会客区沙发）位置全部锁定，路径只动「人」——人走桌留。
+  // 走廊常量（俯视布局：会客区左上、会议室右上、工位区下部两排）：
+  var AISLE_Y = 290;     // 工位区上方水平走廊（会客区下缘 220 与工位桌顶 338 之间）
+  var BOT_Y = 640;       // 工位区下方走廊
+  var RIGHT_X = 1100;    // 会议室右侧竖直走廊（避开会议桌 bbox 右缘 1073）
+  var LEFT_X = 305;      // 工位区左侧竖直走廊（庄子桌右缘 235 与马克桌左缘 375 之间）
+  var TBL_TOP = 100;     // 会议桌顶 110 上方的横穿线（桌头绕桌用）
+  var MOVE_SPEED = 0.6;  // 移动速度 px/ms，单次移动时长 clamp 0.5~1.5s
+  function zoneOf(p) {
+    if (p.y <= 251 && p.x >= 718) return 'meeting';
+    if (p.y <= 220 && p.x < 462) return 'lounge';
+    return 'desk';
+  }
+  // 起点/终点之间的折线路径（waypoints 数组；横/竖正交折线，沿走廊绕开桌椅）
+  function pathTo(from, to) {
+    var fz = zoneOf(from), tz = zoneOf(to);
+    if (fz === tz) return [{ x: to.x, y: to.y }];          // 同区域（会客区换座/会议室换位）直线
+    var pts = [];
+    var wy = to.y < 455 ? AISLE_Y : BOT_Y;                 // 目标工位行外的走廊（入座段）
+    var isHead = to.y >= 110 && to.y <= 195;               // 会议桌头（y 落在桌 bbox 内）
+    if (fz === 'desk') {
+      var sy = from.y < 455 ? AISLE_Y : BOT_Y;             // 先竖走出工位行
+      if (tz === 'meeting') {
+        pts.push({ x: from.x, y: sy }, { x: RIGHT_X, y: sy }, { x: RIGHT_X, y: to.y });
+        if (isHead) {                                      // 桌头：绕到桌左缘外入座（不穿会议桌）
+          pts[2] = { x: RIGHT_X, y: TBL_TOP };
+          pts.push({ x: 790, y: TBL_TOP }, { x: 790, y: to.y });
+        }
+        pts.push({ x: to.x, y: to.y });
+      } else {                                             // lounge：走左侧走廊进会客区
+        pts.push({ x: from.x, y: sy }, { x: LEFT_X, y: sy }, { x: LEFT_X, y: to.y }, { x: to.x, y: to.y });
+      }
+    } else if (fz === 'meeting') {
+      if (tz === 'desk') {
+        if (from.y >= 110 && from.y <= 195) {              // 桌头：x<824 先竖下出桌区
+          pts.push({ x: from.x, y: AISLE_Y }, { x: RIGHT_X, y: AISLE_Y });
+        } else {                                           // 上/下排：横向出会议室右侧
+          pts.push({ x: RIGHT_X, y: from.y });
+        }
+        pts.push({ x: RIGHT_X, y: wy }, { x: to.x, y: wy }, { x: to.x, y: to.y });
+      } else {                                             // lounge
+        if (from.y >= 110 && from.y <= 195) {
+          pts.push({ x: from.x, y: AISLE_Y });             // 桌头：竖下（x<824 不穿桌）
+        } else {
+          pts.push({ x: 790, y: from.y }, { x: 790, y: AISLE_Y });  // 横出桌左缘再竖下
+        }
+        pts.push({ x: LEFT_X, y: AISLE_Y }, { x: LEFT_X, y: to.y }, { x: to.x, y: to.y });
+      }
+    } else {                                               // lounge 出发
+      if (tz === 'meeting') {
+        pts.push({ x: from.x, y: AISLE_Y }, { x: RIGHT_X, y: AISLE_Y }, { x: RIGHT_X, y: to.y });
+        if (isHead) {
+          pts[2] = { x: RIGHT_X, y: TBL_TOP };
+          pts.push({ x: 790, y: TBL_TOP }, { x: 790, y: to.y });
+        }
+        pts.push({ x: to.x, y: to.y });
+      } else {                                             // desk
+        if (to.y >= 455) {                                 // 下排目标：绕左下走廊，避免竖穿两排工位
+          pts.push({ x: from.x, y: AISLE_Y }, { x: LEFT_X, y: AISLE_Y }, { x: LEFT_X, y: BOT_Y }, { x: to.x, y: BOT_Y }, { x: to.x, y: to.y });
+        } else {
+          pts.push({ x: from.x, y: AISLE_Y }, { x: to.x, y: AISLE_Y }, { x: to.x, y: to.y });
+        }
+      }
+    }
+    return pts;
+  }
+  function easeInOutCubic(t) { return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2; }
+  var anims = {};                                          // memberId -> 动画状态机
+  function ensureAnim(id, t) {
+    if (!anims[id]) {
+      anims[id] = { cur: { x: t.x, y: t.y }, target: { x: t.x, y: t.y }, pts: [], seg: 0, segStart: null, t0: 0, durs: [], moving: false };
+    }
+  }
+  // 目标变化：从当前实际位置重规划整条路径（target 合并，不重置 currentPos → 2s 内横跳不会来回走）
+  function planAnim(id, to) {
+    var a = anims[id]; if (!a) return;
+    var pts = pathTo({ x: a.cur.x, y: a.cur.y }, to);
+    var lens = [], total = 0;
+    for (var i = 0; i < pts.length; i++) {
+      var d = i === 0 ? Math.hypot(pts[0].x - a.cur.x, pts[0].y - a.cur.y) : Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
+      lens.push(d); total += d;
+    }
+    var dur = Math.max(500, Math.min(1500, total / MOVE_SPEED));   // 按路程分配总时长
+    a.durs = lens.map(function (d) { return total > 0 ? dur * d / total : 0; });
+    a.pts = pts; a.seg = 0; a.t0 = performance.now(); a.moving = true;
+    a.segStart = { x: a.cur.x, y: a.cur.y };
+    a.target = { x: to.x, y: to.y };
+  }
+  // 逐段 easeInOutCubic 插值推进
+  function tickAnim(id, now) {
+    var a = anims[id]; if (!a || !a.moving) return;
+    var el = now - a.t0, d = a.durs[a.seg], end = a.pts[a.seg];
+    if (d <= 0) {
+      a.seg++; a.t0 = now; a.segStart = { x: a.cur.x, y: a.cur.y };
+      if (a.seg >= a.pts.length) { a.moving = false; a.cur.x = a.target.x; a.cur.y = a.target.y; }
+      return;
+    }
+    var t = Math.min(el / d, 1), e = easeInOutCubic(t);
+    a.cur.x = a.segStart.x + (end.x - a.segStart.x) * e;
+    a.cur.y = a.segStart.y + (end.y - a.segStart.y) * e;
+    if (t >= 1) {
+      a.seg++;
+      if (a.seg >= a.pts.length) { a.moving = false; a.cur.x = a.target.x; a.cur.y = a.target.y; }
+      else { a.segStart = { x: end.x, y: end.y }; a.t0 = now; }
+    }
+  }
+
+  function drawImgFit(img, x, y, w, h) {
+    if (!img || !img.complete || !img.naturalWidth) return;
+    ctx.drawImage(img, x, y, w, h);
+  }
+  function roundRect(x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+
+  function draw() {
+    var now = performance.now();
+    ctx.clearRect(0, 0, CW, CH);
+
+    // 地板平铺
+    if (floorImg.complete && floorImg.naturalWidth) {
+      var pat = ctx.createPattern(floorImg, 'repeat');
+      ctx.fillStyle = pat;
+      ctx.fillRect(0, 0, CW, CH);
+    } else {
+      ctx.fillStyle = '#ececef'; ctx.fillRect(0, 0, CW, CH);
+    }
+
+    // 办公室上部墙：固定高度 WALL_H（会客室上边距已归 0，墙不再跟随 LOUNGE.y），会议室墙背景色填充
+    ctx.fillStyle = '#d8d8d8';
+    ctx.fillRect(0, 0, CW, WALL_H);
+
+    // 会客室：等比缩放保持原图比例（缩小 40%），左边距=办公室墙高
+    if (loungeImg.complete && loungeImg.naturalWidth) {
+      var LS = 0.6;                                  // 缩放系数（缩小 40%）
+      var s = LOUNGE.w / loungeImg.naturalWidth * LS;
+      ctx.drawImage(loungeImg, WALL_H, LOUNGE.y, LOUNGE.w * LS, loungeImg.naturalHeight * s);
+    }
+    drawImgFit(meetingImg, MEETING.x, MEETING.y, MEETING.w, MEETING.h);
+
+    // 工位桌（静态，永远绘制，与人的状态无关）：庄子桌竖放旋转90度，其余统一安然桌；马克/安然/林静/蔡婉桌翻转180度
+    DESKS.forEach(function (d) {
+      if (d.id === 'zhuangzi') {
+        var zimg = deskImgs[0];
+        if (zimg.complete && zimg.naturalWidth) {
+          ctx.save();
+          ctx.translate(d.x + ZZ_W / 2, d.y + ZZ_H / 2);
+          ctx.rotate(Math.PI / 2);
+          ctx.drawImage(zimg, -DW / 2, -DH / 2, DW, DH);
+          ctx.restore();
+        }
+      } else {
+        var img = deskImgs[2];
+        var flip = (d.id === 'make' || d.id === 'anran' || d.id === 'linjing' || d.id === 'ada');
+        if (flip && img.complete && img.naturalWidth) {
+          ctx.save();
+          ctx.translate(d.x + DW / 2, d.y + DH / 2);
+          ctx.rotate(Math.PI);
+          ctx.drawImage(img, -DW / 2, -DH / 2, DW, DH);
+          ctx.restore();
+        } else {
+          drawImgFit(img, d.x, d.y, DW, DH);
+        }
+      }
+    });
+
+    computeSeats();   // 每帧重算 idle 成员的会客区座位占用
+    // 人物（头像，位置来自状态持久化表 MEMBER_STATES 的头像中心 ax/ay）
+    Object.keys(MEMBER_STATES).forEach(function (id) {
+      var info = MEMBER_STATES[id];
+      var pos = memberPos(id);
+      if (!pos) return;
+      var av = avatars[id];
+      var avR = 24;                            // 头像半径（累计放大21%）
+      // —— 移动动画：目标坐标变化 → 从当前位置重规划路径，逐帧 easeInOut 插值（杜绝瞬移）——
+      ensureAnim(id, { x: pos.ax, y: pos.ay });
+      var a = anims[id];
+      if (pos.ax !== a.target.x || pos.ay !== a.target.y) planAnim(id, { x: pos.ax, y: pos.ay });
+      tickAnim(id, now);
+      var ax = a.cur.x, ay = a.cur.y;          // 动画当前位置（沿折线路径移动）
+      if (a.moving) ay += Math.sin(now / 70) * 2;   // 移动中轻微起伏（走路感）
+      ctx.save();
+      ctx.beginPath(); ctx.arc(ax, ay, avR, 0, Math.PI * 2); ctx.clip();
+      if (av) ctx.drawImage(av, ax - avR, ay - avR, avR * 2, avR * 2);
+      else { ctx.fillStyle = '#c2c2c9'; ctx.fillRect(ax - avR, ay - avR, avR * 2, avR * 2); }
+      ctx.restore();
+      // 名字气泡 + 状态灯（锚定头像头顶）
+      var active = (data && data.members.find(function (m) { return m.id === id && m.status === 'active'; }));
+      var pulse = 0.5 + 0.5 * Math.sin(now / 400);
+      var headY = ay - avR - 5;                // 头顶参考 = 头像顶上方5px
+      var dark = root.getAttribute('data-theme') === 'dark';
+      var bubbleBg = dark ? 'rgba(29,29,34,0.92)' : 'rgba(255,255,255,0.94)';
+      var bubbleBorder = dark ? '#3a3a42' : '#e4e4e8';
+      var nameColor = dark ? '#ececef' : '#1a1a1e';
+      var roleColor = dark ? '#9a9aa3' : '#6b6b73';
+      // 气泡（状态灯+名字+角色）
+      ctx.font = '12px sans-serif';
+      var nw = ctx.measureText(info.name).width;
+      ctx.font = '10px sans-serif';
+      var rw = ctx.measureText(info.role).width;
+      var dotD = 12, gap = 5, padX = 8;
+      var textW = Math.max(nw, rw);
+      var bw = padX * 2 + dotD + gap + textW;
+      var bh = 32;
+      var bx = ax - bw / 2;
+      var by = headY - 6 - bh;
+      roundRect(bx, by, bw, bh, 7);
+      ctx.fillStyle = bubbleBg; ctx.fill();
+      ctx.strokeStyle = bubbleBorder; ctx.lineWidth = 1; ctx.stroke();
+      // 状态灯（气泡内左侧，名字旁边）
+      var dotX = bx + padX + dotD / 2;
+      var dotY = by + 10;
+      ctx.beginPath(); ctx.arc(dotX, dotY, active ? 4 + pulse * 2 : 4, 0, Math.PI * 2);
+      ctx.fillStyle = active ? '#16a34a' : '#9ca3af';
+      ctx.globalAlpha = 0.6 + pulse * 0.4; ctx.fill(); ctx.globalAlpha = 1;
+      // 名字 + 角色（灯右侧）
+      var textX = bx + padX + dotD + gap;
+      ctx.textAlign = 'left';
+      ctx.fillStyle = nameColor; ctx.font = '12px sans-serif';
+      ctx.fillText(info.name, textX, by + 14);
+      ctx.fillStyle = roleColor; ctx.font = '10px sans-serif';
+      ctx.fillText(info.role, textX, by + 27);
+    });
+
+    requestAnimationFrame(draw);
+  }
+
+  // ===== 数据 =====
+  var data = null;
+  // 线性图标（lucide 风格，统一 24 viewBox，currentColor 跟随主题）
+  var I_USER  = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>';
+  var I_CLOCK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>';
+  var I_ALERT = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>';
+
+  // ===== Tab 切换 =====
+  var tabBtns = document.querySelectorAll('.tab-btn');
+  function switchTab(name) {
+    tabBtns.forEach(function (b) {
+      var on = b.getAttribute('data-tab') === name;
+      b.classList.toggle('active', on);
+      b.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
+    document.getElementById('pane-office').classList.toggle('active', name === 'office');
+    document.getElementById('pane-kanban').classList.toggle('active', name === 'kanban');
+  }
+  tabBtns.forEach(function (b) {
+    b.addEventListener('click', function () { switchTab(b.getAttribute('data-tab')); });
+  });
+
+  // ===== Kanban 看板 =====
+  var BLOCK_ZH = { needs_input: '等待输入', dependency: '等待依赖', capability: '能力受限', transient: '瞬时故障' };
+  var COL_META = [
+    { key: 'running', label: '进行中', cls: 'run' },
+    { key: 'blocked', label: '受阻', cls: 'blk' },
+    { key: 'todo', label: '待办', cls: '' },
+    { key: 'done', label: '已完成', cls: '' },
+  ];
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function fmtTime(iso) {
+    if (!iso) return '';
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    function p(n) { return (n < 10 ? '0' : '') + n; }
+    return (d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+  }
+  function cardTime(t) { return t.completed_at || t.started_at || t.created_at || ''; }
+  function renderKanban() {
+    var kb = data && data.kanban;
+    var membersEl = document.getElementById('kbMembers');
+    var colsEl = document.getElementById('kbCols');
+    var sumEl = document.getElementById('kbSummary');
+    var hint = document.getElementById('kbHint');
+    if (!kb || !kb.tasks || !kb.tasks.length) {
+      membersEl.innerHTML = '<div class="kb-empty">暂无看板数据</div>';
+      colsEl.innerHTML = '';
+      sumEl.innerHTML = '';
+      return;
+    }
+    if (hint && kb.ts) hint.textContent = '更新于 ' + fmtTime(kb.ts) + ' · 实时同步';
+    // 顶部「各成员在干什么」概览条
+    var membersHtml = Object.keys(kb.by_member || {}).map(function (name) {
+      var m = kb.by_member[name] || {};
+      var dot = m.running ? '<i class="dot run"></i>' : (m.blocked ? '<i class="dot blk"></i>' : '<i class="dot"></i>');
+      var mine = (kb.tasks || []).filter(function (t) { return t.assignee === name; });
+      var latest = '';
+      if (mine.length) {
+        var run = mine.filter(function (t) { return t.status === 'running'; });
+        latest = esc((run.length ? run : mine)[0].title);
+      }
+      return '<div class="kb-member"><div class="nm">' + dot + esc(name) + '</div>' +
+        '<div class="cnt">进行中 ' + (m.running || 0) + ' · 受阻 ' + (m.blocked || 0) + ' · 已完成 ' + (m.done || 0) + '</div>' +
+        (latest ? '<div class="latest">' + latest + '</div>' : '') + '</div>';
+    }).join('');
+    membersEl.innerHTML = membersHtml || '<div class="kb-empty">暂无成员数据</div>';
+    // 按状态分列
+    var colsHtml = COL_META.map(function (c) {
+      var inCol = kb.tasks.filter(function (t) {
+        if (c.key === 'todo') return t.status === 'todo' || t.status === 'ready';
+        return t.status === c.key;
+      });
+      var cards = inCol.map(function (t) {
+        var time = cardTime(t);
+        var why = (t.status === 'blocked' && t.block_kind)
+          ? '<div class="why">' + I_ALERT + esc(BLOCK_ZH[t.block_kind] || t.block_kind) + '</div>' : '';
+        return '<div class="kb-card"><div class="tt">' + esc(t.title) + '</div>' +
+          '<div class="meta"><span class="who">' + I_USER + esc(t.assignee) + '</span>' +
+          (t.priority != null ? '<span class="prio">P' + t.priority + '</span>' : '') +
+          (time ? '<span class="tm">' + I_CLOCK + fmtTime(time) + '</span>' : '') + '</div>' + why + '</div>';
+      }).join('');
+      return '<div class="kb-col"><div class="kb-col-head"><i class="dot ' + c.cls + '"></i>' + esc(c.label) + '<span class="n">' + inCol.length + '</span></div>' +
+        (cards || '<div class="kb-empty">暂无任务</div>') + '</div>';
+    }).join('');
+    colsEl.innerHTML = colsHtml;
+    // 底部 summary 统计
+    var s = kb.summary || {};
+    sumEl.innerHTML = '总计 <b>' + (s.total || 0) + '</b> 个任务 · 进行中 <b>' + (s.running || 0) + '</b> · 受阻 <b>' + (s.blocked || 0) + '</b> · 待办 <b>' + ((s.todo || 0) + (s.ready || 0)) + '</b> · 已完成 <b>' + (s.done || 0) + '</b>';
+    }
+    // ===== Kanban demo 分区（22-4：访客体验任务，独立隔离板 kanban_demo，视觉区分不混入正式统计）=====
+    var DEMO_COL_META = [
+      { key: 'running', label: '进行中', cls: 'demo' },
+      { key: 'blocked', label: '受阻', cls: 'blk' },
+      { key: 'todo', label: '待办', cls: 'demo' },
+      { key: 'done', label: '已完成', cls: '' },
+    ];
+    function renderKanbanDemo() {
+      var kbd = data && data.kanban_demo;
+      var colsEl = document.getElementById('kbDemoCols');
+      var sumEl = document.getElementById('kbDemoSummary');
+      var hint = document.getElementById('kbDemoHint');
+      if (!kbd || !kbd.tasks) {
+        if (colsEl) colsEl.innerHTML = '<div class="kb-empty">暂无体验数据</div>';
+        return;
+      }
+      if (hint) hint.textContent = '隔离板 · 不计入正式任务 · 更新于 ' + (kbd.ts ? fmtTime(kbd.ts) : '--');
+      if (!kbd.tasks.length) {
+        if (colsEl) colsEl.innerHTML = '<div class="kb-empty">暂无体验任务 — 点击右上角「体验一下」试试</div>';
+        if (sumEl) sumEl.innerHTML = '';
+        return;
+      }
+      var colsHtml = DEMO_COL_META.map(function (c) {
+        var inCol = kbd.tasks.filter(function (t) {
+          if (c.key === 'todo') return t.status === 'todo' || t.status === 'ready';
+          return t.status === c.key;
+        });
+        var cards = inCol.map(function (t) {
+          var time = cardTime(t);
+          var why = (t.status === 'blocked' && t.block_kind)
+            ? '<div class="why">' + I_ALERT + esc(BLOCK_ZH[t.block_kind] || t.block_kind) + '</div>' : '';
+          return '<div class="kb-card demo"><div class="tt"><span class="kb-demo-tag">DEMO</span><span class="tt-text">' + esc(t.title) + '</span></div>' +
+            '<div class="meta"><span class="who">' + I_USER + esc(t.assignee) + '</span>' +
+            (t.priority != null ? '<span class="prio">P' + t.priority + '</span>' : '') +
+            (time ? '<span class="tm">' + I_CLOCK + fmtTime(time) + '</span>' : '') + '</div>' + why + '</div>';
+        }).join('');
+        return '<div class="kb-col"><div class="kb-col-head"><i class="dot ' + c.cls + '"></i>' + esc(c.label) + '<span class="n">' + inCol.length + '</span></div>' +
+          (cards || '<div class="kb-empty">暂无任务</div>') + '</div>';
+      }).join('');
+      colsEl.innerHTML = colsHtml;
+      var s = kbd.summary || {};
+      sumEl.innerHTML = '体验任务 <b>' + (s.total || 0) + '</b> 个 · 进行中 <b>' + (s.running || 0) + '</b> · 受阻 <b>' + (s.blocked || 0) + '</b> · 待办 <b>' + ((s.todo || 0) + (s.ready || 0)) + '</b> · 已完成 <b>' + (s.done || 0) + '</b>';
+    }
+  function loadAvatar(id, src) { var i = new Image(); i.onload = function () { avatars[id] = i; }; i.src = src; }
+  var ACTION_ZH = { code: '编码', monitor: '监控', write: '写内容', meet: '开会', work: '干活', talk: '交流', idle: '空闲', done: '完成任务' };
+  function renderFeed() {
+    var feed = document.getElementById('feed');
+    var count = document.getElementById('feedCount');
+    if (!data) return;
+    var acts = data.activities;
+    count.textContent = acts.length + ' 条 / 24h';
+    feed.innerHTML = acts.map(function (a) {
+      var act = a.action !== 'idle';
+      var isDone = a.action === 'done';
+      var tag = ACTION_ZH[a.action] || '干活';
+      // done 条目视觉区分：act-tag 绿色成功样式；dot 沿用 active 绿点（失败/受阻走红字 + ⚠ 沿用 fail 样式）
+      var dotCls = a.failed ? 'fail' : (act ? 'active' : 'idle');
+      return '<div class="feed-item"><span class="t">' + a.ts + '</span>' +
+        '<span class="dot ' + dotCls + '"></span>' +
+        '<span class="who">' + a.member + '</span>' +
+        '<span class="act-tag' + (isDone ? ' done' : '') + '">' + tag + '</span>' +
+        '<span class="what' + (a.failed ? ' fail' : '') + '">' + (a.failed ? I_ALERT + ' ' : '') + a.detail + '</span></div>';
+    }).join('');
+  }
+  // ===== 数据：SSE 全局状态流（15c：替代轮询；15a 服务端契约 /api/opc/stream）=====
+  // 首帧 = EventSource 连接建立时服务端推送的全量快照，不再主动 fetch；
+  // 收到 event:status → applyStatus 统一更新三块（canvas 成员状态 / 活动流 / 看板）。
+  // 断线：EventSource 内置自动重连 + 顶部提示 + 退化 60s 慢轮询兜底，恢复后收到事件即停。
+  // 降级兜底 URL（www 静态镜像副本改为绝对 mrd 地址，其余三处路径差异同 12b 约定）
+  var STATUS_URL = '/company/opc/status.json';
+  var globalES = null;          // 全局状态流
+  var fallbackTimer = null;     // 降级慢轮询
+  var streamHadData = false;    // 主链路是否成功推过数据（区分「真断线」与「从未连上」）
+  var degraded = false;         // 是否处于无 SSE 的降级模式
+
+  function setConnStatus(on) {
+    var bar = document.getElementById('connBar');
+    if (bar) bar.classList.toggle('show', !!on);
+  }
+
+  // 统一渲染入口：三块都从这里取数据，避免各自维护 fetch
+  function applyStatus(d) {
+    if (!d || !Array.isArray(d.members)) return;
+    data = d;
+    d.members.forEach(function (m) { loadAvatar(m.id, '/company/' + m.avatar); });
+    // 兜底：MEMBER_STATES 静态表中存在、但 status.json members 缺失的成员（采集遗漏/双写副本不一致），
+    // 用约定路径 img/avatars/<id>.jpg 补加载头像，避免该成员永远灰块（蔡婉接入后 8 人固定约定）
+    Object.keys(MEMBER_STATES).forEach(function (id) {
+      if (!avatars[id] && !d.members.some(function (m) { return m.id === id; })) {
+        loadAvatar(id, '/company/' + 'img/avatars/' + id + '.jpg');
+      }
+    });
+    renderFeed();
+    renderKanban();
+    renderKanbanDemo();
+    var h = document.getElementById('updateHint');
+    if (h) h.textContent = '更新于 ' + (d.ts ? d.ts.slice(11, 16) : '--:--') + ' · 实时推送';
+  }
+
+  // 统一 EventSource 封装：事件解析 + onerror 路由，全局流与 demo 流共用一套订阅逻辑
+  function openStream(url, onStatus, onError) {
+    var es = new EventSource(url);
+    es.addEventListener('status', function (ev) {
+      var v;
+      try { v = JSON.parse(ev.data); } catch (e) { return; }
+      if (onStatus) onStatus(v, es);
+    });
+    es.onerror = function () { if (onError) onError(es); };
+    return es;
+  }
+
+  // 降级兜底：60s 慢轮询（页面绝不白屏；旧数据保留显示不清空）
+  function fetchStatus() {
+    fetch(STATUS_URL + '?_=' + Date.now())
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (d && Array.isArray(d.members)) {
+          applyStatus(d);
+          // 从未连上（www 镜像无 API）+ 轮询可用 → 页面健康，无需报警
+          if (degraded && !streamHadData) setConnStatus(false);
+        }
+      })
+      .catch(function () { setConnStatus(true); });   // 轮询也失败 → 数据确已陈旧，明确提示
+  }
+  function startFallbackPolling() {
+    if (fallbackTimer) return;
+    degraded = true;
+    fetchStatus();
+    fallbackTimer = setInterval(fetchStatus, 60000);
+  }
+  function stopFallbackPolling() {
+    if (fallbackTimer) { clearInterval(fallbackTimer); fallbackTimer = null; }
+    degraded = false;
+  }
+
+  function startGlobalStream() {
+    if (globalES) { try { globalES.close(); } catch (e) {} globalES = null; }
+    globalES = openStream('/api/opc/stream', function (d) {
+      streamHadData = true;
+      setConnStatus(false);          // 恢复：隐藏断线提示
+      stopFallbackPolling();         // 恢复：停止慢轮询
+      applyStatus(d);
+    }, function () {
+      // 有数据后断开 = 真断线 → 明确提示；从未连上（www 静态镜像无 API）→ 静默降级
+      if (streamHadData) setConnStatus(true);
+      startFallbackPolling();
+    });
+  }
+  startGlobalStream();
+  requestAnimationFrame(draw);
+
+  // ===== Demo 体验（12b）：预设任务 → SSE 进度 → markdown 报告 → 历史回看 =====
+  var DEMO_PRESETS = [
+    { id: 'v2ex_hot', title: 'V2EX 热帖', desc: '收集 V2EX 十个热帖（标题 + 链接 + 热度）', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg>' },
+    { id: 'gz_weather', title: '广州天气', desc: '查询广州未来 15 天的天气预报', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="M20 12h2"/><path d="m19.07 4.93-1.41 1.41"/><path d="M15.947 12.65a4 4 0 0 0-5.925-4.128"/><path d="M13 22H7a5 5 0 1 1 4.9-6H13a3 3 0 0 1 0 6Z"/></svg>' },
+    { id: 'gz_trip', title: '广州周边旅行', desc: '生成一份 2-3 天的周边旅行计划', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.106 5.553a2 2 0 0 0 1.788 0l3.659-1.83A1 1 0 0 1 21 4.619v12.764a1 1 0 0 1-.553.894l-4.553 2.277a2 2 0 0 1-1.788 0l-4.212-2.106a2 2 0 0 0-1.788 0l-3.659 1.83A1 1 0 0 1 3 19.381V6.618a1 1 0 0 1 .553-.894l4.553-2.277a2 2 0 0 1 1.788 0z"/><path d="M15 5.764v15"/><path d="M9 3.236v15"/></svg>' },
+    { id: 'niulai_boxoffice', title: '电影实时票房', desc: '查看电影《牛来》的实时票房数据', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"/><path d="M13 5v2"/><path d="M13 17v2"/><path d="M13 11v2"/></svg>' },
+  ];
+  var DEMO_STATUS_ZH = { queued: '排队中', dispatched: '庄子派活中', running: '成员执行中', completed: '已完成', failed: '失败' };
+  var DEMO_STATUS_MSG = {
+    queued: '已收到任务，正在排队',
+    dispatched: '庄子已派活，等待成员执行',
+    running: '成员正在执行中',
+    completed: '任务已完成',
+    failed: '任务执行失败，可稍后重试'
+  };
+  var STEP_KEYS = ['queued', 'dispatched', 'running', 'completed'];
+  var I_SEND = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>';
+
+  function presetOf(id) {
+    for (var i = 0; i < DEMO_PRESETS.length; i++) if (DEMO_PRESETS[i].id === id) return DEMO_PRESETS[i];
+    return null;
+  }
+  // 22-7: pop 面板背景滚动锁定 —— 打开时锁背景滚动（桌面滚轮 + 移动端触摸），关闭恢复且不丢滚动位置
+  var _modalCount = 0, _scrollY = 0, _touchLock = null;
+  function _lockBgScroll() {
+    _scrollY = window.pageYOffset || document.documentElement.scrollTop || 0;
+    document.documentElement.classList.add('scroll-lock');
+    document.body.classList.add('scroll-lock');
+    if (!_touchLock) {
+      _touchLock = function (e) {
+        var t = e.target;
+        if (t && t.closest && t.closest('.modal')) return; // 弹窗内部正常滚动，只锁背景
+        e.preventDefault();
+      };
+      document.addEventListener('touchmove', _touchLock, { passive: false });
+    }
+  }
+  function _unlockBgScroll() {
+    document.documentElement.classList.remove('scroll-lock');
+    document.body.classList.remove('scroll-lock');
+    if (_touchLock) { document.removeEventListener('touchmove', _touchLock); _touchLock = null; }
+    window.scrollTo(0, _scrollY);
+  }
+  function showModal(id) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    if (!el.classList.contains('show')) {
+      _modalCount++;
+      if (_modalCount === 1) _lockBgScroll();
+    }
+    el.classList.add('show');
+  }
+  function hideModal(id) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    if (el.classList.contains('show')) {
+      el.classList.remove('show');
+      _modalCount = Math.max(0, _modalCount - 1);
+      if (_modalCount === 0) _unlockBgScroll();
+    }
+  }
+
+  // —— 任务选择弹窗（无任何自由文本输入，仅 4 个预设卡片）——
+  var demoGrid = document.getElementById('demoGrid');
+  demoGrid.innerHTML = DEMO_PRESETS.map(function (p) {
+    return '<button type="button" class="demo-card" data-id="' + p.id + '">' +
+      '<span class="ic">' + p.icon + '</span>' +
+      '<span class="tx"><span class="t">' + p.title + '</span><span class="d">' + p.desc + '</span></span></button>';
+  }).join('');
+  var submitting = false;
+  function note(msg, kind) {
+    var el = document.getElementById('demoNote');
+    el.textContent = msg || '';
+    el.className = 'modal-note' + (kind ? ' ' + kind : '');
+  }
+  demoGrid.addEventListener('click', function (e) {
+    var card = e.target.closest('.demo-card');
+    if (!card || submitting || card.disabled) return;
+    submitting = true;
+    demoGrid.querySelectorAll('.demo-card').forEach(function (c) { c.disabled = true; });
+    note('', '');
+    var taskId = card.getAttribute('data-id');
+    fetch('https://mrd.hermes.cc.cd/api/opc/demo', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ task_id: taskId })
+    }).then(function (r) {
+      return r.json().catch(function () { return { ok: false, error: 'service unavailable' }; })
+        .then(function (j) { return { code: r.status, j: j }; });
+    }).then(function (res) {
+      submitting = false;
+      demoGrid.querySelectorAll('.demo-card').forEach(function (c) { c.disabled = false; });
+      if (res.code === 200 && res.j && res.j.ok && res.j.data && res.j.data.demo_id) {
+        hideModal('demoModal');
+        startDemo(res.j.data);
+      } else {
+        var err = (res.j && res.j.error) || '';
+        note(err === 'demo rate limited' ? '操作太频繁，请稍后再试'
+          : err === 'demo busy' ? '当前体验任务较多，请稍后再试'
+          : '体验服务暂不可用，请稍后再试', 'err');
+      }
+    }).catch(function () {
+      submitting = false;
+      demoGrid.querySelectorAll('.demo-card').forEach(function (c) { c.disabled = false; });
+      note('网络异常，体验服务暂时不可用', 'err');
+    });
+  });
+  document.getElementById('demoBtn').addEventListener('click', function () {
+    note('', '');
+    showModal('demoModal');
+  });
+  document.getElementById('demoClose').addEventListener('click', function () { hideModal('demoModal'); });
+  // 22-5：任务选择弹窗内常驻历史体验入口（无任务进行时也可达）
+  document.getElementById('demoHistoryBtn').addEventListener('click', function () {
+    hideModal('demoModal');
+    openHistory(null);
+  });
+
+  // —— demo 进度（SSE 推送，唯一秒级实时性场景；EventSource 断线自动重连）——
+  var currentDemo = null;
+  var demoES = null;
+  var lastDemoId = null;
+  try { lastDemoId = localStorage.getItem('opc-demo-last') || null; } catch (e) {}
+  function startDemo(d) {
+    currentDemo = { demo_id: d.demo_id, task_id: d.task_id };
+    try { localStorage.setItem('opc-demo-last', d.demo_id); } catch (e) {}
+    switchTab('kanban');
+    showProgress({ demo_id: d.demo_id, task_id: d.task_id, status: d.status || 'queued' });
+    connectDemoStream(d.demo_id);
+  }
+  function connectDemoStream(demoId) {
+    if (demoES) { try { demoES.close(); } catch (e) {} demoES = null; }
+    demoES = openStream('https://mrd.hermes.cc.cd/api/opc/demo/' + encodeURIComponent(demoId) + '/stream', function (v, es) {
+      renderProgress(v);
+      if (v.status === 'completed' || v.status === 'failed') {
+        try { es.close(); } catch (e) {}
+        if (demoES === es) demoES = null;
+        if (v.status === 'completed') setTimeout(function () { openReport(v); }, 500);
+        else toast('体验任务失败，可稍后重试');
+      }
+    }, function (es) {
+      // 断线由 EventSource 自动重连恢复；已无当前任务时才彻底断开
+      if (!currentDemo && demoES === es) { try { es.close(); } catch (e) {} demoES = null; }
+    });
+  }
+  function showProgress(v) {
+    document.getElementById('demoProgress').classList.add('show');
+    renderProgress(v);
+  }
+  function renderProgress(v) {
+    document.getElementById('demoProgress').classList.add('show');
+    var idx = STEP_KEYS.indexOf(v.status);
+    var failed = v.status === 'failed';
+    var done = v.status === 'completed';
+    document.getElementById('demoSteps').innerHTML = STEP_KEYS.map(function (k, i) {
+      var cls = '';
+      if (failed) { if (i < idx) cls = 'done'; else if (i === idx) cls = 'fail'; }
+      else if (i < idx || (i === idx && done)) cls = 'done';
+      else if (i === idx) cls = 'cur';
+      return '<div class="demo-step ' + cls + '"><span class="dot"></span><span class="lbl">' + DEMO_STATUS_ZH[k] + '</span></div>';
+    }).join('');
+    var preset = presetOf(v.task_id);
+    var name = preset ? preset.title : v.task_id;
+    var msg = failed ? '任务执行失败' : (DEMO_STATUS_MSG[v.status] || v.status);
+    document.getElementById('demoMetaTask').innerHTML = I_SEND + ' <b>' + esc(name) + '</b><span class="muted">' + esc(msg) + '</span>';
+    var btn = document.getElementById('demoViewReport');
+    btn.style.display = 'inline-flex';
+    if (v.status === 'completed') {
+      btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px;vertical-align:-2px"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg> 查看报告';
+      btn.onclick = function () { openReport(v); };
+    } else {
+      // 常显入口：未完成任务也可点开历史体验列表（22-5）
+      btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px;vertical-align:-2px"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> 历史体验/查看报告';
+      btn.onclick = function () { openHistory(v); };
+    }
+  }
+
+  // —— 报告弹窗 + 历史回看（22-6：左右分栏，左历史列表 + 右报告内容）——
+  var reportModal = document.getElementById('reportModal');
+  var reportTitleEl = document.getElementById('reportTitle');
+  var reportBodyEl = document.getElementById('reportBody');
+  function setReportTitle(kind, v) {
+    var preset = v && v.task_id ? presetOf(v.task_id) : null;
+    if (kind === 'history') {
+      reportTitleEl.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>历史体验' + (preset ? ' · ' + esc(preset.title) : '');
+    } else {
+      reportTitleEl.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>体验报告' + (preset ? ' · ' + esc(preset.title) : '');
+    }
+  }
+  // 右栏：渲染报告内容（markdown），加载失败给错误提示而非白屏
+  function renderReportInto(v) {
+    if (v.status === 'completed' && v.report_md) {
+      reportBodyEl.innerHTML = '<div class="report-body">' + mdToHtml(v.report_md) + '</div>';
+      return;
+    }
+    reportBodyEl.innerHTML = '<div class="report-loading">报告加载中…</div>';
+    fetch('https://mrd.hermes.cc.cd/api/opc/demo/status?demo_id=' + encodeURIComponent(v.demo_id))
+      .then(function (r) { return r.json(); })
+      .then(function (res) {
+        var d = res && res.ok && res.data;
+        if (d && d.status === 'completed' && d.report_md) reportBodyEl.innerHTML = '<div class="report-body">' + mdToHtml(d.report_md) + '</div>';
+        else if (d && d.status) {
+          var stm = DEMO_STATUS_MSG[d.status] || (DEMO_STATUS_ZH[d.status] || d.status);
+          reportBodyEl.innerHTML = '<div class="report-empty">任务' + esc(stm) + '，完成后可在此查看报告</div>';
+        }
+        else reportBodyEl.innerHTML = '<div class="report-empty">报告暂不可用，请稍后再试</div>';
+      })
+      .catch(function () { reportBodyEl.innerHTML = '<div class="report-empty">报告加载失败，请稍后再试</div>'; });
+  }
+  function openReport(v) {
+    setReportTitle('report', v);
+    renderReportInto(v);
+    loadHistory(v.demo_id, v.status === 'completed' ? v : null);
+    showModal('reportModal');
+  }
+  document.getElementById('reportClose').addEventListener('click', function () { hideModal('reportModal'); });
+  // 22-5：历史体验常驻入口 —— 未完成任务点击按钮直接打开历史列表弹窗
+  // 22-6：右侧默认展示当前（最新/在跑）报告内容，左侧列表可选
+  function openHistory(v) {
+    setReportTitle('history', v);
+    var preset = v && v.task_id ? presetOf(v.task_id) : null;
+    if (v && v.task_id) {
+      var st = v.status || '';
+      var name = esc(preset ? preset.title : v.task_id);
+      if (st === 'failed') {
+        reportBodyEl.innerHTML = '<div class="report-empty">任务「' + name + '」执行失败，未生成报告</div>';
+      } else {
+        var msg = DEMO_STATUS_MSG[st] || (DEMO_STATUS_ZH[st] || '任务执行中');
+        reportBodyEl.innerHTML = '<div class="report-empty">当前任务「' + name + '」' + esc(msg) + '，完成后可在此查看报告</div>';
+      }
+      loadHistory(v.demo_id, null);
+    } else {
+      // 无指定任务：默认展示最新/在跑报告内容，点击左侧历史项切换
+      reportBodyEl.innerHTML = '<div class="report-loading">报告加载中…</div>';
+      loadHistory(null, null);
+    }
+    showModal('reportModal');
+  }
+  // 左栏历史列表点击 → 右栏切换为该历史报告内容 + 选中高亮
+  document.getElementById('histList').addEventListener('click', function (e) {
+    var it = e.target.closest('.hist-item');
+    if (!it) return;
+    this.querySelectorAll('.hist-item.selected').forEach(function (x) { x.classList.remove('selected'); });
+    it.classList.add('selected');
+    var v = { demo_id: it.getAttribute('data-id'), task_id: it.getAttribute('data-task') || '', status: '' };
+    setReportTitle('report', v);
+    renderReportInto(v);
+  });
+  function loadHistory(selectedId, selectedFull) {
+    var listEl = document.getElementById('histList');
+    listEl.innerHTML = '<div class="report-loading">加载中…</div>';
+    fetch('https://mrd.hermes.cc.cd/api/opc/demo/history').then(function (r) { return r.json(); }).then(function (res) {
+      var items = (res && res.ok && res.data && res.data.items) || [];
+      if (!items.length) { listEl.innerHTML = '<div class="kb-empty">暂无历史体验</div>'; return; }
+      listEl.innerHTML = items.map(function (it) {
+        var preset = presetOf(it.task_id);
+        var label = preset ? preset.title : it.task_id;
+        var stCls = it.status === 'completed' ? 'ok' : (it.status === 'failed' ? 'fail' : '');
+        var sel = selectedId && it.demo_id === selectedId ? ' selected' : '';
+        return '<div class="hist-item' + sel + '" data-id="' + esc(it.demo_id) + '" data-task="' + esc(it.task_id) + '">' +
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>' +
+          '<span class="hist-lbl">' + esc(label) + '</span>' +
+          '<span class="tm">' + fmtTime(it.created_at) + '</span>' +
+          '<span class="st ' + stCls + '">' + (DEMO_STATUS_ZH[it.status] || it.status) + '</span></div>';
+      }).join('');
+      // 22-6：openHistory(null) 时右侧默认显示最新/在跑报告内容，并高亮对应列表项
+      if (!selectedId && !selectedFull && !reportBodyEl.querySelector('.report-empty')) {
+        var latest = items[0];
+        var lv = { demo_id: latest.demo_id, task_id: latest.task_id || '', status: latest.status || '' };
+        var cur = listEl.querySelector('.hist-item');
+        if (cur) cur.classList.add('selected');
+        if (latest.status === 'completed') {
+          setReportTitle('report', lv);
+          renderReportInto(lv);
+        } else if (latest.status === 'failed') {
+          var nm = esc(presetOf(latest.task_id) ? presetOf(latest.task_id).title : latest.task_id);
+          reportBodyEl.innerHTML = '<div class="report-empty">最近任务「' + nm + '」执行失败，未生成报告</div>';
+        } else {
+          var msg2 = DEMO_STATUS_MSG[latest.status] || (DEMO_STATUS_ZH[latest.status] || '任务执行中');
+          var nm2 = esc(presetOf(latest.task_id) ? presetOf(latest.task_id).title : latest.task_id);
+          reportBodyEl.innerHTML = '<div class="report-empty">当前任务「' + nm2 + '」' + esc(msg2) + '，完成后可在此查看报告</div>';
+        }
+      }
+    }).catch(function () {
+      listEl.innerHTML = '<div class="kb-empty">历史加载失败</div>';
+      // 22-6：右栏若还停在加载中，给错误提示而非白屏
+      if (!selectedId && !reportBodyEl.querySelector('.report-body, .report-empty')) {
+        reportBodyEl.innerHTML = '<div class="report-empty">报告加载失败，请稍后再试</div>';
+      }
+    });
+  }
+
+  // —— 迷你 markdown 渲染（零依赖；先转义防注入，再行级/内联转换）——
+  function inlineMd(s) {
+    var re = /(`[^`]+`|\*\*[^*]+\*\*|\*[^*]+\*|\[[^\]]+\]\(https?:\/\/[^\s)]+\))/g;
+    return s.replace(re, function (m) {
+      if (m.charAt(0) === '`') return '<code>' + m.slice(1, -1) + '</code>';
+      if (m.slice(0, 2) === '**') return '<strong>' + m.slice(2, -2) + '</strong>';
+      if (m.charAt(0) === '*') return '<em>' + m.slice(1, -1) + '</em>';
+      var a = m.indexOf('](');
+      return '<a href="' + m.slice(a + 2, -1) + '" target="_blank" rel="noopener noreferrer">' + m.slice(1, a) + '</a>';
+    });
+  }
+  function mdToHtml(md) {
+    if (!md) return '<div class="report-empty">报告为空</div>';
+    // 1) 保护代码块（原样保留）
+    var codeBlocks = [];
+    md = md.replace(/```[\s\S]*?```/g, function (m) {
+      codeBlocks.push('<pre><code>' + esc(m.slice(3, -3).replace(/^\n|\n\s*$/g, '')) + '</code></pre>');
+      return '\u0000C' + (codeBlocks.length - 1) + '\u0000';
+    });
+    // 2) 先整体转义防注入；不转义 ">"（"<" 已转义封死标签，且需保留供 blockquote 行识别）
+    md = md.replace(/[&<"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '"': '&quot;', "'": '&#39;' }[c]; });
+    // 3) 行级处理
+    var lines = md.split('\n');
+    var html = [], tbl = [], list = null, inP = false;
+    function flushTbl() {
+      if (!tbl.length) return;
+      var rows = tbl.map(function (l) {
+        return l.replace(/^\s*\|?/, '').replace(/\|?\s*$/, '').trim().split('|').map(function (c) { return c.trim(); });
+      });
+      html.push('<table>');
+      rows.forEach(function (cells, ri) {
+        if (ri === 1 && cells.every(function (c) { return /^:?-{2,}:?$/.test(c); })) return; // 分隔行
+        var tag = ri === 0 ? 'th' : 'td';
+        html.push('<tr>' + cells.map(function (c) { return '<' + tag + '>' + inlineMd(c) + '</' + tag + '>'; }).join('') + '</tr>');
+      });
+      html.push('</table>');
+      tbl = [];
+    }
+    function closeP() { if (inP) { html.push('</p>'); inP = false; } }
+    function closeList() { if (list) { html.push('</' + list + '>'); list = null; } }
+    lines.forEach(function (line) {
+      var t = line.trim();
+      if (!t) { flushTbl(); closeP(); closeList(); return; }
+      if (t.indexOf('|') >= 0) { closeP(); closeList(); tbl.push(t); return; }
+      flushTbl();
+      var m;
+      if (t === '---' || /^(\*\s*){3,}$/.test(t)) { closeP(); closeList(); html.push('<hr/>'); return; }
+      if ((m = t.match(/^(#{1,3})\s+(.*)$/))) { closeP(); closeList(); var h = m[1].length; html.push('<h' + h + '>' + inlineMd(m[2]) + '</h' + h + '>'); return; }
+      if ((m = t.match(/^>\s?(.*)$/))) { closeP(); closeList(); html.push('<blockquote>' + inlineMd(m[1]) + '</blockquote>'); return; }
+      if ((m = t.match(/^[-*]\s+(.*)$/))) { if (list !== 'ul') { closeList(); closeP(); html.push('<ul>'); list = 'ul'; } html.push('<li>' + inlineMd(m[1]) + '</li>'); return; }
+      if ((m = t.match(/^\d+[.)]\s+(.*)$/))) { if (list !== 'ol') { closeList(); closeP(); html.push('<ol>'); list = 'ol'; } html.push('<li>' + inlineMd(m[1]) + '</li>'); return; }
+      if (!inP) { html.push('<p>'); inP = true; }
+      html.push(inlineMd(t));
+    });
+    flushTbl(); closeP();
+    if (list) html.push('</' + list + '>');
+    // 4) 恢复代码块
+    var out = html.join('').replace(/\u0000C(\d+)\u0000/g, function (m, i) { return codeBlocks[+i]; });
+    return out;
+  }
+
+  // —— 全局轻提示 / 弹窗通用行为 ——
+  var toastTimer = null;
+  function toast(msg) {
+    var el = document.getElementById('toast');
+    el.textContent = msg;
+    el.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { el.classList.remove('show'); }, 3200);
+  }
+  document.querySelectorAll('.modal-mask').forEach(function (mask) {
+    mask.addEventListener('click', function (e) { if (e.target === mask) hideModal(mask.id); });
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') document.querySelectorAll('.modal-mask.show').forEach(function (m) { hideModal(m.id); });
+  });
+
+  // —— 恢复上次体验（localStorage 记住 demo_id；在飞则重连 SSE 继续看进度）——
+  if (lastDemoId) {
+    fetch('https://mrd.hermes.cc.cd/api/opc/demo/status?demo_id=' + encodeURIComponent(lastDemoId))
+      .then(function (r) { return r.json(); })
+      .then(function (res) {
+        var d = res && res.ok && res.data;
+        if (!d) return;
+        currentDemo = { demo_id: d.demo_id, task_id: d.task_id };
+        if (d.status !== 'completed' && d.status !== 'failed') {
+          switchTab('kanban');
+          showProgress(d);
+          connectDemoStream(d.demo_id);
+        } else {
+          showProgress(d); // 终态也展示（查看报告入口），不自动切 tab
+        }
+      }).catch(function () {});
+  }
+})();
+</script>
+</body>
+</html>
