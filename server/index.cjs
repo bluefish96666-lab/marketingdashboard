@@ -85,6 +85,9 @@ const { handleSpotTable, handleChemSpot } = srcSunsirs;
 const srcAiModels = require("./sources/ai-models.cjs")({ fetchText, num, readHistory, writeHistory, bjToday, path, fs });
 const { handleAaModels, handleSpendIndex } = srcAiModels;
 
+// 官网合作咨询（改版5）: 校验 + 落盘 contact.jsonl（不写 state.json）
+const { validateContact, appendContact } = require("./lib/contact.cjs");
+
 // 个股资金流上游 inflight 去重表(handleStockFlows 使用)
 const flowInflight = new Map();
 
@@ -96,6 +99,50 @@ const activeSweeper = setInterval(() => {
 }, 5 * 60 * 1000);
 activeSweeper.unref();
 function trackActiveIp(ip) { activeIps.set(ip, Date.now()); }
+
+/* ---------------- 官网访问统计（改版4）: 只计数不采集, UV 匿名去重 ----------------
+ * 红线(Gavin): 不采集个人信息 —— 不做指纹、不存 cookie 值。
+ * - PV = 页面请求次数(每次 GET /api/visits +1)
+ * - UV = 去重访客数: 客户端生成随机匿名 id 存 localStorage 随 ?vid= 上报,
+ *   服务端只存其 sha256 哈希用于去重; 无 vid(curl/无 JS 环境)时用 IP 哈希兜底。
+ * - 持久化 server/data/visits.json, tmp+rename 原子写, 重启不丢。
+ * - seen 保留 365 天内的哈希(老访客重访计为新访客, UV 累计不降), 防文件无限膨胀。
+ */
+const VISITS_FILE = path.join(__dirname, "data", "visits.json");
+const VISITS_KEEP_MS = 365 * 24 * 3600 * 1000;
+let visits = { pv: 0, uv: 0, seen: {} };
+try {
+  const raw = JSON.parse(fs.readFileSync(VISITS_FILE, "utf-8"));
+  visits = { pv: raw.pv || 0, uv: raw.uv || 0, seen: raw.seen || {} };
+} catch (e) { /* 首启无文件 */ }
+function saveVisits() {
+  const tmp = VISITS_FILE + ".tmp";
+  fs.writeFileSync(tmp, JSON.stringify(visits));
+  fs.renameSync(tmp, VISITS_FILE); // 同目录 rename 原子替换, 防并发写坏
+}
+function visitKey(req, vid) {
+  if (vid && /^[A-Za-z0-9_-]{8,64}$/.test(vid)) {
+    return "v:" + crypto.createHash("sha256").update("vid:" + vid).digest("hex").slice(0, 32);
+  }
+  return "i:" + crypto.createHash("sha256").update("ip:" + clientIp(req)).digest("hex").slice(0, 32);
+}
+function handleVisits(req, vid) {
+  const now = Date.now();
+  visits.pv += 1;
+  const key = visitKey(req, vid);
+  if (!visits.seen[key]) {
+    visits.seen[key] = now;
+    visits.uv += 1;
+    // 清理 365 天前的哈希, 防文件无限膨胀(UV 为累计值, 删除不影响已计数)
+    for (const k of Object.keys(visits.seen)) {
+      if (visits.seen[k] < now - VISITS_KEEP_MS) delete visits.seen[k];
+    }
+  } else {
+    visits.seen[key] = now;
+  }
+  try { saveVisits(); } catch (e) { console.error("[visits] save error:", e.message); }
+  return { pv: visits.pv, uv: visits.uv };
+}
 
 const PORT = process.env.PORT || 3000;
 const DIST = path.join(__dirname, "..", "dist");
@@ -158,6 +205,8 @@ const routes = {
     fs.writeFileSync(file, JSON.stringify(arr, null, 2));
     return { received: true, count: arr.length };
   },
+  // ---- 官网访问统计（改版4）: 只计数不采集, 每次 GET 即记一次访问(PV+1), UV 按匿名 vid/IP 哈希去重 ----
+  "/api/visits": async (q, _body, req) => handleVisits(req, q.get("vid") || ""),
   "/api/minute": async (q) =>
     cached(`minute:${q.get("code")}`, 5000, () => handleMinute(q.get("code") || "sh000001")),
   // 批量分钟线: 将 N 次单独请求合并为 1 次, 大幅降低冷启动爆发请求数
@@ -279,6 +328,17 @@ const routes = {
   "/api/stock-search": async (q) =>
     cached(`ssearch:${q.get("q")}`, 5000, () => handleStockSearch(q.get("q") || "")), // 前端击键触发, 短缓存防新浪WAF
   "/api/chain-parse": async (_q, body) => handleChainParse(body || {}),
+  // ---- 官网合作咨询（改版5）: 校验 + 同 IP 限频 + 落盘 contact.jsonl（不写 state.json）----
+  "/api/contact": async (_q, body, req) => {
+    const v = validateContact(body);
+    if (!v.ok) { const e = new Error(v.error); e.status = 400; throw e; }
+    const ip = clientIp(req);
+    // 防 spam: 同 IP 1 小时 ≤3 条（先于落盘判断, 超限直接 429）
+    if (!contactLimiter(ip)) { const e = new Error("contact rate limited"); e.status = 429; throw e; }
+    const rec = { ts: new Date().toISOString(), ip, ...v.value };
+    appendContact(CONTACT_DATA_DIR, rec);
+    return { received: true, ts: rec.ts };
+  },
   // ---- OPC 透明办公室 demo 体验（12a）----
   "/api/opc/demo": async (_q, body, req) => {
     // a) 白名单校验: 只认 4 个预设 id, 其他字段一律忽略（防 prompt 注入/防外人驱动 agent）
@@ -601,6 +661,12 @@ const DEMO_SSE_POLL_MS = 2000;           // SSE 内部状态轮询间隔（状�
 const DEMO_SSE_MAX_MS = 15 * 60 * 1000;  // SSE 连接硬上限 15 分钟，防资源泄漏
 const demoLimiter = makeLimiter(DEMO_RATE_WINDOW_MS, DEMO_RATE_MAX);
 
+// 官网合作咨询（改版5）: 落盘目录 + 同 IP 1 小时 ≤3 条限频
+const CONTACT_DATA_DIR = path.join(__dirname, "data");
+const CONTACT_RATE_WINDOW_MS = 60 * 60 * 1000; // 1 小时窗口
+const CONTACT_RATE_MAX = 3;                    // 同 IP 最多 3 条/小时
+const contactLimiter = makeLimiter(CONTACT_RATE_WINDOW_MS, CONTACT_RATE_MAX);
+
 // 启动时把预设表同步成 presets.json（供 opc_demo_dispatch.py 读取，单一事实源；服务端仍是硬编码白名单）
 try {
   fs.mkdirSync(DEMO_DIR, { recursive: true });
@@ -725,7 +791,8 @@ const server = http.createServer(async (req, res) => {
     // ---- OPC demo/透明办公室 API 跨域预检(12c): www Pages 站跨源 POST(content-type: application/json)
     // 触发 preflight, 现返回 400 导致浏览器拦截; 这里放行白名单来源并返回完整 CORS 头。
     // status/history/SSE 流为简单 GET(无自定义头)不触发 preflight, 由响应 ACAO 放行。
-    if (req.method === "OPTIONS" && u.pathname.startsWith("/api/opc/")) {
+    // 官网合作咨询(改版5): /api/contact 同走 www.hermes.cc.cd 白名单(落地页表单跨源提交)。
+    if (req.method === "OPTIONS" && (u.pathname.startsWith("/api/opc/") || u.pathname === "/api/contact" || u.pathname === "/api/visits")) {
       const cors = opcCorsHeaders(req);
       if (cors["Access-Control-Allow-Origin"] == null) {
         send(res, 403, { ok: false, error: "forbidden" }, cors);
@@ -743,7 +810,9 @@ const server = http.createServer(async (req, res) => {
       stats.reqs++;
       const ip = clientIp(req);
       trackActiveIp(ip);
-      const cors = u.pathname.startsWith("/api/opc/") ? opcCorsHeaders(req) : corsHeadersFor(req);
+      const cors = u.pathname.startsWith("/api/opc/") || u.pathname === "/api/contact" || u.pathname === "/api/visits"
+        ? opcCorsHeaders(req)
+        : corsHeadersFor(req);
       // 按 IP 限流(先于缓存命中判断, 防唯一 key 旋转造成的上游请求放大)
       const allowed = (PROTECTED_ROUTES.has(u.pathname) ? protectedLimiter : apiLimiter)(clientIp(req));
       if (!allowed) {
