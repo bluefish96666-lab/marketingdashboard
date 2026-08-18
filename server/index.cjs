@@ -89,6 +89,12 @@ const { handleAaModels, handleSpendIndex } = srcAiModels;
 // 官网合作咨询（改版5）: 校验 + 落盘 contact.jsonl（不写 state.json）
 const { validateContact, appendContact } = require("./lib/contact.cjs");
 
+// 官网 AI 助理（0818-a P0）: 校验 + 意向判定 + LLM 回复 + 落盘 assistant-leads.jsonl
+const {
+  validateAssistant, detectIntent, callAssistantLLM, fallbackReply,
+  appendAssistantLead, QUESTION_MAX,
+} = require("./lib/assistant.cjs");
+
 // 个股资金流上游 inflight 去重表(handleStockFlows 使用)
 const flowInflight = new Map();
 
@@ -361,6 +367,36 @@ const routes = {
     const rec = { ts: new Date().toISOString(), ip, ...v.value };
     appendContact(CONTACT_DATA_DIR, rec);
     return { received: true, ts: rec.ts };
+  },
+  // ---- 官网 AI 助理（0818-a P0）: 校验 + 同 IP 限频 + LLM 回复 + 意向命中落盘 ----
+  // 访客提交问题/意向 → AI 基于公司知识库回复（话术红线: 托管版只讲「筹备中」不报价不承诺）
+  // → INTENT_KEYWORDS 命中 → 落盘 assistant-leads.jsonl → cron 登记 state.json leads[] → 转温雯。
+  // 红线: 邮箱以外的个人信息不落盘（只存 email，不存姓名/电话）。
+  "/api/assistant": async (_q, body, req) => {
+    const v = validateAssistant(body);
+    if (!v.ok) { const e = new Error(v.error); e.status = 400; throw e; }
+    const ip = clientIp(req);
+    // 防烧 token/防刷: 同 IP 3 条/5 分钟（先于 LLM 调用, 超限直接 429）
+    if (!assistantLimiter(ip)) { const e = new Error("assistant rate limited"); e.status = 429; throw e; }
+    const { question, contact } = v.value;
+    const reply = (await callAssistantLLM(question)) || fallbackReply();
+    const hits = detectIntent(question);
+    let lead_id = null;
+    if (hits.length > 0) {
+      // 意向命中 → 落盘（供 cron 登记 leads[] + 转温雯; 不写 state.json, 与 contact 同策略）
+      const rec = {
+        ts: new Date().toISOString(),
+        ip,
+        question,
+        contact, // 仅邮箱（红线: 邮箱以外不落盘）
+        intent_hits: hits,
+        reply,
+        registered: false,
+      };
+      const saved = appendAssistantLead(ASSISTANT_DATA_DIR, rec);
+      lead_id = `${saved.ts}_${String(ip).replace(/[^0-9a-f.]/gi, "_").slice(0, 40)}`;
+    }
+    return { reply, intent_hit: hits.length > 0, intent_keywords: hits, lead_id };
   },
   // ---- OPC 透明办公室 demo 体验（12a）----
   "/api/opc/demo": async (_q, body, req) => {
@@ -695,6 +731,12 @@ const CONTACT_DATA_DIR = path.join(__dirname, "data");
 const CONTACT_RATE_WINDOW_MS = 60 * 60 * 1000; // 1 小时窗口
 const CONTACT_RATE_MAX = 3;                    // 同 IP 最多 3 条/小时
 const contactLimiter = makeLimiter(CONTACT_RATE_WINDOW_MS, CONTACT_RATE_MAX);
+
+// 官网 AI 助理（0818-a P0）: 落盘目录 + 同 IP 3 条/5 分钟限频（防烧 token/防刷）
+const ASSISTANT_DATA_DIR = path.join(__dirname, "data");
+const ASSISTANT_RATE_WINDOW_MS = 5 * 60 * 1000; // 5 分钟窗口
+const ASSISTANT_RATE_MAX = 3;                   // 同 IP 最多 3 条/5 分钟
+const assistantLimiter = makeLimiter(ASSISTANT_RATE_WINDOW_MS, ASSISTANT_RATE_MAX);
 
 // 启动时把预设表同步成 presets.json（供 opc_demo_dispatch.py 读取，单一事实源；服务端仍是硬编码白名单）
 try {
@@ -1083,7 +1125,8 @@ const server = http.createServer(async (req, res) => {
     // 触发 preflight, 现返回 400 导致浏览器拦截; 这里放行白名单来源并返回完整 CORS 头。
     // status/history/SSE 流为简单 GET(无自定义头)不触发 preflight, 由响应 ACAO 放行。
     // 官网合作咨询(改版5): /api/contact 同走 www.hermes.cc.cd 白名单(落地页表单跨源提交)。
-    if (req.method === "OPTIONS" && (u.pathname.startsWith("/api/opc/") || u.pathname === "/api/contact" || u.pathname === "/api/visits" || u.pathname === "/api/token-stats")) {
+    // 官网 AI 助理(0818-a P0): /api/assistant 同走白名单(落地页 AI 问答表单跨源提交)。
+    if (req.method === "OPTIONS" && (u.pathname.startsWith("/api/opc/") || u.pathname === "/api/contact" || u.pathname === "/api/visits" || u.pathname === "/api/token-stats" || u.pathname === "/api/assistant")) {
       const cors = opcCorsHeaders(req);
       if (cors["Access-Control-Allow-Origin"] == null) {
         send(res, 403, { ok: false, error: "forbidden" }, cors);
@@ -1101,7 +1144,7 @@ const server = http.createServer(async (req, res) => {
       stats.reqs++;
       const ip = clientIp(req);
       trackActiveIp(ip);
-      const cors = u.pathname.startsWith("/api/opc/") || u.pathname === "/api/contact" || u.pathname === "/api/visits" || u.pathname === "/api/token-stats"
+      const cors = u.pathname.startsWith("/api/opc/") || u.pathname === "/api/contact" || u.pathname === "/api/visits" || u.pathname === "/api/token-stats" || u.pathname === "/api/assistant"
         ? opcCorsHeaders(req)
         : corsHeadersFor(req);
       // 按 IP 限流(先于缓存命中判断, 防唯一 key 旋转造成的上游请求放大)
