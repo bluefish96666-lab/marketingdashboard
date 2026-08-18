@@ -501,9 +501,11 @@ const routes = {
         .filter(([, t]) => ["completed", "failed"].includes(t.status))
         .map(([id, t]) => ({
           demo_id: id, task_id: t.task_id, status: t.status,
-          created_at: t.created_at, finished_at: t.finished_at || null,
+          // created_at 兜底（缺省回退 started_at/finished_at），保证每条可排序
+          created_at: demoTaskCreatedAt(t), finished_at: t.finished_at || null,
         }))
-        .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))
+        // 排序健壮性: 先归一化再比较, 杜绝 undefined 参与 localeCompare 异常(曾致无时间记录恒置顶)
+        .sort((a, b) => String(b.created_at || "").localeCompare(String(a.created_at || "")))
         .slice(0, DEMO_HISTORY_MAX);
     }
     return { items, count: items.length };
@@ -800,7 +802,7 @@ const DEMO_STATUS_FILE = path.join(DEMO_DIR, "status.json");
 const DEMO_RATE_WINDOW_MS = 60 * 1000;   // 同 IP 频控窗口: 1 次/60s（防烧钱/防刷，可调）
 const DEMO_RATE_MAX = 1;                 // 同 IP 频控上限
 const DEMO_MAX_INFLIGHT = 2;             // 全局并发上限: 在飞(queued/dispatched/running) ≤2
-const DEMO_HISTORY_MAX = 20;             // 回看入口最多 20 条
+const DEMO_HISTORY_MAX = 30;             // 回看入口最多 30 条（23 修复: 20→30, 让时间正确的历史遗留条目如 dflocktest 不被截断在列表外）
 const DEMO_SSE_POLL_MS = 2000;           // SSE 内部状态轮询间隔（状态分钟级变化，2s 追平足够）
 const DEMO_SSE_MAX_MS = 15 * 60 * 1000;  // SSE 连接硬上限 15 分钟，防资源泄漏
 const demoLimiter = makeLimiter(DEMO_RATE_WINDOW_MS, DEMO_RATE_MAX);
@@ -956,6 +958,11 @@ function demoReadStatus() {
 function demoWriteStatus(s) {
   fs.mkdirSync(DEMO_DIR, { recursive: true });
   fs.writeFileSync(DEMO_STATUS_FILE, JSON.stringify(s, null, 2));
+}
+// 统一创建时间兜底: 历史遗留写入可能缺 created_at（如 8/17 flock 并发测试直写 status.json 的条目），
+// 依次回退 started_at → finished_at, 保证派生 history 每条都有可排序时间
+function demoTaskCreatedAt(t) {
+  return t.created_at || t.started_at || t.finished_at || null;
 }
 // 对外视图: 不含 ip（隐私），completed 时附带报告 markdown（读结果文件）
 function demoTaskView(s, id) {
