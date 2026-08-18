@@ -527,6 +527,18 @@ if (process.env.HOSTING === "1") {
   }
 }
 
+// ---- 手速排行榜后端(里程碑1, 2026-08-18): 木鱼彩蛋「最快手速」全球榜, 娱乐榜轻校验 ----
+// 只挂在开源线上版(:3000, mrd.hermes.cc.cd); 托管版(:3200, HOSTING=1)不加载,
+// 避免双进程写同一 SQLite(server/data/knock.db)。契约响应为裸 JSON(见 __rawResponse 约定)。
+if (process.env.HOSTING !== "1") {
+  try {
+    const { initKnock } = require("./knock/index.cjs");
+    Object.assign(routes, initKnock());
+  } catch (e) {
+    console.error("[knock] 排行榜后端加载失败(不阻断开源功能):", e?.stack || e?.message || e);
+  }
+}
+
 const MIME = {
   ".html": "text/html; charset=utf-8",
   ".js": "application/javascript; charset=utf-8",
@@ -1246,7 +1258,13 @@ const server = http.createServer(async (req, res) => {
           try { body = JSON.parse(r.buf.toString()); } catch { send(res, 400, { ok: false, error: "invalid json body" }, cors); return; }
         }
         const data = await routes[u.pathname](u.searchParams, body, req);
-        send(res, 200, { ok: true, data, ts: Date.now() }, cors);
+        // __rawResponse 约定(排行榜 0818): 契约要求裸 JSON 响应体(如 /api/v1/knock 的
+        // {"leaderboard":...}), handler 返回 {__rawResponse: <payload>} 时原样输出, 不套 ok/data 包装。
+        if (data && data.__rawResponse !== undefined) {
+          send(res, 200, data.__rawResponse, cors);
+        } else {
+          send(res, 200, { ok: true, data, ts: Date.now() }, cors);
+        }
       } catch (e) {
         // 错误回显契约: 内部细节只记日志; err.status 由可预期的业务错误(队列满/问财配额等)携带,
         // 其 message 必须为白名单文案(不含 URL/网络细节); 无 status 一律回显静态 "upstream error"
