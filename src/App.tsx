@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { Routes, Route } from "react-router";
+import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { Navigate, Routes, Route } from "react-router";
 import { TickerTape, type TapeItem } from "@/components/dash/TickerTape";
 import { DashboardHeader } from "@/components/dash/DashboardHeader";
 import { StarHint } from "@/components/dash/StarHint";
@@ -93,6 +93,16 @@ const PANEL_ROWS: PanelRowDef[] = [
 
 function Dashboard() {
   const { isFullscreen, toggle } = useFullscreen();
+  const hosting = useHosting();
+  // 托管模式: 过滤 Pro 入口(保留 商品价格/AI 观察/财报窗口); 开源模式: 原样含 Pro(零回归)
+  const links = useMemo(() => {
+    const base = [
+      { to: "/goods", label: "商品价格" },
+      { to: "/ai", label: "AI 观察" },
+      { to: "/fin", label: "财报窗口" },
+    ];
+    return hosting ? base : [...base, { to: "/pro", label: "Pro" }];
+  }, [hosting]);
 
   return (
     <div className="flex min-h-screen flex-col bg-[#070b12] text-slate-200 lg:h-screen lg:overflow-hidden">
@@ -103,7 +113,7 @@ function Dashboard() {
         tagline="沪深港美 · 大宗 · 美债 · 板块 · 资金流 · 快讯 · 产业链"
         linkTo="/ai"
         linkLabel="AI 观察"
-        links={[{ to: "/goods", label: "商品价格" }, { to: "/ai", label: "AI 观察" }, { to: "/fin", label: "财报窗口" }, { to: "/pro", label: "Pro" }]}
+        links={links}
         live
         githubUrl="https://github.com/theBigGavin/marketingdashboard"
         isFullscreen={isFullscreen}
@@ -116,16 +126,29 @@ function Dashboard() {
   );
 }
 
+/** 托管模式上下文: HostingGate 探测结果(enabled) 复用同一次探测, 供 Dashboard/路由消费 */
+const HostingContext = createContext(false);
+function useHosting() {
+  return useContext(HostingContext);
+}
+
+function AppRoutes() {
+  const hosting = useHosting();
+  return (
+    <Routes>
+      <Route path="/" element={<Dashboard />} />
+      <Route path="/ai" element={<AiDashboard />} />
+      <Route path="/goods" element={<GoodsDashboard />} />
+      <Route path="/fin" element={<FinDashboard />} />
+      <Route path="/pro" element={hosting ? <Navigate to="/" replace /> : <ProLanding />} />
+    </Routes>
+  );
+}
+
 export default function App() {
   return (
     <HostingGate>
-      <Routes>
-        <Route path="/" element={<Dashboard />} />
-        <Route path="/ai" element={<AiDashboard />} />
-        <Route path="/goods" element={<GoodsDashboard />} />
-        <Route path="/fin" element={<FinDashboard />} />
-        <Route path="/pro" element={<ProLanding />} />
-      </Routes>
+      <AppRoutes />
     </HostingGate>
   );
 }
@@ -137,22 +160,29 @@ export default function App() {
  */
 function HostingGate({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<"checking" | "open" | "login">("checking");
+  const [hosting, setHosting] = useState(false);
   useEffect(() => {
     let alive = true;
     (async () => {
       let enabled = false;
       try { enabled = await hostingEnabled(); } catch { enabled = false; }
       if (!alive) return;
+      setHosting(enabled);
       if (!enabled) { setState("open"); return; }
       setState(hostingToken() ? "open" : "login");
     })();
     return () => { alive = false; };
   }, []);
+  // 托管模式(探测 enabled=true): index.html 静态 footer(id=mrd-foot) 无业务价值 → 移除;
+  // 开源模式(enabled=false): 不动 DOM, 与以往完全一致(零回归)
+  useEffect(() => {
+    if (hosting) document.getElementById("mrd-foot")?.remove();
+  }, [hosting]);
   if (state === "checking") {
     return <div className="flex min-h-screen items-center justify-center bg-[#070b12] text-slate-500">加载中…</div>;
   }
   if (state === "login") {
     return <LoginPage onAuthed={() => setState("open")} />;
   }
-  return <>{children}</>;
+  return <HostingContext.Provider value={hosting}>{children}</HostingContext.Provider>;
 }
