@@ -3,6 +3,11 @@
 > 状态：**内测**（非对外、非生产、非销售）。Gavin 2026-08-18 拍板：继续打磨托管版，做内测，暂不对外公布。
 > 架构依据：`~/.hermes/opc/mrd-hosting-plan.md` §1（单实例多租户）。
 
+> **红线（庄子 2026-08-18 评估定稿）：本仓库为公开仓库，禁止提交任何收款/订阅/webhook/计费代码与密钥。**
+> 拆库预案：托管层 `server/hosting/` 服务端自包含（仅依赖 node builtins），`server/index.cjs` 仅 1 处 try/catch require。
+> G1（收款链路）解除时，必须先拆独立私有仓库（服务端 hosting/ + hosting.test.cjs + scripts/gen_invites.js + 未来 billing/ 迁出，
+> 部署脚本注入），**先拆库，后写收款代码**。前端登录墙无秘密，留公开仓库不拆。
+
 ## 是什么
 
 mrd 托管版「本机内测版」= 开源版 mrd + 托管层（极简账号系统 + 邀请码注册闸门 + 租户隔离），本机单实例运行。

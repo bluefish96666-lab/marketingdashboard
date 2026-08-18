@@ -15,6 +15,7 @@ dist-ssr
 # server
 server/.env
 server/data/
+server/hosting/*.db
 
 # 每日备份快照(不入库)
 backups/
