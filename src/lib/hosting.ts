@@ -99,6 +99,34 @@ export function hostingWatchlistSave(codes: string[]): Promise<string[]> {
   })).then((d) => d.codes);
 }
 
+export interface HostingAiQuota {
+  limit: number;
+  used: number;
+  remaining: number;
+}
+
+/** 本租户当日 AI 额度(0819-c P1-1): GET /api/hosting/ai-quota, 未登录 401 */
+export function hostingAiQuota(): Promise<HostingAiQuota> {
+  return jfetch<{ quota: HostingAiQuota }>("/api/hosting/ai-quota", authed("/api/hosting/ai-quota")).then((d) => d.quota);
+}
+
+/** 服务端面板布局(按租户隔离): GET 读取 — 整个对象 {页面key: zoomedId|null} 或 null */
+export function hostingLayout(): Promise<Record<string, string | null> | null> {
+  return jfetch<{ layout: Record<string, string | null> | null }>("/api/hosting/layout", authed("/api/hosting/layout"))
+    .then((d) => d.layout);
+}
+
+/**
+ * 服务端面板布局(按租户隔离): POST 写入 — 服务端按页面 key merge(只覆盖传入的 key,
+ * 其他页面 key 保留), 返回写入后的完整对象。前端每页只管自己的 key, 多页互不覆盖。
+ */
+export function hostingLayoutSave(layout: Record<string, string | null>): Promise<Record<string, string | null>> {
+  return jfetch<{ layout: Record<string, string | null> }>("/api/hosting/layout", authed("/api/hosting/layout", {
+    method: "POST",
+    body: JSON.stringify({ layout }),
+  })).then((d) => d.layout);
+}
+
 /** 托管模式下的本地降级缓存(离线/服务端故障时兜底, 不跨租户泄漏: 随 token 隔离) */
 const LS_CACHE_KEY = "mrd.hosting.watchlist.cache";
 

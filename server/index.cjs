@@ -428,8 +428,22 @@ const routes = {
     const v = validateAssistant(body);
     if (!v.ok) { const e = new Error(v.error); e.status = 400; throw e; }
     const ip = clientIp(req);
-    // 防烧 token/防刷: 同 IP 3 条/5 分钟（先于 LLM 调用, 超限直接 429）
-    if (!assistantLimiter(ip)) { const e = new Error("assistant rate limited"); e.status = 429; throw e; }
+    // 0819-c P1-1 托管模式分支: 请求带有效 Bearer token → 解析 tenant → 按租户独立额度扣减
+    // (consume 在 LLM 调用前扣, 防烧钱; LLM 失败不退还, 从简)。额度耗尽 → 429 中性文案。
+    // 无 token 或非托管模式 → 现有 IP 限流照旧(开源行为零回归)。
+    let tenantId = null;
+    if (hostingQuotaApi) {
+      const token = hostingQuotaApi.bearerToken(req);
+      if (token) {
+        tenantId = hostingQuotaApi.resolveToken(hostingDb, token);
+        // 托管模式带 token 但无效/过期 → 401(不回落 IP 限流, 防伪造 token 刷额度)
+        if (!tenantId) { const e = new Error("请先登录"); e.status = 401; throw e; }
+        const quota = hostingQuotaApi.consumeAiQuota(hostingDb, tenantId);
+        if (quota.remaining <= 0) { const e = new Error("今日 AI 额度已用完，明天再来"); e.status = 429; throw e; }
+      }
+    }
+    // 防烧 token/防刷: 同 IP 3 条/5 分钟(先于 LLM 调用, 超限直接 429); 托管扣减分支跳过(租户额度即限流)
+    if (!tenantId && !assistantLimiter(ip)) { const e = new Error("assistant rate limited"); e.status = 429; throw e; }
     const { question, contact, source } = v.value;
     const reply = (await callAssistantLLM(question)) || fallbackReply();
     const hits = detectIntent(question);
@@ -519,11 +533,21 @@ const routes = {
 // 复用本文件数据管道/共享缓存(公开行情只读共享); 新增 /api/hosting/* 账号路由
 // (SQLite users 表, 邮箱+密码, Bearer token; watchlist 等个性化数据按租户隔离)。
 // 开源版(HOSTING 未设置)完全不加载, 行为与以往逐字节一致。
+// 0819-c P1-1: hostingDb/hostingQuotaApi 供 /api/assistant 托管化扣减复用同一连接(见下方路由)。
+let hostingDb = null;      // HOSTING=1 时的托管 SQLite 连接(assistant 配额扣减用)
+let hostingQuotaApi = null; // { bearerToken, resolveToken, consumeAiQuota } — 开源模式保持 null
 if (process.env.HOSTING === "1") {
   try {
     const { initHosting } = require("./hosting/index.cjs");
     const hosting = initHosting();
     Object.assign(routes, hosting.routes);
+    hostingDb = hosting.db;
+    // 配额扣减只依赖托管层导出的纯函数(与路由表解耦); 拆库后文件由 start_hosting.sh 注入
+    hostingQuotaApi = {
+      bearerToken: require("./hosting/routes.cjs").bearerToken,
+      resolveToken: require("./hosting/db.cjs").resolveToken,
+      consumeAiQuota: require("./hosting/db.cjs").consumeAiQuota,
+    };
   } catch (e) {
     // 拆库后(2026-08-18): 托管层由私有仓库 mrd-pro 经 start_hosting.sh 注入部署。
     // 托管模式(HOSTING=1)下加载失败 = 账号墙缺失 → 裸开源实例暴露在托管域名(host.hermes.cc.cd)

@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Navigate, Routes, Route } from "react-router";
 import { TickerTape, type TapeItem } from "@/components/dash/TickerTape";
 import { DashboardHeader } from "@/components/dash/DashboardHeader";
@@ -20,6 +20,7 @@ import FinDashboard from "./FinDashboard";
 import ProLanding from "./ProLanding";
 import LoginPage from "./pages/LoginPage";
 import { hostingEnabled, hostingToken } from "@/lib/hosting";
+import { HostingContext, useHosting } from "@/lib/hosting-context";
 import { useSharedPolling } from "@/hooks/useSharedPolling";
 import { useQuotes } from "@/lib/market";
 import { useFullscreen } from "@/hooks/useFullscreen";
@@ -126,11 +127,8 @@ function Dashboard() {
   );
 }
 
-/** 托管模式上下文: HostingGate 探测结果(enabled) 复用同一次探测, 供 Dashboard/路由消费 */
-const HostingContext = createContext(false);
-function useHosting() {
-  return useContext(HostingContext);
-}
+/** 托管模式上下文: HostingGate 探测结果(enabled) 复用同一次探测, 供 Dashboard/路由消费
+ *  (定义在 src/lib/hosting-context.ts, 独立模块避免 AiDashboard ↔ App 循环依赖) */
 
 function AppRoutes() {
   const hosting = useHosting();
