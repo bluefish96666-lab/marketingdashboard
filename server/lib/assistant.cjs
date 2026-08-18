@@ -24,10 +24,11 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const SOURCE_ALLOW = new Set(["demo_report"]);
 
 // 意向关键词（与 linjing_monitor.py INTENT_KEYWORDS 同源，four-platform-monitor 判定口径）
+// 0819-z: 补充「试用/trial」（决议第 7 项点名命中词），两处词表保持同步
 const INTENT_KEYWORDS = [
-  "托管", "付费", "多少钱", "价格", "部署", "能部署", "自托管", "收费", "购买", "订阅",
+  "托管", "付费", "多少钱", "价格", "部署", "能部署", "自托管", "收费", "购买", "订阅", "试用",
   "host", "hosting", "hosted", "paid", "price", "pricing", "pay", "deploy", "self-host",
-  "selfhost", "how much", "subscribe", "license", "cost",
+  "selfhost", "how much", "subscribe", "license", "cost", "trial",
 ];
 
 /** OpenRouter 模型（复用 server/.env 的 OPENROUTER_API_KEY，低成本模型） */
@@ -62,6 +63,20 @@ function detectIntent(text) {
   return INTENT_KEYWORDS.filter((k) => t.includes(k.toLowerCase()));
 }
 
+// 需求详情摘要上限（字符）。question 最长 500，摘要保留信息量同时控制登记字段体积。
+const NEED_DETAIL_MAX = 120;
+
+/**
+ * 需求详情结构化提取（0819-z 决议第 7 项）：原始 question 摘要
+ * 规则法（不引额外 LLM 调用）：压缩空白 + 超长截断。question 通常 ≤60 字，摘要≈原文。
+ * @param {string} question
+ * @returns {string}
+ */
+function summarizeNeed(question) {
+  const q = String(question || "").replace(/\s+/g, " ").trim();
+  return q.length > NEED_DETAIL_MAX ? q.slice(0, NEED_DETAIL_MAX) + "…" : q;
+}
+
 /**
  * 公司知识库 + 话术红线系统提示词（单一事实源，改动只在此处）
  */
@@ -78,7 +93,8 @@ function assistantSystemPrompt() {
 2. 不主动推销付费；访客问到价格/付费/托管/部署到自家服务器等意向问题时，除「筹备中」口径外，可告知开源版可以自己部署（开源版是免费公开的，可自行部署使用）。
 3. 回答简短（中文 ≤80 字，其他语言 ≤50 词），口语化、友好，用「我们」而非「我」。
 4. 回复不使用表情符号/颜文字（如 (◕‿◕)、😊 等一律不用），纯文字回复。
-5. 不知道的事不编造，引导访客看官网或留言留下联系方式。`;
+5. 不知道的事不编造，引导访客看官网或留言留下联系方式。
+6. 当访客表达了意向兴趣（询问托管/部署/购买/试用/价格等）时，回答末尾可自然邀请补充使用场景或具体需求（例如：「如果方便，可以补充一下你的使用场景，我们会更好地评估」）——礼貌引导、不重复追问、不强求；不是推销，不借此引导付费意向。`;
 }
 
 /**
@@ -123,10 +139,10 @@ async function callAssistantLLM(question) {
 }
 
 /**
- * LLM 失败时的降级回复（守红线：不报价不承诺；告知开源版可自行部署）
+ * LLM 失败时的降级回复（守红线：不报价不承诺；告知开源版可自行部署；引导补充使用场景）
  */
 function fallbackReply() {
-  return "收到你的问题！关于托管版，我们还在筹备中，具体上线安排以官网公布为准；开源版目前完全免费公开，可以自行部署使用。欢迎留下联系方式，我们会认真对待每一条反馈。";
+  return "收到你的问题！关于托管版，我们还在筹备中，具体上线安排以官网公布为准；开源版目前完全免费公开，可以自行部署使用。如果方便，可以补充一下你的使用场景，我们会更好地评估。欢迎留下联系方式，我们会认真对待每一条反馈。";
 }
 
 /**
@@ -143,6 +159,6 @@ function appendAssistantLead(dataDir, rec) {
 }
 
 module.exports = {
-  validateAssistant, detectIntent, assistantSystemPrompt, callAssistantLLM,
-  fallbackReply, appendAssistantLead, INTENT_KEYWORDS, QUESTION_MAX,
+  validateAssistant, detectIntent, summarizeNeed, assistantSystemPrompt, callAssistantLLM,
+  fallbackReply, appendAssistantLead, INTENT_KEYWORDS, QUESTION_MAX, NEED_DETAIL_MAX,
 };

@@ -91,7 +91,7 @@ const { validateContact, appendContact } = require("./lib/contact.cjs");
 
 // 官网 AI 助理（0818-a P0）: 校验 + 意向判定 + LLM 回复 + 落盘 assistant-leads.jsonl
 const {
-  validateAssistant, detectIntent, callAssistantLLM, fallbackReply,
+  validateAssistant, detectIntent, summarizeNeed, callAssistantLLM, fallbackReply,
   appendAssistantLead, QUESTION_MAX,
 } = require("./lib/assistant.cjs");
 
@@ -450,12 +450,14 @@ const routes = {
     let lead_id = null;
     if (hits.length > 0) {
       // 意向命中 → 落盘（供 cron 登记 leads[] + 转温雯; 不写 state.json, 与 contact 同策略）
+      // 0819-z 决议第 7 项: 结构化字段随线索落盘 —— intent_hits(意向关键词数组) + need_detail(需求详情摘要)
       const rec = {
         ts: new Date().toISOString(),
         ip,
         question,
         contact, // 仅邮箱（红线: 邮箱以外不落盘）
         intent_hits: hits,
+        need_detail: summarizeNeed(question),
         reply,
         registered: false,
       };

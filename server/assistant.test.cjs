@@ -6,8 +6,8 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const {
-  validateAssistant, detectIntent, fallbackReply, appendAssistantLead,
-  INTENT_KEYWORDS, QUESTION_MAX,
+  validateAssistant, detectIntent, summarizeNeed, fallbackReply, appendAssistantLead,
+  INTENT_KEYWORDS, QUESTION_MAX, NEED_DETAIL_MAX,
 } = require("./lib/assistant.cjs");
 
 test("合法提交通过: 问题必填 + 邮箱可选", () => {
@@ -62,6 +62,13 @@ test("意向判定: 中文关键词命中（按词表序）", () => {
   assert.deepEqual(detectIntent("如何订阅"), ["订阅"]);
 });
 
+test("意向判定: 试用词命中（0819-z 决议第 7 项补充词）", () => {
+  assert.deepEqual(detectIntent("能试用一下吗"), ["试用"]);
+  assert.deepEqual(detectIntent("有没有试用版可以体验"), ["试用"]);
+  assert.deepEqual(detectIntent("Can I try a trial version?"), ["trial"]);
+  assert.deepEqual(detectIntent("试用"), ["试用"]); // 独立词也命中（子串匹配语义）
+});
+
 test("意向判定: 英文关键词命中（大小写不敏感, 子串匹配+词表序, 与 four-platform-monitor 同语义）", () => {
   // 纯子串语义: paid 不含 pay; subscription 不含 subscribe; self-host 同时命中 host
   assert.deepEqual(detectIntent("How much for hosting?"), ["host", "hosting", "how much"]);
@@ -79,9 +86,19 @@ test("意向判定: 普通技术问题不命中", () => {
 
 test("INTENT_KEYWORDS 与 four-platform-monitor 词表同源", () => {
   // 核心词必须存在（渠道判定口径一致，四步链路判定共用）
-  for (const k of ["托管", "付费", "多少钱", "能部署", "host", "paid", "deploy"]) {
+  for (const k of ["托管", "付费", "多少钱", "能部署", "试用", "host", "paid", "deploy", "trial"]) {
     assert.ok(INTENT_KEYWORDS.some((x) => x.toLowerCase() === k.toLowerCase()), `缺词: ${k}`);
   }
+});
+
+test("summarizeNeed: 需求详情摘要（0819-z 决议第 7 项）", () => {
+  assert.equal(summarizeNeed("  托管版什么时间上线，可以直接部署吗？  "), "托管版什么时间上线，可以直接部署吗？");
+  assert.equal(summarizeNeed(""), "");
+  const long = "问".repeat(NEED_DETAIL_MAX + 10);
+  const s = summarizeNeed(long);
+  assert.equal(s.length, NEED_DETAIL_MAX + 1); // 截断 + 省略号
+  assert.ok(s.endsWith("…"));
+  assert.equal(summarizeNeed("q".repeat(NEED_DETAIL_MAX)).length, NEED_DETAIL_MAX); // 恰好上限不截断
 });
 
 test("fallbackReply 守红线: 不含价格/日期/承诺", () => {
@@ -91,11 +108,12 @@ test("fallbackReply 守红线: 不含价格/日期/承诺", () => {
   assert.ok(r.includes("筹备中"), "应含「筹备中」口径");
 });
 
-test("appendAssistantLead 追加落盘 jsonl(意向命中记录)", () => {
+test("appendAssistantLead 追加落盘 jsonl(意向命中记录, 含 need_detail 结构化字段)", () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "assistant-test-"));
   const rec = {
     ts: "2026-08-18T02:00:00.000Z", ip: "1.2.3.4", question: "托管版多少钱？",
-    contact: "v@example.com", intent_hits: ["托管", "多少钱"], reply: "筹备中…", registered: false,
+    contact: "v@example.com", intent_hits: ["托管", "多少钱"], need_detail: "托管版多少钱？",
+    reply: "筹备中…", registered: false,
   };
   appendAssistantLead(dir, rec);
   appendAssistantLead(dir, { ...rec, ts: "2026-08-18T02:05:00.000Z", contact: null, source: "demo_report" });
@@ -103,12 +121,14 @@ test("appendAssistantLead 追加落盘 jsonl(意向命中记录)", () => {
   assert.equal(lines.length, 2);
   const p1 = JSON.parse(lines[0]);
   assert.equal(p1.intent_hits.join(","), "托管,多少钱");
+  assert.equal(p1.need_detail, "托管版多少钱？"); // 0819-z: 需求详情随线索落盘
   assert.equal(p1.registered, false);
   assert.equal(p1.contact, "v@example.com");
   assert.equal("source" in p1, false, "无 source 的记录不带该字段（官网链路行为不变）");
   const p2 = JSON.parse(lines[1]);
   assert.equal(p2.contact, null);
   assert.equal(p2.source, "demo_report", "带 source 的记录原样落盘");
+  assert.equal(p2.need_detail, "托管版多少钱？");
   // 红线: 记录不含姓名/电话字段
   for (const p of [p1, p2]) {
     assert.ok(!("name" in p), "不应存姓名");
