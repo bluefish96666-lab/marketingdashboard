@@ -3,14 +3,8 @@
 // gitignored 运行时数据), 生成托管路由表挂载进 routes(只增不改, 开源版核心路由零改动)。
 // 红线: 本文件不含任何收款/订阅/webhook 代码(LS G1 挂起, 禁止实现收款链路)。
 "use strict";
-const path = require("path");
-const { openHostingDb, deleteExpiredSessions } = require("./db.cjs");
+const { openHostingDb, defaultDbPath, deleteExpiredSessions } = require("./db.cjs");
 const { createHostingRoutes } = require("./routes.cjs");
-
-/** 默认账号库路径: server/data/hosting.db(随 server/data gitignored, 不提交) */
-function defaultDbPath() {
-  return process.env.HOSTING_DB || path.join(__dirname, "..", "data", "hosting.db");
-}
 
 /**
  * 初始化托管层: 打开 DB + 生成路由表 + 启动过期会话清理。

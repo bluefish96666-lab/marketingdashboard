@@ -61,8 +61,13 @@ export interface HostingTenant {
   created_at?: string;
 }
 
-export function hostingRegister(email: string, password: string): Promise<{ token: string; tenant: HostingTenant }> {
-  return jfetch("/api/hosting/register", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password }) });
+export function hostingRegister(email: string, password: string, inviteCode: string): Promise<{ token: string; tenant: HostingTenant }> {
+  // 邀请码只进 register 请求体, 前端不落 localStorage、不进 bundle 产物之外任何持久化
+  return jfetch("/api/hosting/register", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password, invite_code: inviteCode }),
+  });
 }
 
 export function hostingLogin(email: string, password: string): Promise<{ token: string; tenant: HostingTenant }> {

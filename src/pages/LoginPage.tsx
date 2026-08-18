@@ -10,6 +10,7 @@ export default function LoginPage({ onAuthed }: Props) {
   const [mode, setMode] = useState<"login" | "register">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [inviteCode, setInviteCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -18,14 +19,16 @@ export default function LoginPage({ onAuthed }: Props) {
     setError(null);
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) { setError("请输入有效邮箱"); return; }
     if (password.length < 8) { setError("密码至少 8 位"); return; }
+    if (mode === "register" && !inviteCode.trim()) { setError("请输入邀请码"); return; }
     setBusy(true);
     try {
       const res = mode === "register"
-        ? await hostingRegister(email.trim().toLowerCase(), password)
+        ? await hostingRegister(email.trim().toLowerCase(), password, inviteCode.trim().toUpperCase())
         : await hostingLogin(email.trim().toLowerCase(), password);
       setHostingToken(res.token);
       onAuthed();
     } catch (err) {
+      // 服务端错误文案(邀请码无效/已使用/已撤销/限流等)原样展示
       setError(err instanceof Error ? err.message : "请求失败，请重试");
     } finally {
       setBusy(false);
@@ -60,6 +63,20 @@ export default function LoginPage({ onAuthed }: Props) {
               className="rounded border border-slate-700/60 bg-slate-800/50 px-2.5 py-1.5 text-[13px] text-slate-100 outline-none placeholder:text-slate-600 focus:border-cyan-500/60"
             />
           </label>
+          {mode === "register" && (
+            <label className="flex flex-col gap-1 text-[12px] text-slate-400">
+              邀请码<span className="text-[10px] text-slate-600">（内测名单发放，一次性使用）</span>
+              <input
+                type="text"
+                value={inviteCode}
+                onChange={(e) => setInviteCode(e.target.value)}
+                placeholder="请输入 12 位邀请码"
+                autoComplete="off"
+                spellCheck={false}
+                className="rounded border border-slate-700/60 bg-slate-800/50 px-2.5 py-1.5 text-[13px] text-slate-100 outline-none placeholder:text-slate-600 focus:border-cyan-500/60"
+              />
+            </label>
+          )}
           {error && <div className="rounded border border-rose-500/40 bg-rose-500/10 px-2 py-1.5 text-[12px] text-rose-300">{error}</div>}
           <button
             type="submit"

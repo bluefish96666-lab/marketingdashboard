@@ -9,7 +9,7 @@ const crypto = require("crypto");
 
 const { DatabaseSync } = require("node:sqlite");
 
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 
 /** 打开(必要时创建)账号库并迁移到最新 schema。dbPath 可注入(测试用 :memory: 或临时文件) */
 function openHostingDb(dbPath) {
@@ -47,6 +47,64 @@ function migrate(db) {
     `);
     db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
   }
+  if (ver < 2) {
+    // 0818-q: 公网内测邀请码闸门 — 一次性邀请码(注册必填)。used_by/used_at 标记使用;
+    // revoked=1 撤销(撤销后不可用, 已注册用户不受影响)。created_at/used_at 用 epoch 毫秒 INTEGER。
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS invite_codes (
+        code TEXT PRIMARY KEY,
+        created_at INTEGER NOT NULL,
+        used_by INTEGER REFERENCES users(id),
+        used_at INTEGER,
+        revoked INTEGER NOT NULL DEFAULT 0
+      );
+    `);
+    db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
+  }
+}
+
+/* ---------------- 默认库路径(CLI 与托管层入口共用, 单一事实源) ---------------- */
+/** 默认账号库路径: server/data/hosting.db(随 server/data gitignored, 不提交) */
+function defaultDbPath() {
+  return process.env.HOSTING_DB || path.join(__dirname, "..", "data", "hosting.db");
+}
+
+/* ---------------- 邀请码(0818-q: 公网内测注册闸门) ---------------- */
+// 12 位随机码, 字符集剔除全部易混淆字符(0/O/1/I/L): 23 大写字母 + 8 数字 = 31 元字符集
+const INVITE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+const INVITE_LEN = 12;
+
+/** 生成单个 12 位随机邀请码(crypto.randomInt 无模偏差, 每字符 5 bit 熵) */
+function generateInviteCode() {
+  let s = "";
+  for (let i = 0; i < INVITE_LEN; i++) s += INVITE_ALPHABET[crypto.randomInt(INVITE_ALPHABET.length)];
+  return s;
+}
+
+/** 生成并插入 n 个邀请码(revoked=0), 返回生成的码数组(stdout 打印用)。主键冲突(极小概率)自动重试 */
+function createInviteCodes(db, n) {
+  const codes = [];
+  const stmt = db.prepare("INSERT INTO invite_codes (code, created_at) VALUES (?, ?)");
+  const now = Date.now();
+  while (codes.length < n) {
+    const code = generateInviteCode();
+    try {
+      stmt.run(code, now);
+      codes.push(code);
+    } catch (err) {
+      const m = String(err?.message || "");
+      if (m.includes("UNIQUE") || m.includes("PRIMARY")) continue; // 撞码重试
+      throw err;
+    }
+  }
+  return codes;
+}
+
+/** 撤销邀请码(revoked=1): 撤销后不可再用于注册; 已注册用户不受影响。返回是否确有该码 */
+function revokeInviteCode(db, code) {
+  if (typeof code !== "string" || !code) return false;
+  const r = db.prepare("UPDATE invite_codes SET revoked = 1 WHERE code = ? AND revoked = 0").run(code);
+  return r.changes === 1;
 }
 
 /* ---------------- 密码哈希(scrypt)与校验 ---------------- */
@@ -137,6 +195,7 @@ function setWatchlist(db, tenantId, codes) {
 }
 
 module.exports = {
-  openHostingDb, hashPassword, verifyPassword, createSession, resolveToken,
-  deleteSession, deleteExpiredSessions, getWatchlist, setWatchlist, SCHEMA_VERSION,
+  openHostingDb, defaultDbPath, hashPassword, verifyPassword, createSession, resolveToken,
+  deleteSession, deleteExpiredSessions, getWatchlist, setWatchlist,
+  createInviteCodes, revokeInviteCode, generateInviteCode, SCHEMA_VERSION,
 };
