@@ -557,17 +557,9 @@ if (process.env.HOSTING === "1") {
   }
 }
 
-// ---- 手速排行榜后端(里程碑1, 2026-08-18): 木鱼彩蛋「最快手速」全球榜, 娱乐榜轻校验 ----
-// 只挂在开源线上版(:3000, mrd.hermes.cc.cd); 托管版(:3200, HOSTING=1)不加载,
-// 避免双进程写同一 SQLite(server/data/knock.db)。契约响应为裸 JSON(见 __rawResponse 约定)。
-if (process.env.HOSTING !== "1") {
-  try {
-    const { initKnock } = require("./knock/index.cjs");
-    Object.assign(routes, initKnock());
-  } catch (e) {
-    console.error("[knock] 排行榜后端加载失败(不阻断开源功能):", e?.stack || e?.message || e);
-  }
-}
+// ---- 手速排行榜迁移(0819-i): 已迁独立进程 server/knock-standalone.cjs(:3032, 公网入口
+// https://hermes.cc.cd/api/v1/knock, cloudflared ingress)。此处不再挂载 initKnock,
+// 避免双进程写同一 SQLite(server/data/knock.db); 旧路径改由下方请求处理器 302 重定向到新域。
 
 const MIME = {
   ".html": "text/html; charset=utf-8",
@@ -1167,6 +1159,20 @@ function readBodyWithLimit(req, limit) {
 const server = http.createServer(async (req, res) => {
   try {
     const u = new URL(req.url, "http://localhost");
+    // ---- 手速排行榜旧路径重定向(0819-i): knock 已迁独立进程(hermes.cc.cd/api/v1/knock, :3032)。
+    // mrd 旧路径 /api/v1/knock/* 一律 302 到新域, 保留剩余路径与 query 参数; 旧版 mylauncher
+    // 升级前排行榜不中断(客户端默认跟随重定向)。GET/HEAD 用 302; POST 用 307(保留方法与 body,
+    // 旧版 submit 不被 302 转 GET 丢体)。放在请求处理最前, 先于一切路由/预检分支。
+    if (u.pathname.startsWith("/api/v1/knock/")) {
+      const rest = u.pathname.slice("/api/v1/knock".length) || "/";
+      const loc = "https://hermes.cc.cd/api/v1/knock" + rest + (u.search || "");
+      res.writeHead(req.method === "POST" ? 307 : 302, {
+        Location: loc,
+        "Cache-Control": "no-store",
+        ...STATIC_HEADERS,
+      });
+      return res.end();
+    }
     // ---- OPC 全局状态流 SSE: GET /api/opc/stream（15a, 持续推送不关闭）----
     if (u.pathname === "/api/opc/stream" && req.method === "GET") {
       stats.reqs++;
