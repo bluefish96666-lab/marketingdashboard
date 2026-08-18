@@ -13,13 +13,20 @@ const {
 test("合法提交通过: 问题必填 + 邮箱可选", () => {
   const v = validateAssistant({ question: "你们这个行情面板能部署到自己服务器吗？", contact: "visitor@example.com" });
   assert.equal(v.ok, true);
-  assert.deepEqual(v.value, { question: "你们这个行情面板能部署到自己服务器吗？", contact: "visitor@example.com" });
+  assert.deepEqual(v.value, { question: "你们这个行情面板能部署到自己服务器吗？", contact: "visitor@example.com", source: null });
 });
 
 test("合法提交通过: 不带联系方式（contact 置 null）", () => {
   const v = validateAssistant({ question: "项目开源吗" });
   assert.equal(v.ok, true);
-  assert.deepEqual(v.value, { question: "项目开源吗", contact: null });
+  assert.deepEqual(v.value, { question: "项目开源吗", contact: null, source: null });
+});
+
+test("source 白名单: demo_report 通过并回传, 未知来源忽略置 null（防 jsonl 注入）", () => {
+  assert.equal(validateAssistant({ question: "托管版什么时候上线", source: "demo_report" }).value.source, "demo_report");
+  assert.equal(validateAssistant({ question: "托管版什么时候上线", source: "hacker\" ; rm -rf" }).value.source, null);
+  assert.equal(validateAssistant({ question: "托管版什么时候上线", source: "   " }).value.source, null);
+  assert.equal(validateAssistant({ question: "托管版什么时候上线" }).value.source, null);
 });
 
 test("问题必填/超短被拒", () => {
@@ -91,15 +98,17 @@ test("appendAssistantLead 追加落盘 jsonl(意向命中记录)", () => {
     contact: "v@example.com", intent_hits: ["托管", "多少钱"], reply: "筹备中…", registered: false,
   };
   appendAssistantLead(dir, rec);
-  appendAssistantLead(dir, { ...rec, ts: "2026-08-18T02:05:00.000Z", contact: null });
+  appendAssistantLead(dir, { ...rec, ts: "2026-08-18T02:05:00.000Z", contact: null, source: "demo_report" });
   const lines = fs.readFileSync(path.join(dir, "assistant-leads.jsonl"), "utf-8").trim().split("\n");
   assert.equal(lines.length, 2);
   const p1 = JSON.parse(lines[0]);
   assert.equal(p1.intent_hits.join(","), "托管,多少钱");
   assert.equal(p1.registered, false);
   assert.equal(p1.contact, "v@example.com");
+  assert.equal("source" in p1, false, "无 source 的记录不带该字段（官网链路行为不变）");
   const p2 = JSON.parse(lines[1]);
   assert.equal(p2.contact, null);
+  assert.equal(p2.source, "demo_report", "带 source 的记录原样落盘");
   // 红线: 记录不含姓名/电话字段
   for (const p of [p1, p2]) {
     assert.ok(!("name" in p), "不应存姓名");

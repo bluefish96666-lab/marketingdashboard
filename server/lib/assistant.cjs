@@ -19,6 +19,10 @@ const QUESTION_MAX = 500; // 问题限长（字符，防注入/防烧 token）
 const QUESTION_MIN = 2;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+// 来源白名单（0818-aa: demo 报告页 CTA 提问带 source=demo_report 落盘区分漏斗来源；
+// 未知来源字段一律忽略，防 jsonl 被注入任意字符串）
+const SOURCE_ALLOW = new Set(["demo_report"]);
+
 // 意向关键词（与 linjing_monitor.py INTENT_KEYWORDS 同源，four-platform-monitor 判定口径）
 const INTENT_KEYWORDS = [
   "托管", "付费", "多少钱", "价格", "部署", "能部署", "自托管", "收费", "购买", "订阅",
@@ -34,16 +38,18 @@ const LLM_TIMEOUT_MS = 25000;
 /**
  * 校验 AI 助理提交
  * @param {any} body POST JSON body
- * @returns {{ok:true, value:{question:string, contact:string|null}} | {ok:false, error:string}}
+ * @returns {{ok:true, value:{question:string, contact:string|null, source:string|null}} | {ok:false, error:string}}
  */
 function validateAssistant(body) {
   const question = String((body && body.question) || "").trim();
   const contact = String((body && body.contact) || "").trim();
+  let source = String((body && body.source) || "").trim();
+  if (source && !SOURCE_ALLOW.has(source)) source = ""; // 未知来源忽略（防注入）
   if (!question) return { ok: false, error: "question required" };
   if (question.length > QUESTION_MAX) return { ok: false, error: "question too long" };
   if (question.length < QUESTION_MIN) return { ok: false, error: "question too short" };
   if (contact && !EMAIL_RE.test(contact)) return { ok: false, error: "invalid contact" };
-  return { ok: true, value: { question, contact: contact || null } };
+  return { ok: true, value: { question, contact: contact || null, source: source || null } };
 }
 
 /**

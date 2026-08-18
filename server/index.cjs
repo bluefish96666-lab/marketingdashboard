@@ -430,7 +430,7 @@ const routes = {
     const ip = clientIp(req);
     // 防烧 token/防刷: 同 IP 3 条/5 分钟（先于 LLM 调用, 超限直接 429）
     if (!assistantLimiter(ip)) { const e = new Error("assistant rate limited"); e.status = 429; throw e; }
-    const { question, contact } = v.value;
+    const { question, contact, source } = v.value;
     const reply = (await callAssistantLLM(question)) || fallbackReply();
     const hits = detectIntent(question);
     let lead_id = null;
@@ -445,6 +445,7 @@ const routes = {
         reply,
         registered: false,
       };
+      if (source) rec.source = source; // 0818-aa: demo 报告页 CTA 来源（如 demo_report），官网提交不带 source 行为不变
       const saved = appendAssistantLead(ASSISTANT_DATA_DIR, rec);
       lead_id = `${saved.ts}_${String(ip).replace(/[^0-9a-f.]/gi, "_").slice(0, 40)}`;
     }
