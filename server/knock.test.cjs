@@ -1,5 +1,5 @@
 // mrd · 手速排行榜单测（node --test）
-// 覆盖: 三接口契约(裸 JSON) / gapMs=30 拒 / samples=9 拒 / rate 与 gapMs 互验不匹配拒 /
+// 覆盖: 三接口契约(裸 JSON) / gapMs=0 拒 / gapMs=24(41.7/s) 接受 / samples=9 拒 / rate 与 gapMs 互验不匹配拒 /
 //       昵称超长拒 / 空昵称服务端生成 / 同昵称 upsert 只留最好成绩 / 限流每 IP 每分钟 5 次第 6 次拒 /
 //       percentile 比例计算。
 "use strict";
@@ -69,10 +69,20 @@ test("submit 合法成绩 → 裸响应 {rank,totalPlayers,leaderboard}, top1 �
   assert.ok(Number.isInteger(top.createdAt));
 });
 
-test("轻校验: gapMs=30(<40) 拒绝 400", async () => {
+test("轻校验: gapMs=0(≤0) 拒绝 400; gapMs=-1(负数) 拒绝 400", async () => {
   const { routes } = fresh();
-  const r = await submit(routes, { gapMs: 30, rate: 33.3 });
-  assert.strictEqual(r.status, 400);
+  const r0 = await submit(routes, { gapMs: 0, rate: 1000 });
+  assert.strictEqual(r0.status, 400, "gapMs=0 拒绝");
+  const rn = await submit(routes, { gapMs: -1, rate: 1000 });
+  assert.strictEqual(rn.status, 400, "gapMs=-1 拒绝");
+});
+
+test("轻校验: gapMs=24/rate=41.7(Gavin 41.7/s 场景, 原 <40 被拒) → 接受", async () => {
+  const { routes } = fresh();
+  const r = await submit(routes, { nickname: "快手24", gapMs: 24, rate: 41.7, samples: 10 });
+  assert.strictEqual(r.status, 200);
+  assert.strictEqual(r.payload.rank, 1);
+  assert.strictEqual(r.payload.leaderboard[0].rate, 41.7, "rate 保留 1 位小数");
 });
 
 test("轻校验: samples=9(<10) 拒绝 400", async () => {

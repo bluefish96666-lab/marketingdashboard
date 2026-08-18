@@ -3,14 +3,14 @@
 //   GET  /leaderboard?limit=10[&nickname=] → {leaderboard:[{rank,nickname,rate,createdAt}],totalPlayers,myRank}
 //   GET  /percentile?rate=23.3             → {percentile:87.5}   (超过的全球用户比例 0-100, 无写入)
 //   POST /submit {nickname,rate,gapMs,samples[,region]} → {rank,totalPlayers,leaderboard}
-// 轻校验(拒绝即 400): 40<=gapMs<=2000; samples>=10; abs(1000/rate-gapMs)<=0.6;
+// 轻校验(拒绝即 400): gapMs>0 && gapMs<=2000; samples>=10; abs(1000/rate-gapMs)<=0.6;
 //   nickname 清洗后 ≤16 字符; 同 nickname 只保留最好成绩(upsert); 限流每 IP 每分钟 ≤5 次 submit。
 // 响应为契约裸 JSON(handler 返回 {__rawResponse: <payload>} 由 index.cjs 原样输出, 不套 ok/data 包装)。
 "use strict";
 const crypto = require("crypto");
 
 const NICKNAME_MAX = 16;
-const GAP_MIN = 40;
+const GAP_MIN = 0; // 下限完全放开: gapMs 须 >0(0819-p Gavin 指令, 对应速率无上限; 上限 GAP_MAX 保留防无意义慢速)
 const GAP_MAX = 2000;
 const SAMPLES_MIN = 10;
 const RATE_TOLERANCE = 0.6; // abs(1000/rate - gapMs) 容差(rate 保留 1 位小数)
@@ -172,9 +172,9 @@ function createKnockRoutes(db) {
       if (typeof rate !== "number" || !Number.isFinite(rate) || rate <= 0) {
         throw httpError(400, "invalid rate");
       }
-      // gapMs: 整数, 40 <= gapMs <= 2000
+      // gapMs: 整数, 0 < gapMs <= 2000(下限完全放开, 上限保留防无意义慢速)
       const gapMs = b.gapMs;
-      if (!Number.isInteger(gapMs) || gapMs < GAP_MIN || gapMs > GAP_MAX) {
+      if (!Number.isInteger(gapMs) || gapMs <= GAP_MIN || gapMs > GAP_MAX) {
         throw httpError(400, "invalid gapMs");
       }
       // samples: 整数, >= 10
