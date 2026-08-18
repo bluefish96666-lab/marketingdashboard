@@ -95,6 +95,16 @@ const {
   appendAssistantLead, QUESTION_MAX,
 } = require("./lib/assistant.cjs");
 
+// 博客评论 + 阅读量（0818: Gavin 指令 blog 支持回复评论 + 统计阅读量, 方案: mrd 后端代理）
+const {
+  loadComments, saveComments, validateComment, isAdmin, addComment,
+  makeCommentRateLimiter, loadViews, saveViews, recordView, viewsFor, vidKey,
+} = require("./lib/blog.cjs");
+const BLOG_COMMENTS_FILE = path.join(__dirname, "data", "blog-comments.json");
+const BLOG_VIEWS_FILE = path.join(__dirname, "data", "blog-views.json");
+// 评论频控: 同 vid(无 vid 则按 IP) 60 秒内限 1 条, 超限 429
+const blogCommentLimiter = makeCommentRateLimiter(60 * 1000);
+
 // 个股资金流上游 inflight 去重表(handleStockFlows 使用)
 const flowInflight = new Map();
 
@@ -217,6 +227,48 @@ const routes = {
   },
   // ---- 官网访问统计（改版4）: 只计数不采集, 每次 GET 即记一次访问(PV+1), UV 按匿名 vid/IP 哈希去重 ----
   "/api/visits": async (q, _body, req) => handleVisits(req, q.get("vid") || ""),
+  // ---- 博客评论（0818）: GET 拉取(post_id 过滤, 时间升序) / POST 发表(校验 + admin 判定 + 频控 + 原子落盘) ----
+  "/api/blog/comments": async (q, body, req) => {
+    if (req.method === "GET") {
+      const post_id = String(q.get("post_id") || "").trim();
+      if (!post_id || post_id.length > 64) {
+        const e = new Error("invalid post_id"); e.status = 400; throw e;
+      }
+      const list = loadComments(BLOG_COMMENTS_FILE)
+        .filter((c) => c.post_id === post_id)
+        .sort((a, b) => (a.created_at < b.created_at ? -1 : 1));
+      return { comments: list };
+    }
+    const comments = loadComments(BLOG_COMMENTS_FILE);
+    const v = validateComment(body, comments);
+    if (!v.ok) { const e = new Error(v.error); e.status = 400; throw e; }
+    const vid = vidKey(body && body.vid);
+    const rateKey = vid || clientIp(req);
+    if (!blogCommentLimiter(rateKey)) {
+      const e = new Error("too many requests"); e.status = 429; throw e;
+    }
+    const rec = addComment(comments, v.value, isAdmin(body));
+    try { saveComments(BLOG_COMMENTS_FILE, comments); }
+    catch (e) { console.error("[blog-comments] save error:", e.message); }
+    return { comment: rec };
+  },
+  // ---- 博客阅读量（0818）: POST 幂等计数(同 vid 每篇 365 天内 1 次) / GET 批量查询(列表页一次拉全) ----
+  "/api/blog/views": async (q, body, req) => {
+    if (req.method === "POST") {
+      const post_id = String((body && body.post_id) || "").trim();
+      if (!post_id || post_id.length > 64) {
+        const e = new Error("invalid post_id"); e.status = 400; throw e;
+      }
+      const views = loadViews(BLOG_VIEWS_FILE);
+      const vid = vidKey(body && body.vid);
+      const key = vid || "ip:" + crypto.createHash("sha256").update("ip:" + clientIp(req)).digest("hex").slice(0, 32);
+      const { count, added } = recordView(views, post_id, key);
+      if (added) { try { saveViews(BLOG_VIEWS_FILE, views); } catch (e) { console.error("[blog-views] save error:", e.message); } }
+      return { count };
+    }
+    const ids = String(q.get("post_ids") || "").split(",").map((s) => s.trim()).filter(Boolean).slice(0, 100);
+    return { views: viewsFor(loadViews(BLOG_VIEWS_FILE), ids) };
+  },
   "/api/minute": async (q) =>
     cached(`minute:${q.get("code")}`, 5000, () => handleMinute(q.get("code") || "sh000001")),
   // 批量分钟线: 将 N 次单独请求合并为 1 次, 大幅降低冷启动爆发请求数
@@ -1140,7 +1192,8 @@ const server = http.createServer(async (req, res) => {
     // status/history/SSE 流为简单 GET(无自定义头)不触发 preflight, 由响应 ACAO 放行。
     // 官网合作咨询(改版5): /api/contact 同走 www.hermes.cc.cd 白名单(落地页表单跨源提交)。
     // 官网 AI 助理(0818-a P0): /api/assistant 同走白名单(落地页 AI 问答表单跨源提交)。
-    if (req.method === "OPTIONS" && (u.pathname.startsWith("/api/opc/") || u.pathname === "/api/contact" || u.pathname === "/api/visits" || u.pathname === "/api/token-stats" || u.pathname === "/api/assistant")) {
+    // 博客评论+阅读量(0818): /api/blog/ 同走白名单(www Pages 站 blog 评论区跨源读写)。
+    if (req.method === "OPTIONS" && (u.pathname.startsWith("/api/opc/") || u.pathname.startsWith("/api/blog/") || u.pathname === "/api/contact" || u.pathname === "/api/visits" || u.pathname === "/api/token-stats" || u.pathname === "/api/assistant")) {
       const cors = opcCorsHeaders(req);
       if (cors["Access-Control-Allow-Origin"] == null) {
         send(res, 403, { ok: false, error: "forbidden" }, cors);
@@ -1158,7 +1211,7 @@ const server = http.createServer(async (req, res) => {
       stats.reqs++;
       const ip = clientIp(req);
       trackActiveIp(ip);
-      const cors = u.pathname.startsWith("/api/opc/") || u.pathname === "/api/contact" || u.pathname === "/api/visits" || u.pathname === "/api/token-stats" || u.pathname === "/api/assistant"
+      const cors = u.pathname.startsWith("/api/opc/") || u.pathname.startsWith("/api/blog/") || u.pathname === "/api/contact" || u.pathname === "/api/visits" || u.pathname === "/api/token-stats" || u.pathname === "/api/assistant"
         ? opcCorsHeaders(req)
         : corsHeadersFor(req);
       // 按 IP 限流(先于缓存命中判断, 防唯一 key 旋转造成的上游请求放大)
