@@ -460,6 +460,20 @@ const routes = {
     cached("gz-weather", GZ_WEATHER_TTL_MS, () => handleGzWeather()),
 };
 
+// ---- 托管版托管层（HOSTING=1 启用）: 单实例多租户账号系统, 只增不改核心路由 ----
+// 复用本文件数据管道/共享缓存(公开行情只读共享); 新增 /api/hosting/* 账号路由
+// (SQLite users 表, 邮箱+密码, Bearer token; watchlist 等个性化数据按租户隔离)。
+// 开源版(HOSTING 未设置)完全不加载, 行为与以往逐字节一致。
+if (process.env.HOSTING === "1") {
+  try {
+    const { initHosting } = require("./hosting/index.cjs");
+    const hosting = initHosting();
+    Object.assign(routes, hosting.routes);
+  } catch (e) {
+    console.error("[hosting] 托管层加载失败(不阻断开源功能):", e?.stack || e?.message || e);
+  }
+}
+
 const MIME = {
   ".html": "text/html; charset=utf-8",
   ".js": "application/javascript; charset=utf-8",

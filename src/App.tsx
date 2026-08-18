@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Routes, Route } from "react-router";
 import { TickerTape, type TapeItem } from "@/components/dash/TickerTape";
 import { DashboardHeader } from "@/components/dash/DashboardHeader";
@@ -18,6 +18,8 @@ import AiDashboard from "./AiDashboard";
 import GoodsDashboard from "./GoodsDashboard";
 import FinDashboard from "./FinDashboard";
 import ProLanding from "./ProLanding";
+import LoginPage from "./pages/LoginPage";
+import { hostingEnabled, hostingToken } from "@/lib/hosting";
 import { useSharedPolling } from "@/hooks/useSharedPolling";
 import { useQuotes } from "@/lib/market";
 import { useFullscreen } from "@/hooks/useFullscreen";
@@ -116,12 +118,41 @@ function Dashboard() {
 
 export default function App() {
   return (
-    <Routes>
-      <Route path="/" element={<Dashboard />} />
-      <Route path="/ai" element={<AiDashboard />} />
-      <Route path="/goods" element={<GoodsDashboard />} />
-      <Route path="/fin" element={<FinDashboard />} />
-      <Route path="/pro" element={<ProLanding />} />
-    </Routes>
+    <HostingGate>
+      <Routes>
+        <Route path="/" element={<Dashboard />} />
+        <Route path="/ai" element={<AiDashboard />} />
+        <Route path="/goods" element={<GoodsDashboard />} />
+        <Route path="/fin" element={<FinDashboard />} />
+        <Route path="/pro" element={<ProLanding />} />
+      </Routes>
+    </HostingGate>
   );
+}
+
+/**
+ * 托管版登录墙（运行时探测 /api/hosting/config）:
+ * - 开源模式(端点 404): 直接渲染 children, 行为与以往完全一致(零回归)
+ * - 托管模式(端点 enabled=true): 有 token → children(看板); 无 token → 登录页
+ */
+function HostingGate({ children }: { children: React.ReactNode }) {
+  const [state, setState] = useState<"checking" | "open" | "login">("checking");
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      let enabled = false;
+      try { enabled = await hostingEnabled(); } catch { enabled = false; }
+      if (!alive) return;
+      if (!enabled) { setState("open"); return; }
+      setState(hostingToken() ? "open" : "login");
+    })();
+    return () => { alive = false; };
+  }, []);
+  if (state === "checking") {
+    return <div className="flex min-h-screen items-center justify-center bg-[#070b12] text-slate-500">加载中…</div>;
+  }
+  if (state === "login") {
+    return <LoginPage onAuthed={() => setState("open")} />;
+  }
+  return <>{children}</>;
 }
