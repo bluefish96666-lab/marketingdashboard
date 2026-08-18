@@ -525,7 +525,11 @@ if (process.env.HOSTING === "1") {
     const hosting = initHosting();
     Object.assign(routes, hosting.routes);
   } catch (e) {
-    console.error("[hosting] 托管层加载失败(不阻断开源功能):", e?.stack || e?.message || e);
+    // 拆库后(2026-08-18): 托管层由私有仓库 mrd-pro 经 start_hosting.sh 注入部署。
+    // 托管模式(HOSTING=1)下加载失败 = 账号墙缺失 → 裸开源实例暴露在托管域名(host.hermes.cc.cd)
+    // 是安全隐患(任何访客绕过登录墙直达看板) → 拒绝启动。
+    console.error("[hosting] 托管层加载失败(HOSTING=1, 拒绝启动防裸奔):", e?.stack || e?.message || e);
+    process.exit(1);
   }
 }
 
