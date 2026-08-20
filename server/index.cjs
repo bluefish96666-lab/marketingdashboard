@@ -453,7 +453,7 @@ const routes = {
     // 防烧 token/防刷: 同 IP 3 条/5 分钟(先于 LLM 调用, 超限直接 429); 托管扣减分支跳过(租户额度即限流)
     if (!tenantId && !assistantLimiter(ip)) { const e = new Error("assistant rate limited"); e.status = 429; throw e; }
     const { question, contact, source } = v.value;
-    const reply = (await callAssistantLLM(question)) || fallbackReply();
+    const reply = (await callAssistantLLM(question, OPC_STATUS_FILE)) || fallbackReply();
     const hits = detectIntent(question);
     let lead_id = null;
     if (hits.length > 0) {
