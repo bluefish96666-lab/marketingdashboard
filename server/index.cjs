@@ -96,6 +96,10 @@ const { handleSpotTable, handleChemSpot } = srcSunsirs;
 const srcAiModels = require("./sources/ai-models.cjs")({ fetchText, num, readHistory, writeHistory, bjToday, path, fs });
 const { handleAaModels, handleSpendIndex } = srcAiModels;
 
+// 引流聚合（0820-k t_de577480）: utm_visits/feedback_events(knock.db 只读) + 短链 hits + V2EX 曝光 + metrics
+const srcAcquisition = require("./sources/acquisition.cjs")({ fetchText, fs, bjToday });
+const { handleAcquisition } = srcAcquisition;
+
 // 官网合作咨询（改版5）: 校验 + 落盘 contact.jsonl（不写 state.json）
 const { validateContact, appendContact } = require("./lib/contact.cjs");
 
@@ -419,6 +423,9 @@ const routes = {
         throw e;
       }
     }),
+  // 引流聚合（0820-k t_de577480）: 治理仪表盘引流区块数据源, 60s 缓存; 内部四源三层 fallback,
+  // 永不整卡报错; 任一源降级时响应带 __ttl:5min 短缓存(上游恢复后尽快重试, 防锁死旧数据)
+  "/api/acquisition": async () => cached("acquisition", 60 * 1000, () => handleAcquisition()),
   "/api/ai-infra": async () => cached("ai-infra", 24 * 3600 * 1000, () => handleAiInfra()), // 财报/定价日更, 24h 缓存
   "/api/mystery-select": async (q) =>
     cached(`ms:${q.get("query")}:${q.get("limit")}:${q.get("page")}`, 60000, () =>
@@ -1291,8 +1298,9 @@ const server = http.createServer(async (req, res) => {
     // 官网合作咨询(改版5): /api/contact 同走 www.hermes.cc.cd 白名单(落地页表单跨源提交)。
     // 官网 AI 助理(0818-a P0): /api/assistant 同走白名单(落地页 AI 问答表单跨源提交)。
     // 官网独立反馈(26): /api/feedback 同走白名单(blog 悬浮反馈表单跨源提交)。
+    // 引流聚合(0820-k t_de577480): /api/acquisition 同走白名单(governance 引流区块跨源读取)。
     // 博客评论+阅读量(0818): /api/blog/ 同走白名单(www Pages 站 blog 评论区跨源读写)。
-    if (req.method === "OPTIONS" && (u.pathname.startsWith("/api/opc/") || u.pathname.startsWith("/api/blog/") || u.pathname === "/api/contact" || u.pathname === "/api/visits" || u.pathname === "/api/token-stats" || u.pathname === "/api/assistant" || u.pathname === "/api/feedback")) {
+    if (req.method === "OPTIONS" && (u.pathname.startsWith("/api/opc/") || u.pathname.startsWith("/api/blog/") || u.pathname === "/api/contact" || u.pathname === "/api/visits" || u.pathname === "/api/token-stats" || u.pathname === "/api/assistant" || u.pathname === "/api/feedback" || u.pathname === "/api/acquisition")) {
       const cors = opcCorsHeaders(req);
       if (cors["Access-Control-Allow-Origin"] == null) {
         send(res, 403, { ok: false, error: "forbidden" }, cors);
@@ -1310,7 +1318,7 @@ const server = http.createServer(async (req, res) => {
       stats.reqs++;
       const ip = clientIp(req);
       trackActiveIp(ip);
-      const cors = u.pathname.startsWith("/api/opc/") || u.pathname.startsWith("/api/blog/") || u.pathname === "/api/contact" || u.pathname === "/api/visits" || u.pathname === "/api/token-stats" || u.pathname === "/api/assistant" || u.pathname === "/api/feedback"
+      const cors = u.pathname.startsWith("/api/opc/") || u.pathname.startsWith("/api/blog/") || u.pathname === "/api/contact" || u.pathname === "/api/visits" || u.pathname === "/api/token-stats" || u.pathname === "/api/assistant" || u.pathname === "/api/feedback" || u.pathname === "/api/acquisition"
         ? opcCorsHeaders(req)
         : corsHeadersFor(req);
       // 按 IP 限流(先于缓存命中判断, 防唯一 key 旋转造成的上游请求放大)
