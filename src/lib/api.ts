@@ -173,6 +173,15 @@ export interface MinuteData {
   code: string;
   prec: number;
   points: { t: string; p: number }[];
+  /** 数据源标注: "eastmoney" 正常分时 / "tencent-spot" 东财失败降级腾讯实时价 / "unavailable" 无可用源 */
+  source?: string;
+  /** 降级标志: 上游分时不可用, 前端显示占位提示(最新价+日涨跌仍正常, 不伪造曲线) */
+  degraded?: boolean;
+  /** 降级时携带的腾讯 spot 快照(最新价/日涨跌/时间) */
+  price?: number;
+  change?: number;
+  pct?: number;
+  time?: string;
 }
 
 /** 期货日线K线(归一化) */

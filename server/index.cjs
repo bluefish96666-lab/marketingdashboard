@@ -15,6 +15,12 @@ const { createCache } = require("./lib/cache.cjs");
 const createFetchAny = require("./lib/fetch-any.cjs");
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// 分钟线缓存 TTL: 常规 5s(与报价中心同频); 汇率(wh*)降频 2min —
+// 东财 WAF 限流(SSL unexpected eof)主因是频率, 汇率分时 2min 粒度足够且命中率降 24 倍
+const MINUTE_TTL = 5000;
+const FX_MINUTE_TTL = 120000;
+const minuteTtl = (code) => (code && code.startsWith("wh") ? FX_MINUTE_TTL : MINUTE_TTL);
+
 // 运行观测(压测/运维): 仅聚合计数, 无敏感信息; /api/stats 读取
 const stats = { reqs: 0, upstream: 0, blocked: 0, started: Date.now() };
 
@@ -269,17 +275,19 @@ const routes = {
     const ids = String(q.get("post_ids") || "").split(",").map((s) => s.trim()).filter(Boolean).slice(0, 100);
     return { views: viewsFor(loadViews(BLOG_VIEWS_FILE), ids) };
   },
-  "/api/minute": async (q) =>
-    cached(`minute:${q.get("code")}`, 5000, () => handleMinute(q.get("code") || "sh000001")),
+  "/api/minute": async (q) => {
+    const code = q.get("code") || "sh000001";
+    return cached(`minute:${code}`, minuteTtl(code), () => handleMinute(code));
+  },
   // 批量分钟线: 将 N 次单独请求合并为 1 次, 大幅降低冷启动爆发请求数
   "/api/batch-minute": async (q) => {
     const codes = parseCsvParam(q.get("codes") || "");
     if (codes.length === 0) return {};
     if (codes.length > 30) codes.length = 30; // 上限防滥用
     const map = {};
-    // 逐个走缓存(每个 code 各自 5s TTL), 但共享一次 HTTP 往返
+    // 逐个走缓存(常规代码 5s TTL, 汇率 wh* 降频 2min), 但共享一次 HTTP 往返
     await Promise.all(codes.map(async (c) => {
-      try { map[c] = await cached(`minute:${c}`, 5000, () => handleMinute(c)); } catch (e) { map[c] = null; console.error("[batch-minute]", c, e?.message || e); }
+      try { map[c] = await cached(`minute:${c}`, minuteTtl(c), () => handleMinute(c)); } catch (e) { map[c] = null; console.error("[batch-minute]", c, e?.message || e); }
     }));
     return map;
   },
