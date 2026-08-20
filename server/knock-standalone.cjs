@@ -116,6 +116,15 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    // [0820-g] /go/* 短链: bare domain (hermes.cc.cd) 保留路径 302 到 www —— 短链体系以 www 为准,
+    // bare 直接 404 会丢路径; 302 后由 www 侧 _worker.js 统一小写匹配 + 302 + 点击计数。
+    // 目标拼接写死前缀防 open redirect, pathname 原样保留(大小写交给 www worker 归一)。
+    if (u.pathname === "/go" || u.pathname === "/go/" || u.pathname.indexOf("/go/") === 0) {
+      res.writeHead(302, { Location: "https://www.hermes.cc.cd" + u.pathname, "Cache-Control": "no-store" });
+      res.end();
+      return;
+    }
+
     // 仅分发 /api/v1/knock/* 三路由; 其余路径一律 404
     if (!routes[u.pathname]) {
       send(res, 404, { ok: false, error: "not found" });
