@@ -26,6 +26,9 @@ test("source 白名单: demo_report 通过并回传, 未知来源忽略置 null�
   assert.equal(validateAssistant({ question: "托管版什么时候上线", source: "demo_report" }).value.source, "demo_report");
   // 0820-fb-2b/26: blog 悬浮反馈独立表单来源（26 已并入 SOURCE_ALLOW）
   assert.equal(validateAssistant({ question: "托管版什么时候上线", source: "blog_feedback" }).value.source, "blog_feedback");
+  // 0820-fb-3: 首页/opc 悬浮反馈来源（同一 SOURCE_ALLOW 扩展）
+  assert.equal(validateAssistant({ question: "托管版什么时候上线", source: "home_feedback" }).value.source, "home_feedback");
+  assert.equal(validateAssistant({ question: "托管版什么时候上线", source: "opc_feedback" }).value.source, "opc_feedback");
   assert.equal(validateAssistant({ question: "托管版什么时候上线", source: "hacker\" ; rm -rf" }).value.source, null);
   assert.equal(validateAssistant({ question: "托管版什么时候上线", source: "   " }).value.source, null);
   assert.equal(validateAssistant({ question: "托管版什么时候上线" }).value.source, null);

@@ -101,6 +101,9 @@ const {
   appendAssistantLead, QUESTION_MAX,
 } = require("./lib/assistant.cjs");
 
+// 官网独立反馈（26）: 落盘 feedback-messages.jsonl（校验复用 validateAssistant; 不调 LLM/无 lead_id）
+const { appendFeedback, normalizePage } = require("./lib/feedback.cjs");
+
 // 博客评论 + 阅读量（0818: Gavin 指令 blog 支持回复评论 + 统计阅读量, 方案: mrd 后端代理）
 const {
   loadComments, saveComments, validateComment, isAdmin, addComment,
@@ -475,6 +478,24 @@ const routes = {
     }
     return { reply, intent_hit: hits.length > 0, intent_keywords: hits, lead_id };
   },
+  // ---- 官网独立反馈（26, 0820 Gavin 拍板）: 校验 + 同 IP 限频 + 落盘 feedback-messages.jsonl ----
+  // 悬浮反馈按钮用独立反馈表单: 不复用 AI 助理弹窗/问答链路(不调 LLM/无意向判定/无 lead_id),
+  // 不并入 assistant-leads.jsonl(不碰其语义与 cron 登记流程); question/contact 规则复用
+  // validateAssistant(同源单点维护); 埋点由前端自行打 /api/v1/knock/feedback(本卡不动 knock.db)。
+  "/api/feedback": async (_q, body, req) => {
+    const v = validateAssistant(body);
+    if (!v.ok) { const e = new Error(v.error); e.status = 400; throw e; }
+    const ip = clientIp(req);
+    // 防 spam: 同 IP 1 小时 ≤3 条(独立限流器, 不与 contact/assistant 共享计数); 超限 429 中性文案
+    if (!feedbackLimiter(ip)) { const e = new Error("提交太频繁了，请稍后再试"); e.status = 429; throw e; }
+    const { question, contact, source } = v.value;
+    const page = normalizePage(body && body.page); // 白名单校验(blog/opc/company), 未知忽略防注入
+    const rec = { ts: new Date().toISOString(), ip, question, contact };
+    if (page) rec.page = page;
+    if (source) rec.source = source; // SOURCE_ALLOW 白名单(blog_feedback 已允许)
+    appendFeedback(FEEDBACK_DATA_DIR, rec);
+    return { received: true, ts: rec.ts };
+  },
   // ---- OPC 透明办公室 demo 体验（12a）----
   "/api/opc/demo": async (_q, body, req) => {
     // a) 白名单校验: 只认 4 个预设 id, 其他字段一律忽略（防 prompt 注入/防外人驱动 agent）
@@ -848,6 +869,12 @@ const ASSISTANT_DATA_DIR = path.join(__dirname, "data");
 const ASSISTANT_RATE_WINDOW_MS = 5 * 60 * 1000; // 5 分钟窗口
 const ASSISTANT_RATE_MAX = 3;                   // 同 IP 最多 3 条/5 分钟
 const assistantLimiter = makeLimiter(ASSISTANT_RATE_WINDOW_MS, ASSISTANT_RATE_MAX);
+
+// 官网独立反馈（26）: 落盘目录 + 同 IP 1 小时 ≤3 条限频（独立限流器, 不与 contact/assistant 共享计数）
+const FEEDBACK_DATA_DIR = path.join(__dirname, "data");
+const FEEDBACK_RATE_WINDOW_MS = 60 * 60 * 1000; // 1 小时窗口
+const FEEDBACK_RATE_MAX = 3;                    // 同 IP 最多 3 条/小时
+const feedbackLimiter = makeLimiter(FEEDBACK_RATE_WINDOW_MS, FEEDBACK_RATE_MAX);
 
 // 启动时把预设表同步成 presets.json（供 opc_demo_dispatch.py 读取，单一事实源；服务端仍是硬编码白名单）
 try {
@@ -1256,8 +1283,9 @@ const server = http.createServer(async (req, res) => {
     // status/history/SSE 流为简单 GET(无自定义头)不触发 preflight, 由响应 ACAO 放行。
     // 官网合作咨询(改版5): /api/contact 同走 www.hermes.cc.cd 白名单(落地页表单跨源提交)。
     // 官网 AI 助理(0818-a P0): /api/assistant 同走白名单(落地页 AI 问答表单跨源提交)。
+    // 官网独立反馈(26): /api/feedback 同走白名单(blog 悬浮反馈表单跨源提交)。
     // 博客评论+阅读量(0818): /api/blog/ 同走白名单(www Pages 站 blog 评论区跨源读写)。
-    if (req.method === "OPTIONS" && (u.pathname.startsWith("/api/opc/") || u.pathname.startsWith("/api/blog/") || u.pathname === "/api/contact" || u.pathname === "/api/visits" || u.pathname === "/api/token-stats" || u.pathname === "/api/assistant")) {
+    if (req.method === "OPTIONS" && (u.pathname.startsWith("/api/opc/") || u.pathname.startsWith("/api/blog/") || u.pathname === "/api/contact" || u.pathname === "/api/visits" || u.pathname === "/api/token-stats" || u.pathname === "/api/assistant" || u.pathname === "/api/feedback")) {
       const cors = opcCorsHeaders(req);
       if (cors["Access-Control-Allow-Origin"] == null) {
         send(res, 403, { ok: false, error: "forbidden" }, cors);
@@ -1275,7 +1303,7 @@ const server = http.createServer(async (req, res) => {
       stats.reqs++;
       const ip = clientIp(req);
       trackActiveIp(ip);
-      const cors = u.pathname.startsWith("/api/opc/") || u.pathname.startsWith("/api/blog/") || u.pathname === "/api/contact" || u.pathname === "/api/visits" || u.pathname === "/api/token-stats" || u.pathname === "/api/assistant"
+      const cors = u.pathname.startsWith("/api/opc/") || u.pathname.startsWith("/api/blog/") || u.pathname === "/api/contact" || u.pathname === "/api/visits" || u.pathname === "/api/token-stats" || u.pathname === "/api/assistant" || u.pathname === "/api/feedback"
         ? opcCorsHeaders(req)
         : corsHeadersFor(req);
       // 按 IP 限流(先于缓存命中判断, 防唯一 key 旋转造成的上游请求放大)

@@ -20,8 +20,10 @@ const QUESTION_MIN = 2;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 // 来源白名单（0818-aa: demo 报告页 CTA 提问带 source=demo_report 落盘区分漏斗来源；
+// 0820-fb-2b/26: blog 悬浮反馈改独立表单 source=blog_feedback（复用同一白名单）;
+// 0820-fb-3: 首页/opc 悬浮反馈 source=home_feedback / opc_feedback（同一白名单扩展）;
 // 未知来源字段一律忽略，防 jsonl 被注入任意字符串）
-const SOURCE_ALLOW = new Set(["demo_report"]);
+const SOURCE_ALLOW = new Set(["demo_report", "blog_feedback", "home_feedback", "opc_feedback"]);
 
 // 意向关键词（与 linjing_monitor.py INTENT_KEYWORDS 同源，four-platform-monitor 判定口径）
 // 0819-z: 补充「试用/trial」（决议第 7 项点名命中词），两处词表保持同步
