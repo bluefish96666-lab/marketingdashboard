@@ -152,7 +152,8 @@ const server = http.createServer(async (req, res) => {
       }
     }
 
-    // 解析 POST body(JSON); 非 POST 无 body, 与 index.cjs 语义一致(submit 仅接受 POST 带体)
+    // 解析 POST body(JSON); 空 body(如 GET 语义的 feedback 上报走 POST 无体) → undefined, 不报错。
+    // submit 带体照常解析; 非 POST 无 body, 与 index.cjs 语义一致。
     let body;
     if (req.method === "POST") {
       const r = await readBodyWithLimit(req, BODY_LIMIT);
@@ -160,9 +161,14 @@ const server = http.createServer(async (req, res) => {
         send(res, 413, { ok: false, error: "payload too large" });
         return;
       }
-      try { body = JSON.parse(r.buf.toString()); } catch {
-        send(res, 400, { ok: false, error: "invalid json body" });
-        return;
+      const raw = r.buf.toString().trim();
+      if (!raw) {
+        body = undefined;
+      } else {
+        try { body = JSON.parse(raw); } catch {
+          send(res, 400, { ok: false, error: "invalid json body" });
+          return;
+        }
       }
     }
 
@@ -182,5 +188,5 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`[knock] 手速排行榜独立进程已启动 — :${PORT}/api/v1/knock/{leaderboard,percentile,submit} (SQLite)`);
+  console.log(`[knock] 手速排行榜独立进程已启动 — :${PORT}/api/v1/knock/{leaderboard,percentile,submit,track,feedback} (SQLite)`);
 });
