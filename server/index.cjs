@@ -80,6 +80,10 @@ const { handleFinanceMain, handleFinanceBoard, handleFinanceForecast, validPerio
 const srcTreasuries = require("./sources/treasuries.cjs")({ fetchTextAny, num, fs, path });
 const { handleTreasuries, handleTreasuryHistory } = srcTreasuries;
 
+// 黄金观察（25, 0820 Gavin 指令）: 读 gold-monitor 产物文件(零网络依赖) + central-bank-gold SQLite(只读)
+const srcGold = require("./sources/gold.cjs")({ fs, path });
+const { handleGold, handleGoldHistory } = srcGold;
+
 const srcOpenRouter = require("./sources/openrouter.cjs")({ safeRecord, fs, path });
 const { handleOpenRouterUsage } = srcOpenRouter;
 
@@ -353,6 +357,9 @@ const routes = {
       handleNews(q.get("page") || "1", q.get("size") || "40")
     ),
   "/api/treasuries": async () => cached("treasuries", 30000, () => handleTreasuries()),
+  // 黄金观察（25）: 聚合(8 面板字段) + 历史序列(days=1|7|30), TTL 60s(mrd 轮询风格)
+  "/api/gold": async () => cached("gold:summary", 60000, () => handleGold()),
+  "/api/gold/history": async (q) => cached(`gold:hist:${q.get("days") || "1"}`, 60000, () => handleGoldHistory(q.get("days") || "1")),
   "/api/finance-main": async (q) =>
     cached(`fin-main:${q.get("code")}`, 3600000, () => handleFinanceMain(q.get("code") || "")), // 单公司近12期主指标, 1h缓存
   "/api/finance-board": async (q) => {
