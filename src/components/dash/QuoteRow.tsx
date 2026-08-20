@@ -433,7 +433,12 @@ export const QuoteRow = memo(function QuoteRow({
   const needsVisible = (spark && !sparkData) || boards || flow;
   const [visible, setVisible] = useState(isTv || !needsVisible);
   useEffect(() => {
-    if (isTv || !needsVisible) return;
+    // 懒加载依赖就绪(sparkData/boards/flow 到达)后强制可见 — 否则 IO 未触发过的行(面板底部)
+    // 会永远 visible=false, 报价订阅禁用 → 价格空态"—"(0820-25 实锤: BTC 行)
+    if (isTv || !needsVisible) {
+      setVisible(true);
+      return;
+    }
     const el = rootRef.current;
     if (!el) return;
     const io = new IntersectionObserver((entries) => {
