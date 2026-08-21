@@ -1382,6 +1382,49 @@ const server = http.createServer(async (req, res) => {
       });
       return res.end();
     }
+    // ---- OPC 后端反代（P0-1 架构拆分 2026-08-21）----
+    // OPC 透明办公室/工作台/治理后端已迁独立 opc-server(:3033, opc.hermes.cc.cd)。
+    // 旧 mrd /api/opc/* /api/kanban/* /api/token-stats /api/acquisition 端点改为反代过渡
+    // （双跑期保持旧 URL 可用; P0-3 移除反代+死代码, 前端已切 opc.hermes.cc.cd）。
+    // OPTIONS 预检仍由本分支下方原逻辑处理（保留 OPC_CORS_ORIGINS 白名单行为）;
+    // GET/POST/SSE 流式反代到 opc-server, 响应 ACAO 以 mrd 白名单计算结果覆盖（行为不变）。
+    const OPC_PROXY_TARGET = process.env.OPC_PROXY_TARGET || "http://localhost:3033";
+    const OPC_PROXY_PATHS = ["/api/opc/", "/api/kanban/"];
+    const isOpcProxyPath = (p) =>
+      OPC_PROXY_PATHS.some((x) => p.startsWith(x)) || p === "/api/token-stats" || p === "/api/acquisition";
+    if (isOpcProxyPath(u.pathname) && req.method !== "OPTIONS") {
+      stats.reqs++;
+      const ip = clientIp(req);
+      trackActiveIp(ip);
+      const cors = opcCorsHeaders(req);
+      if (!apiLimiter(ip)) { stats.blocked++; send(res, 429, { ok: false, error: "too many requests" }, cors); return; }
+      const target = new URL(OPC_PROXY_TARGET + u.pathname + u.search);
+      const headers = { ...req.headers, host: target.host };
+      delete headers["connection"]; // hop-by-hop 头由本层管理
+      const proxyReq = http.request(target, { method: req.method, headers }, (proxyRes) => {
+        const outHeaders = { ...proxyRes.headers };
+        delete outHeaders["transfer-encoding"]; // node res 自动计算
+        if (cors["Access-Control-Allow-Origin"] != null) {
+          outHeaders["Access-Control-Allow-Origin"] = cors["Access-Control-Allow-Origin"];
+          outHeaders["Vary"] = "Origin";
+        }
+        res.writeHead(proxyRes.statusCode || 502, outHeaders);
+        proxyRes.pipe(res);
+      });
+      proxyReq.on("error", (e) => {
+        console.error("[opc-proxy]", u.pathname, e.message);
+        if (!res.headersSent) send(res, 502, { ok: false, error: "opc-server unavailable" }, cors);
+        else res.end();
+      });
+      if (req.method === "POST" || req.method === "PUT" || req.method === "PATCH") {
+        const chunks = [];
+        req.on("data", (c) => chunks.push(c));
+        req.on("end", () => proxyReq.end(Buffer.concat(chunks)));
+      } else {
+        req.pipe(proxyReq);
+      }
+      return;
+    }
     // ---- OPC 全局状态流 SSE: GET /api/opc/stream（15a, 持续推送不关闭）----
     if (u.pathname === "/api/opc/stream" && req.method === "GET") {
       stats.reqs++;
