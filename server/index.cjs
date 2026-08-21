@@ -805,8 +805,9 @@ function sseHeartbeat(res, ms) {
  * opc_collect.py 双写 public/ 种子 + dist/ 实时, public/ 仅 npm run build 时被拷贝, 运行时不读)。
  */
 const OPC_STATUS_FILE = path.join(DIST, "company", "opc", "status.json");
+const OPC_STATUS_DIR = path.dirname(OPC_STATUS_FILE);   // 27d-fix: watch 目录而非文件(原子替换换 inode)
 const OPC_STREAM_MAX_CLIENTS = 50;            // 并发上限: 超限新连接直接 503(防滥用), 可调
-const OPC_STREAM_DEBOUNCE_MS = 200;           // fs.watch 防抖: 写是整文件覆盖(open 'w' 截断+写), 立即读可能读到半截
+const OPC_STREAM_DEBOUNCE_MS = 200;           // fs.watch 防抖: rename 事件后合并突发, 立即读可能读到半截
 const OPC_STREAM_FALLBACK_POLL_MS = 30 * 1000; // 兜底轮询周期(非主路径, 见 opcStreamStartWatcher)
 const OPC_STREAM_HEARTBEAT_MS = 27 * 1000;    // 保活心跳(25~30s 区间取 27s, 防 CF ~100s 空闲超时)
 
@@ -815,25 +816,37 @@ let opcStreamWatcher = null;         // fs.watch 句柄(无客户端时关闭, �
 let opcStreamFallbackTimer = null;   // 兜底轮询定时器(同上)
 let opcStreamDebounceTimer = null;   // fs.watch 事件防抖定时器
 let opcStreamLastMtime = 0;          // 兜底轮询 mtime 对比基准
+let opcStreamLastPayload = null;     // 上次广播 payload(JSON 字符串): 内容相同跳过, 防无变化写入重复推送
 
 // 读当前 status.json 全量快照; 失败(半截/不存在)返回 null, 调用方跳过, 绝不 crash
 function opcStreamReadSnapshot() {
   try { return JSON.parse(fs.readFileSync(OPC_STATUS_FILE, "utf-8")); } catch { return null; }
 }
-// 广播当前全量快照给所有全局流客户端
+// 广播当前全量快照给所有全局流客户端; 内容与上次相同则跳过(去重, 防 opc-bus 1s 写 + collect 10min 写重复推送)
 function opcStreamBroadcast() {
   const snap = opcStreamReadSnapshot();
   if (snap == null) return; // 写窗口半截/暂缺: 跳过, 等下一次 change
-  for (const c of opcStreamClients) sendEvent(c.res, "status", snap);
+  const payload = JSON.stringify(snap);
+  if (payload === opcStreamLastPayload) return;
+  opcStreamLastPayload = payload;
+  for (const c of opcStreamClients) sendEvent(c.res, "status", payload);
 }
-// 懒启动 watcher(首个客户端连接时): fs.watch 主路径 + 30s mtime 轮询兜底。
-// 兜底说明: fs.watch 在部分平台/文件系统(网络盘/容器/编辑器原子替换)不可靠可能丢事件,
+// 懒启动 watcher(首个客户端连接时): 目录级 fs.watch 主路径 + 30s mtime 轮询兜底。
+// 27d-fix(蔡婉双写实验复现): opc-bus.py / opc_collect.py 均 tmp+os.replace 原子写(换 inode),
+// 文件级 fs.watch 在首次替换后 inotify 失效, 之后写入零事件 → SSE 只剩 30s 兜底轮询(气泡 P95 24.5s)。
+// 方案①(庄子拍板): watch status.json 所在目录, 捕获 rename 事件按文件名过滤定位 status.json,
+// 写入方原子性零改动(tmp+os.replace 保留)。
+// 兜底说明: fs.watch 在部分平台/文件系统(网络盘/容器)不可靠可能丢事件,
 // 轮询每 30s 对比 mtimeMs, 变了才推——这是保险, 非主路径。
 function opcStreamStartWatcher() {
   if (opcStreamWatcher || opcStreamFallbackTimer) return;
   try { opcStreamLastMtime = fs.statSync(OPC_STATUS_FILE).mtimeMs; } catch { opcStreamLastMtime = 0; }
   try {
-    opcStreamWatcher = fs.watch(OPC_STATUS_FILE, { persistent: false }, () => {
+    opcStreamWatcher = fs.watch(OPC_STATUS_DIR, { persistent: false }, (eventType, filename) => {
+      // 目录级 watch 会收到目录内所有文件事件(tmp 中间文件/其他文件): 只认 status.json。
+      // Linux inotify 下 os.replace(tmp, status.json) → IN_MOVED_TO, eventType='rename', filename='status.json'。
+      const name = Buffer.isBuffer(filename) ? filename.toString("utf8") : filename;
+      if (name !== null && name !== path.basename(OPC_STATUS_FILE)) return;
       if (opcStreamDebounceTimer) clearTimeout(opcStreamDebounceTimer);
       opcStreamDebounceTimer = setTimeout(() => { opcStreamDebounceTimer = null; opcStreamBroadcast(); }, OPC_STREAM_DEBOUNCE_MS);
     });
