@@ -8,6 +8,7 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 const { spawn } = require("child_process");
+const { DatabaseSync } = require("node:sqlite"); // 人在 loop 工作台: kanban 只读聚合(v22 原生, 零依赖)
 const { num, changeOf, pctOf, fmtHHMM, toMarketCode6 } = require("./lib/format.cjs");
 const { parseCsvParam, chunked, safeRecord } = require("./lib/netutil.cjs");
 const { bjToday, readHistory, writeHistory } = require("./lib/persist.cjs");
@@ -111,6 +112,9 @@ const {
 
 // 官网独立反馈（26）: 落盘 feedback-messages.jsonl（校验复用 validateAssistant; 不调 LLM/无 lead_id）
 const { appendFeedback, normalizePage } = require("./lib/feedback.cjs");
+
+// 人在 loop 工作台（0821-轨A-8 t_16098289）: kanban 只读聚合 + Gavin 反馈写回（纯逻辑层, 单测 server/workbench.test.cjs）
+const { tokenOk, validateFeedback, buildPlan, taskOperable } = require("./lib/workbench.cjs");
 
 // 博客评论 + 阅读量（0818: Gavin 指令 blog 支持回复评论 + 统计阅读量, 方案: mrd 后端代理）
 const {
@@ -510,6 +514,9 @@ const routes = {
     appendFeedback(FEEDBACK_DATA_DIR, rec);
     return { received: true, ts: rec.ts };
   },
+  // ---- 人在 loop 工作台（0821-轨A-8）: kanban 公开读 + Gavin 反馈写回 ----
+  "/api/kanban/tasks": async (q, _body, req) => handleKanbanTasks(q, req),
+  "/api/kanban/feedback": async (_q, body, req) => handleKanbanFeedback(body, req),
   // ---- OPC 透明办公室 demo 体验（12a）----
   "/api/opc/demo": async (_q, body, req) => {
     // a) 白名单校验: 只认 4 个预设 id, 其他字段一律忽略（防 prompt 注入/防外人驱动 agent）
@@ -889,6 +896,151 @@ const FEEDBACK_DATA_DIR = path.join(__dirname, "data");
 const FEEDBACK_RATE_WINDOW_MS = 60 * 60 * 1000; // 1 小时窗口
 const FEEDBACK_RATE_MAX = 3;                    // 同 IP 最多 3 条/小时
 const feedbackLimiter = makeLimiter(FEEDBACK_RATE_WINDOW_MS, FEEDBACK_RATE_MAX);
+
+/* ---------------- 人在 loop 工作台（0821-轨A-8 t_16098289）: kanban 只读聚合 + Gavin 反馈写回 ----------------
+ * 设计基线: ~/.hermes/opc/human-in-loop-workbench.md
+ * - 读: GET /api/kanban/tasks —— 公开（透明理念: 任务卡不含财务）, 只读 node:sqlite 聚合
+ *   tasks+task_comments+task_events; 可选 X-Workbench-Token 头 → session_ok（登录校验, 不阻断公开读）
+ * - 写: POST /api/kanban/feedback —— 需 WORKBENCH_TOKEN(server/.env, 已 gitignore 不进仓库), 一律 spawn
+ *   hermes CLI 正规写回(comment+unblock/block/complete), 绝不裸写 SQLite(防绕过状态机); 只允许操作
+ *   assignee=gavin 或 block_kind=needs_input 的卡; 双留痕(comment author=gavin + task_events 状态迁移)
+ * - 子进程 env 清理(与 opc_demo_dispatch.py 同款): 剥 HERMES_KANBAN_DB/HERMES_KANBAN_BOARD/
+ *   HERMES_DELEGATED_CHILD_CONTEXT, 显式钉死 opc 库路径(防 pm2 继承 Hermes 会话变量污染定向)
+ */
+const KANBAN_DB_PATH = "/home/gavin/.hermes/kanban/boards/opc/kanban.db";
+const KANBAN_HERMES_BIN = "/home/gavin/.hermes/hermes-agent/venv/bin/hermes";
+const WORKBENCH_TOKEN = process.env.WORKBENCH_TOKEN || "";
+const workbenchLimiter = makeLimiter(60 * 1000, 30); // 同 IP 30 次/分钟(防刷; 真门禁是 token)
+
+function openKanbanDb() {
+  try {
+    if (!fs.existsSync(KANBAN_DB_PATH)) return null;
+    const db = new DatabaseSync(KANBAN_DB_PATH, { readOnly: true });
+    try { db.exec("PRAGMA busy_timeout = 5000;"); } catch {}
+    return db;
+  } catch (e) {
+    console.error("[workbench] kanban db open failed:", e.message);
+    return null;
+  }
+}
+
+// 单卡详情: body 全文 + 评论线程 + 事件流(events.payload 尽量解析为对象)
+function kanbanTaskView(db, row) {
+  let comments = [];
+  let events = [];
+  try {
+    comments = db.prepare("SELECT id, author, body, created_at FROM task_comments WHERE task_id = ? ORDER BY created_at ASC, id ASC").all(row.id);
+  } catch {}
+  try {
+    events = db.prepare("SELECT id, run_id, kind, payload, created_at FROM task_events WHERE task_id = ? ORDER BY created_at ASC, id ASC").all(row.id)
+      .map((e) => {
+        let p = e.payload;
+        try { p = JSON.parse(p); } catch {}
+        return { id: e.id, run_id: e.run_id, kind: e.kind, payload: p, created_at: e.created_at };
+      });
+  } catch {}
+  return { ...row, comments, events };
+}
+
+// 公开读: assignee 过滤 + 自动并入 blocked+needs_input(待 Gavin 处理的跨人卡); 排序 blocked 优先
+function handleKanbanTasks(q, req) {
+  const db = openKanbanDb();
+  if (!db) { const e = new Error("kanban 数据未就绪"); e.status = 503; throw e; }
+  try {
+    const assignee = String(q.get("assignee") || "gavin").trim().slice(0, 64);
+    const seen = new Set();
+    const rows = [];
+    if (assignee) {
+      for (const r of db.prepare("SELECT * FROM tasks WHERE assignee = ? AND status != 'archived' ORDER BY created_at DESC LIMIT 200").all(assignee)) rows.push(r);
+    }
+    for (const r of db.prepare("SELECT * FROM tasks WHERE status = 'blocked' AND block_kind = 'needs_input' ORDER BY created_at DESC").all()) rows.push(r);
+    const tasks = [];
+    for (const r of rows) {
+      if (seen.has(r.id)) continue;
+      seen.add(r.id);
+      tasks.push(kanbanTaskView(db, r));
+    }
+    tasks.sort((a, b) => {
+      const pa = a.status === "blocked" ? 0 : 1;
+      const pb = b.status === "blocked" ? 0 : 1;
+      if (pa !== pb) return pa - pb;
+      return (b.created_at || 0) - (a.created_at || 0);
+    });
+    let session_ok = null;
+    const tok = req && req.headers && req.headers["x-workbench-token"];
+    if (typeof tok === "string" && tok.length > 0) session_ok = tokenOk(tok, WORKBENCH_TOKEN);
+    return { tasks, session_ok };
+  } catch (e) {
+    console.error("[workbench] kanban read error:", e?.message || e);
+    const err = new Error("kanban 数据读取失败"); err.status = 502; throw err;
+  } finally {
+    try { db.close(); } catch {}
+  }
+}
+
+// spawn hermes kanban CLI（写回唯一通道; 失败返回 {ok:false, err}）
+function spawnHermesKanban(args, timeoutMs = 30000) {
+  return new Promise((resolve) => {
+    let env;
+    try {
+      env = { ...process.env };
+      delete env.HERMES_KANBAN_DB;
+      delete env.HERMES_KANBAN_BOARD;
+      delete env.HERMES_DELEGATED_CHILD_CONTEXT; // 服务器 spawn 场景会继承该标记, CLI 拒改 kanban
+      env.HERMES_KANBAN_DB = KANBAN_DB_PATH;     // 钉死 opc 库路径（与 --board opc 同源, 双保险）
+      env.HOME = "/home/gavin";
+    } catch (e) { resolve({ ok: false, err: "env prepare failed: " + e.message }); return; }
+    const child = spawn(KANBAN_HERMES_BIN, ["kanban", "--board", "opc", ...args], { env, stdio: ["ignore", "pipe", "pipe"] });
+    let out = "", err = "";
+    child.stdout.on("data", (d) => { out += d.toString(); });
+    child.stderr.on("data", (d) => { err += d.toString(); });
+    const timer = setTimeout(() => { try { child.kill(); } catch {} resolve({ ok: false, err: "CLI 执行超时" }); }, timeoutMs);
+    child.on("error", (e) => { clearTimeout(timer); resolve({ ok: false, err: e.message }); });
+    child.on("close", (code) => {
+      clearTimeout(timer);
+      if (code === 0) resolve({ ok: true, out, err });
+      else resolve({ ok: false, err: (err || out || `exit ${code}`).trim().slice(0, 300) });
+    });
+  });
+}
+
+async function handleKanbanFeedback(body, req) {
+  if (!WORKBENCH_TOKEN) { const e = new Error("工作台未配置（WORKBENCH_TOKEN 缺失）"); e.status = 503; throw e; }
+  // 防 token 爆破: 同 IP 30 次/分钟（先于 token 校验, 无论对错都占槽位）
+  if (!workbenchLimiter(clientIp(req))) { const e = new Error("操作太频繁，请稍后再试"); e.status = 429; throw e; }
+  const v = validateFeedback(body);
+  if (!v.ok) { const e = new Error(v.error); e.status = v.status; throw e; }
+  if (!tokenOk(body && body.token, WORKBENCH_TOKEN)) { const e = new Error("密码不正确"); e.status = 401; throw e; }
+  const { taskId, action, text } = v.value;
+  // 读卡: 存在性 + 安全边界(assignee=gavin 或 block_kind=needs_input)
+  const db = openKanbanDb();
+  if (!db) { const e = new Error("kanban 数据未就绪"); e.status = 503; throw e; }
+  let task;
+  try { task = db.prepare("SELECT id, assignee, status, block_kind FROM tasks WHERE id = ?").get(taskId); }
+  catch (e) { console.error("[workbench] task lookup error:", e?.message || e); }
+  finally { try { db.close(); } catch {} }
+  if (!task) { const e = new Error("任务卡不存在"); e.status = 404; throw e; }
+  if (!taskOperable(task)) { const e = new Error("无权操作该任务卡"); e.status = 403; throw e; }
+  // 动作 → CLI 序列, 逐条执行（任一失败即抛, 已写部分留痕可查）
+  const steps = [];
+  for (const args of buildPlan(action, task, text)) {
+    const r = await spawnHermesKanban(args);
+    steps.push({ cmd: args[0], ok: r.ok });
+    if (!r.ok) {
+      console.error("[workbench] CLI failed:", args[0], taskId, r.err);
+      // CLI 原始错误信息对 Gavin 不友好, 做常见场景映射（父卡未完成/状态不允许）
+      const FRIENDLY = [
+        [/cannot complete/, "该卡存在未完成的父卡或已处于终态，无法标记完成"],
+        [/cannot block/, "该卡当前状态不允许执行驳回阻塞操作"],
+        [/cannot unblock/, "该卡当前未处于阻塞状态，无法批准"],
+      ];
+      let msg = r.err;
+      for (const [re, friendly] of FRIENDLY) if (re.test(r.err)) { msg = friendly; break; }
+      const e = new Error(`写回失败（${args[0]}）: ${msg}`); e.status = 502; throw e;
+    }
+  }
+  return { action, task_id: taskId, steps };
+}
 
 // 启动时把预设表同步成 presets.json（供 opc_demo_dispatch.py 读取，单一事实源；服务端仍是硬编码白名单）
 try {
@@ -1300,7 +1452,8 @@ const server = http.createServer(async (req, res) => {
     // 官网独立反馈(26): /api/feedback 同走白名单(blog 悬浮反馈表单跨源提交)。
     // 引流聚合(0820-k t_de577480): /api/acquisition 同走白名单(governance 引流区块跨源读取)。
     // 博客评论+阅读量(0818): /api/blog/ 同走白名单(www Pages 站 blog 评论区跨源读写)。
-    if (req.method === "OPTIONS" && (u.pathname.startsWith("/api/opc/") || u.pathname.startsWith("/api/blog/") || u.pathname === "/api/contact" || u.pathname === "/api/visits" || u.pathname === "/api/token-stats" || u.pathname === "/api/assistant" || u.pathname === "/api/feedback" || u.pathname === "/api/acquisition")) {
+    // 人在 loop 工作台(0821-轨A-8): /api/kanban/ 同走白名单(www Pages 站 workbench.html 跨源读写)。
+    if (req.method === "OPTIONS" && (u.pathname.startsWith("/api/opc/") || u.pathname.startsWith("/api/blog/") || u.pathname.startsWith("/api/kanban/") || u.pathname === "/api/contact" || u.pathname === "/api/visits" || u.pathname === "/api/token-stats" || u.pathname === "/api/assistant" || u.pathname === "/api/feedback" || u.pathname === "/api/acquisition")) {
       const cors = opcCorsHeaders(req);
       if (cors["Access-Control-Allow-Origin"] == null) {
         send(res, 403, { ok: false, error: "forbidden" }, cors);
@@ -1308,7 +1461,7 @@ const server = http.createServer(async (req, res) => {
         send(res, 200, { ok: true }, {
           ...cors,
           "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
-          "Access-Control-Allow-Headers": "Content-Type",
+          "Access-Control-Allow-Headers": "Content-Type, X-Workbench-Token",
           "Access-Control-Max-Age": "600",
         });
       }
@@ -1318,7 +1471,7 @@ const server = http.createServer(async (req, res) => {
       stats.reqs++;
       const ip = clientIp(req);
       trackActiveIp(ip);
-      const cors = u.pathname.startsWith("/api/opc/") || u.pathname.startsWith("/api/blog/") || u.pathname === "/api/contact" || u.pathname === "/api/visits" || u.pathname === "/api/token-stats" || u.pathname === "/api/assistant" || u.pathname === "/api/feedback" || u.pathname === "/api/acquisition"
+      const cors = u.pathname.startsWith("/api/opc/") || u.pathname.startsWith("/api/blog/") || u.pathname.startsWith("/api/kanban/") || u.pathname === "/api/contact" || u.pathname === "/api/visits" || u.pathname === "/api/token-stats" || u.pathname === "/api/assistant" || u.pathname === "/api/feedback" || u.pathname === "/api/acquisition"
         ? opcCorsHeaders(req)
         : corsHeadersFor(req);
       // 按 IP 限流(先于缓存命中判断, 防唯一 key 旋转造成的上游请求放大)
