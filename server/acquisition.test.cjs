@@ -5,7 +5,7 @@ const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("fs");
 
-const KNOCK_DB = "/home/gavin/hermes_space/marketingdashboard/server/data/knock.db";
+const KNOCK_DB = "/home/gavin/hermes_space/mylauncher/server/data/knock.db"; // P0-3a: 随 knock 迁 mylauncher 仓
 const V2EX_TRACKING = "/home/gavin/.hermes/mrd-promo/v2ex_tracking.json";
 const STATUS_JSON = "/home/gavin/hermes_space/company-site/opc/status.json";
 

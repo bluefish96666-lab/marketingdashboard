@@ -19,7 +19,8 @@ const { DatabaseSync } = require("node:sqlite");
 module.exports = function createAcquisition(ctx) {
   const { fetchText, fs, bjToday } = ctx;
 
-  const KNOCK_DB = ctx.KNOCK_DB || "/home/gavin/hermes_space/marketingdashboard/server/data/knock.db";
+  // P0-3a(2026-08-22): knock 已迁 mylauncher 仓 server/(进程 cwd 同步), 库文件随迁
+  const KNOCK_DB = ctx.KNOCK_DB || "/home/gavin/hermes_space/mylauncher/server/data/knock.db";
   const V2EX_TRACKING = ctx.V2EX_TRACKING || "/home/gavin/.hermes/mrd-promo/v2ex_tracking.json";
   const STATUS_JSON = ctx.STATUS_JSON || "/home/gavin/hermes_space/company-site/opc/status.json";
   const SHORTLINK_PATHS = ["/go/opc", "/go/blog", "/go/github", "/go/rank"];
