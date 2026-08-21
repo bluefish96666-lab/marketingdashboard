@@ -47,7 +47,8 @@ function validateFeedback(body) {
 
 /**
  * 动作 → hermes kanban CLI 命令序列（双留痕: comment + event; 全部走 CLI, 不裸写 SQLite）。
- * task = { status, assignee, block_kind } —— 来自只读查询, 用于 reject 的"非 blocked 需回堵"分支。
+ * task = { status, assignee, block_kind, block_recurrences } —— 来自只读查询,
+ * 用于 reject 的"非 blocked 需回堵"分支（block_recurrences 决定是否回堵, 见 reject 分支注释）。
  * 返回二维数组, 每项为 hermes kanban 子命令 args（不含 kanban --board 前缀）。
  */
 function buildPlan(action, task, text) {
@@ -62,9 +63,19 @@ function buildPlan(action, task, text) {
     plan.push(commentArgs(text || "Gavin 已标记完成。"));
     plan.push(["complete", task.id]);
   } else if (action === "reject") {
-    // 驳回: 评论(说明理由) + 保持 blocked（非 blocked 状态则回堵 needs_input, 防驳回后卡继续跑）
-    plan.push(commentArgs(text));
-    if (task.status !== "blocked") {
+    // 驳回 = 「保持原状态 + 评论」: 评论(说明理由) + 保持 blocked。
+    // 非 blocked 时回堵 needs_input 防驳回后卡继续跑——但若该卡已有 needs_input 历史
+    // (block_recurrences>=1, 如反复 approve→reject), 回堵会触发内核 block_loop_detected
+    // → 卡进 triage → auto-decomposer 改写真实卡标题/正文(数据损坏)。防误伤(0821-b t_1cc8fecd):
+    // 此时不再回堵, 仅评论并说明, 宁可卡保持原状态。
+    const recurrences = task.block_recurrences ?? 0;
+    const reblockable = task.status !== "blocked" && recurrences < 1;
+    let commentBody = text;
+    if (task.status !== "blocked" && recurrences >= 1) {
+      commentBody = `${text}\n\n（已驳回，卡保持原状态；如需阻止执行请联系庄子）`;
+    }
+    plan.push(commentArgs(commentBody));
+    if (reblockable) {
       plan.push(["block", task.id, "--kind", "needs_input"]);
     }
   } else {

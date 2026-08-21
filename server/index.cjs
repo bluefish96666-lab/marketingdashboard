@@ -1016,7 +1016,7 @@ async function handleKanbanFeedback(body, req) {
   const db = openKanbanDb();
   if (!db) { const e = new Error("kanban 数据未就绪"); e.status = 503; throw e; }
   let task;
-  try { task = db.prepare("SELECT id, assignee, status, block_kind FROM tasks WHERE id = ?").get(taskId); }
+  try { task = db.prepare("SELECT id, assignee, status, block_kind, block_recurrences FROM tasks WHERE id = ?").get(taskId); }
   catch (e) { console.error("[workbench] task lookup error:", e?.message || e); }
   finally { try { db.close(); } catch {} }
   if (!task) { const e = new Error("任务卡不存在"); e.status = 404; throw e; }

@@ -71,13 +71,27 @@ test("buildPlan: reject 且已 blocked = 仅评论（保持 blocked）", () => {
   const p = buildPlan("reject", TASK, "方案不行，重议");
   assert.deepStrictEqual(p, [["comment", "t_abc123", "方案不行，重议", "--author", "gavin"]]);
 });
-test("buildPlan: reject 且非 blocked = 评论 + 回堵 needs_input", () => {
-  const running = { id: "t_abc123", status: "running", assignee: "gavin", block_kind: null };
+test("buildPlan: reject 且非 blocked + recurrences=0 = 评论 + 回堵 needs_input（原行为）", () => {
+  const running = { id: "t_abc123", status: "running", assignee: "gavin", block_kind: null, block_recurrences: 0 };
   const p = buildPlan("reject", running, "先停一下");
   assert.deepStrictEqual(p, [
     ["comment", "t_abc123", "先停一下", "--author", "gavin"],
     ["block", "t_abc123", "--kind", "needs_input"],
   ]);
+});
+test("buildPlan: reject 且非 blocked + recurrences>=1 = 仅评论不回堵（防循环检测误伤, 0821-b）", () => {
+  // 已驳回过的卡再回堵会触发内核 block_loop_detected → triage → auto-decomposer 改写真实卡（数据损坏）
+  const running = { id: "t_abc123", status: "running", assignee: "gavin", block_kind: null, block_recurrences: 1 };
+  const p = buildPlan("reject", running, "方案不行，重议");
+  assert.strictEqual(p.length, 1);
+  assert.strictEqual(p[0][0], "comment");
+  assert.ok(p[0][2].includes("已驳回，卡保持原状态；如需阻止执行请联系庄子"));
+  assert.ok(!p.some((s) => s[0] === "block"));
+});
+test("buildPlan: reject 且 blocked + recurrences>=1 = 仅评论（保持 blocked, 不回堵不追加说明）", () => {
+  const blocked = { id: "t_abc123", status: "blocked", assignee: "gavin", block_kind: "needs_input", block_recurrences: 1 };
+  const p = buildPlan("reject", blocked, "方案不行");
+  assert.deepStrictEqual(p, [["comment", "t_abc123", "方案不行", "--author", "gavin"]]);
 });
 test("buildPlan: comment = 仅评论", () => {
   const p = buildPlan("comment", TASK, "补充一点");
