@@ -687,9 +687,16 @@ function corsHeadersFor(req) {
   return { "Access-Control-Allow-Origin": origin && isSameOrigin(req) ? origin : null };
 }
 
-// OPC 透明办公室/demo API 跨源白名单(12c): 仅 www.hermes.cc.cd(CF Pages 静态站, 无后端)允许跨源
-// 读写 demo 链路; 其余跨源 origin 一律不下发 ACAO(维持"默认不授权任何跨源浏览器读取"基线)
-const OPC_CORS_ORIGINS = new Set(["https://www.hermes.cc.cd"]);
+// OPC 透明办公室/demo API 跨源白名单(12c): 默认仅 www.hermes.cc.cd(CF Pages 静态站, 无后端)允许跨源
+// 读写 demo 链路; 其余跨源 origin 一律不下发 ACAO(维持"默认不授权任何跨源浏览器读取"基线)。
+// 0821-wb-cors: OPC_CORS_ORIGINS 环境变量参数化(逗号分隔, 部署时经 server/.env 或进程 env 追加任意
+// origin, 如 OPC_CORS_ORIGINS="https://www.hermes.cc.cd,http://opc-deploy.example.com"; 不设则保持默认)
+const OPC_CORS_ORIGINS = new Set(
+  (process.env.OPC_CORS_ORIGINS || "https://www.hermes.cc.cd")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean)
+);
 
 // /api/opc/* 专用: 同源(或环回开发)反射 Origin; 跨源仅白名单放行; 其余不下发
 function opcCorsHeaders(req) {
