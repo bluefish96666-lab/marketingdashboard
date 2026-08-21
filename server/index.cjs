@@ -942,7 +942,7 @@ function kanbanTaskView(db, row) {
   return { ...row, comments, events };
 }
 
-// 公开读: assignee 过滤 + 自动并入 blocked+needs_input(待 Gavin 处理的跨人卡); 排序 blocked 优先
+// 公开读: assignee 过滤（与气泡 human_waiting 同口径 = 仅 Gavin 自己的卡）; 排序 blocked 优先
 function handleKanbanTasks(q, req) {
   const db = openKanbanDb();
   if (!db) { const e = new Error("kanban 数据未就绪"); e.status = 503; throw e; }
@@ -953,7 +953,6 @@ function handleKanbanTasks(q, req) {
     if (assignee) {
       for (const r of db.prepare("SELECT * FROM tasks WHERE assignee = ? AND status != 'archived' ORDER BY created_at DESC LIMIT 200").all(assignee)) rows.push(r);
     }
-    for (const r of db.prepare("SELECT * FROM tasks WHERE status = 'blocked' AND block_kind = 'needs_input' ORDER BY created_at DESC").all()) rows.push(r);
     const tasks = [];
     for (const r of rows) {
       if (seen.has(r.id)) continue;
