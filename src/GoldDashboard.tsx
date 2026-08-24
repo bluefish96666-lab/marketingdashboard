@@ -9,6 +9,7 @@ import { usePolling } from "@/hooks/usePolling";
 import { useElementSize } from "@/hooks/useElementSize";
 import { useFullscreen } from "@/hooks/useFullscreen";
 import { api } from "@/lib/api";
+import { pageLinks } from "@/lib/nav";
 import { TNUM, clsChg, bgChg, fmtPct } from "@/lib/format";
 import { POLL } from "@/lib/intervals";
 import {
@@ -664,12 +665,7 @@ export default function GoldDashboard() {
         linkTo="/"
         linkLabel="市场驾驶舱"
         linkBack
-        links={[
-          { to: "/", label: "市场驾驶舱" },
-          { to: "/goods", label: "商品价格" },
-          { to: "/ai", label: "AI 观察" },
-          { to: "/fin", label: "财报窗口" },
-        ]}
+        links={pageLinks("/gold")}
         isFullscreen={isFullscreen}
         onToggleFullscreen={toggle}
       />

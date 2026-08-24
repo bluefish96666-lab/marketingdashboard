@@ -12,6 +12,7 @@ import { FinCompanyPanel } from "@/components/dash/fin/FinCompanyPanel";
 import { FinTrendPanel } from "@/components/dash/fin/FinTrendPanel";
 import { FinPeerPanel } from "@/components/dash/fin/FinPeerPanel";
 import { useFullscreen } from "@/hooks/useFullscreen";
+import { pageLinks } from "@/lib/nav";
 
 const PANEL_ROWS: PanelRowDef[] = [
   {
@@ -85,12 +86,7 @@ export default function FinDashboard() {
         linkTo="/"
         linkLabel="市场驾驶舱"
         linkBack
-        links={[
-          { to: "/", label: "市场驾驶舱" },
-          { to: "/ai", label: "AI 观察" },
-          { to: "/goods", label: "商品价格" },
-          { to: "/gold", label: "黄金观察" },
-        ]}
+        links={pageLinks("/fin")}
         isFullscreen={isFullscreen}
         onToggleFullscreen={toggle}
       />

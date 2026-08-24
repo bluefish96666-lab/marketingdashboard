@@ -9,6 +9,7 @@ import { BasisPanel } from "@/components/dash/BasisPanel";
 import type { PanelZoomProps } from "@/components/dash/Panel";
 import { useFullscreen } from "@/hooks/useFullscreen";
 import { GOODS_GROUPS, type GoodsGroupId } from "@/config/goods";
+import { pageLinks } from "@/lib/nav";
 
 /** 为每个品种组生成稳定引用的面板组件(避免每次渲染重建导致面板状态重置) */
 function makeTrendPanel(group: GoodsGroupId) {
@@ -111,12 +112,7 @@ export default function GoodsDashboard() {
         linkTo="/"
         linkLabel="市场驾驶舱"
         linkBack
-        links={[
-          { to: "/", label: "市场驾驶舱" },
-          { to: "/ai", label: "AI 观察" },
-          { to: "/gold", label: "黄金观察" },
-          { to: "/fin", label: "财报窗口" },
-        ]}
+        links={pageLinks("/goods")}
         isFullscreen={isFullscreen}
         onToggleFullscreen={toggle}
       />

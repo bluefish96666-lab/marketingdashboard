@@ -51,12 +51,22 @@ module.exports = function createSina(ctx) {
     }
   }
 
+  /* 新浪建议码 → 腾讯报价代码(与前端 normalizeWatchTicker 对齐, 不引入新数据商) */
+  function sinaFullToQuoteCode(full) {
+    const s = String(full || "").trim();
+    if (/^(sh|sz|bj)\d{6}$/.test(s)) return s;
+    if (/^hk\d{1,5}$/i.test(s)) return `hk${s.slice(2).padStart(5, "0")}`;
+    if (/^us[a-z0-9.]{1,10}$/i.test(s)) return `us${s.slice(2).toUpperCase()}`;
+    if (/^gb_[a-z0-9.]{1,10}$/i.test(s)) return `us${s.slice(3).toUpperCase()}`;
+    return "";
+  }
+
   /* ---------------- 股票搜索(名称/拼音首字母→代码) ---------------- */
   async function handleStockSearch(query) {
     if (!query || query.length < 1) return [];
     const results = [];
 
-    // 1. 新浪搜索(覆盖沪深北): fetchTextAny 双通道(带 UA, node fetch 被拦时 curl 兜底, 计入 stats.upstream)
+    // 1. 新浪搜索(沪深北 + 港股/美股): fetchTextAny 双通道(带 UA, node fetch 被拦时 curl 兜底)
     const sinaUrl = `https://suggest3.sinajs.cn/suggest/type=&key=${encodeURIComponent(query)}`;
     try {
       const text = await fetchTextAny(sinaUrl, { gbk: true });
@@ -64,8 +74,10 @@ module.exports = function createSina(ctx) {
       if (m) {
         for (const part of m[1].split(";")) {
           const f = part.split(",");
-          if (f.length >= 4 && /^(sh|sz|bj)\d{6}$/.test(f[3])) {
-            results.push({ code: f[3], name: f[0], pinyin: f[4] || "" });
+          if (f.length < 4) continue;
+          const code = sinaFullToQuoteCode(f[3]);
+          if (code && !results.some((r) => r.code === code)) {
+            results.push({ code, name: f[0], pinyin: f[4] || "" });
           }
         }
       }
@@ -92,5 +104,5 @@ module.exports = function createSina(ctx) {
     return results.slice(0, 10);
   }
 
-  return { handleNews, handleStockSearch };
+  return { handleNews, handleStockSearch, sinaFullToQuoteCode };
 };
