@@ -1,4 +1,5 @@
 import { createContext, createElement, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
+import { applyRemoveRecent } from "./company-select";
 
 export interface FinCompany {
   code: string; // sh600519 形式
@@ -9,6 +10,8 @@ interface FinCtx {
   company: FinCompany;
   recent: FinCompany[];
   select: (code: string, name: string) => void;
+  /** 移除最近查看 chip; 若删的是当前公司则切到下一条 */
+  removeRecent: (code: string) => void;
   /** 宏观面板报告期(当期=披露中, 上一期=全市场完整数据) */
   period: string;
   setPeriod: (p: string) => void;
@@ -51,6 +54,7 @@ const FinContext = createContext<FinCtx>({
   company: DEFAULT_COMPANY,
   recent: [],
   select: () => {},
+  removeRecent: () => {},
   period: CUR,
   setPeriod: () => {},
   periods: PERIOD_OPTIONS,
@@ -74,18 +78,29 @@ export function FinProvider({ children }: { children: ReactNode }) {
   const [recent, setRecent] = useState<FinCompany[]>(loadRecent);
   const [period, setPeriod] = useState(CUR);
 
+  const persistRecent = (next: FinCompany[]) => {
+    try { localStorage.setItem(LS_KEY, JSON.stringify(next)); } catch { /* 隐私模式/配额满时忽略 */ }
+  };
+
   const select = useCallback((code: string, name: string) => {
     setCompany({ code, name });
     setRecent((rs) => {
       const next = [{ code, name }, ...rs.filter((r) => r.code !== code)].slice(0, MAX_RECENT);
-      try { localStorage.setItem(LS_KEY, JSON.stringify(next)); } catch { /* 隐私模式/配额满时忽略 */ }
+      persistRecent(next);
       return next;
     });
   }, []);
 
+  const removeRecent = useCallback((code: string) => {
+    const result = applyRemoveRecent(recent, company, code);
+    setRecent(result.recent);
+    setCompany(result.company);
+    persistRecent(result.recent);
+  }, [recent, company]);
+
   const value = useMemo(
-    () => ({ company, recent, select, period, setPeriod, periods: PERIOD_OPTIONS }),
-    [company, recent, select, period]
+    () => ({ company, recent, select, removeRecent, period, setPeriod, periods: PERIOD_OPTIONS }),
+    [company, recent, select, removeRecent, period]
   );
   // .ts 文件不可用 JSX, 用 createElement 挂载 Provider
   return createElement(FinContext.Provider, { value }, children);
