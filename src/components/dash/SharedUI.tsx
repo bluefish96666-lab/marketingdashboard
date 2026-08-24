@@ -13,7 +13,7 @@ export function TabBar<T extends string | number>({
   tabs,
   active,
   onChange,
-  accent = "cyan",
+  accent = "amber",
   size = "sm",
 }: {
   tabs: (TabDef<T> | { key: T; label: string })[];

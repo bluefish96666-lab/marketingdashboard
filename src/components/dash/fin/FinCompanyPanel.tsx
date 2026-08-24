@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { FileText } from "lucide-react";
+import { ACCENT } from "@/config/branding";
 import { Panel, type PanelZoomProps } from "../Panel";
 import { useFinMain } from "./useFinData";
 import { clsChg } from "@/lib/format";
@@ -43,7 +44,7 @@ export function FinCompanyPanel({ className = "", ...zoomProps }: { className?: 
       {...zoomProps}
       title="公司财报"
       icon={<FileText size={14} />}
-      accent="#22d3ee"
+      accent={ACCENT.primary}
       right={<span className="max-w-[110px] truncate text-[10px] text-cyan-300">{displayName}</span>}
     >
       <div className="flex h-full min-h-0 flex-col gap-1 p-1.5">

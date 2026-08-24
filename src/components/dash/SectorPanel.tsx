@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Layers } from "lucide-react";
+import { ACCENT } from "@/config/branding";
 import { Panel, type PanelZoomProps } from "./Panel";
 import { QuoteRow } from "./QuoteRow";
 import { usePolling } from "@/hooks/usePolling";
@@ -111,7 +112,7 @@ export function SectorPanel({ className = "", ...zoomProps }: { className?: stri
       {...zoomProps}
       title="市场板块实时热点"
       icon={<Layers size={14} />}
-      accent="#22d3ee"
+      accent={ACCENT.primary}
       right={
         <div className="flex items-center gap-1 text-[11px]">
           <input

@@ -108,7 +108,7 @@ export default function GoodsDashboard() {
       <DashboardHeader
         title="商品价格"
         subtitle="COMMODITY PRICES"
-        accent="cyan"
+        accent="gold"
         tagline="期货主力日线趋势 · 现货报价 · 现期基差"
         linkTo="/"
         linkLabel={BRAND.homeNavLabel}

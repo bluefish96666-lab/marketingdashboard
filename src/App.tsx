@@ -113,7 +113,7 @@ function Dashboard() {
       <DashboardHeader
         title={BRAND.title}
         subtitle={BRAND.subtitle}
-        accent="cyan"
+        accent="gold"
         tagline={BRAND.tagline}
         linkTo="/ai"
         linkLabel="AI 观察"

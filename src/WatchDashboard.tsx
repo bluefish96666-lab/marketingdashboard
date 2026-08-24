@@ -123,7 +123,7 @@ export default function WatchDashboard() {
       <DashboardHeader
         title="自选股"
         subtitle="STOCK WATCH"
-        accent="cyan"
+        accent="gold"
         tagline="搜索添加 · 实时报价 · 沪深港美 · 本地保存"
         linkTo="/"
         linkLabel={BRAND.homeNavLabel}
@@ -221,7 +221,7 @@ export default function WatchDashboard() {
               ]}
               active={filter}
               onChange={setFilter}
-              accent="cyan"
+              accent="amber"
             />
             <span className="text-[10px] text-slate-500">失败报价显示「暂无报价」，不编造价格</span>
           </div>

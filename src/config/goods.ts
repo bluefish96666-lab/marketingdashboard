@@ -20,7 +20,7 @@ export interface GoodsDef {
 
 export const GOODS_GROUPS: GoodsGroup[] = [
   { id: "pm", name: "贵金属 · 国际金", accent: "#f5c542" },
-  { id: "bm", name: "基本金属", accent: "#38bdf8" },
+  { id: "bm", name: "基本金属", accent: "#f5c542" },
   { id: "fer", name: "黑色系", accent: "#94a3b8" },
   { id: "chem", name: "能源化工", accent: "#fb923c" },
   { id: "agri", name: "农产品", accent: "#4ade80" },

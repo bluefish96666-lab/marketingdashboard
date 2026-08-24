@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { ZoomIn, ZoomOut } from "lucide-react";
 import { isTv } from "@/lib/tv";
+import { ACCENT } from "@/config/branding";
 import { ZoomCtx } from "./ZoomCtx";
 
 export interface PanelZoomProps {
@@ -27,7 +28,7 @@ export function Panel({
   children,
   className = "",
   bodyClassName = "",
-  accent = "#38bdf8",
+  accent = ACCENT.primary,
   panelId,
   isZoomed = false,
   onToggleZoom,
@@ -69,7 +70,7 @@ export function Panel({
         ref={measureRef}
         style={overlayStyle}
         className={`flex min-h-0 flex-col rounded-md border bg-[#0c1320]/90 shadow-[0_0_24px_rgba(0,0,0,0.35)] backdrop-blur transition-all duration-300 ${
-          isZoomed ? "border-cyan-500/50 shadow-[0_0_32px_rgba(34,211,238,0.18)]" : "border-slate-700/40"
+          isZoomed ? "border-[#f5c542]/50 shadow-[0_0_32px_rgba(245,197,66,0.18)]" : "border-slate-700/40"
         } ${tvOverlay ? "bg-[#0c1320]" : ""} ${className}`}
       {...(isTv && panelId && onToggleZoom
         ? {
@@ -135,8 +136,8 @@ export function Panel({
                 title={isZoomed ? "缩小" : "放大"}
                 className={`flex h-[22px] w-[22px] items-center justify-center rounded border transition-colors ${
                   isZoomed
-                    ? "border-cyan-500/60 bg-cyan-500/10 text-cyan-300"
-                    : "border-slate-700/60 bg-slate-800/40 text-slate-400 hover:border-cyan-500/60 hover:text-cyan-300"
+                    ? "border-[#f5c542]/60 bg-[#f5c542]/10 text-[#fde68a]"
+                    : "border-slate-700/60 bg-slate-800/40 text-slate-400 hover:border-[#f5c542]/60 hover:text-[#fde68a]"
                 }`}
               >
                 {isZoomed ? <ZoomOut size={12} /> : <ZoomIn size={12} />}
