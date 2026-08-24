@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { FileText } from "lucide-react";
 import { ACCENT } from "@/config/branding";
 import { Panel, type PanelZoomProps } from "../Panel";
@@ -6,19 +6,21 @@ import { useFinMain } from "./useFinData";
 import { clsChg } from "@/lib/format";
 import { useFin } from "./FinContext";
 import { AsyncContent } from "../SharedUI";
-import { TNUM, fmtYi, prefixCode, quarterLabel } from "./utils";
+import { TNUM, fmtYi, prefixCode, resolveFinCompanyQuery, quarterLabel } from "./utils";
 import { useStockSearch } from "@/hooks/useStockSearch";
 
 /** 公司财报: 搜索框 + 最近查看 chips + 最新报告期指标卡 2×3 */
 export function FinCompanyPanel({ className = "", ...zoomProps }: { className?: string } & PanelZoomProps) {
   const { company, recent, select } = useFin();
   const { data, error, loading, retry } = useFinMain(company.code);
+  const [invalid, setInvalid] = useState(false);
 
   const boxRef = useRef<HTMLDivElement>(null);
   const {
     input, triggerSearch,
     suggestions, showSuggest, setShowSuggest,
-    onKeyDown,
+    highlightIdx,
+    clear, onKeyDown,
   } = useStockSearch();
 
   // 点击外部关闭候选
@@ -33,6 +35,37 @@ export function FinCompanyPanel({ className = "", ...zoomProps }: { className?: 
   const pickSuggestion = (s: { code: string; name: string }) => {
     select(prefixCode(s.code), s.name);
     setShowSuggest(false);
+    setInvalid(false);
+    clear();
+  };
+
+  const submitQuery = () => {
+    if (showSuggest && highlightIdx >= 0 && highlightIdx < suggestions.length) {
+      pickSuggestion(suggestions[highlightIdx]);
+      return true;
+    }
+    if (suggestions.length > 0) {
+      pickSuggestion(suggestions[0]);
+      return true;
+    }
+    const resolved = resolveFinCompanyQuery(input);
+    if (resolved) {
+      select(resolved.code, resolved.name);
+      setInvalid(false);
+      clear();
+      return true;
+    }
+    setInvalid(true);
+    return false;
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+      e.preventDefault();
+      submitQuery();
+      return;
+    }
+    onKeyDown(e, pickSuggestion);
   };
 
   const r0 = data?.reports?.[0];
@@ -48,23 +81,34 @@ export function FinCompanyPanel({ className = "", ...zoomProps }: { className?: 
       right={<span className="max-w-[110px] truncate text-[10px] text-cyan-300">{displayName}</span>}
     >
       <div className="flex h-full min-h-0 flex-col gap-1 p-1.5">
-        {/* 搜索框 */}
-        <div ref={boxRef} className="relative shrink-0">
+        {/* 搜索框: 名称走联想; 6 位代码 / sh600519 回车或点「查」直接载入 */}
+        <div ref={boxRef} className="relative shrink-0 flex gap-1">
           <input
             value={input}
-            onChange={(e) => triggerSearch(e.target.value)}
-            onKeyDown={(e) => onKeyDown(e, pickSuggestion)}
+            onChange={(e) => { setInvalid(false); triggerSearch(e.target.value); }}
+            onKeyDown={handleKeyDown}
             onFocus={() => suggestions.length > 0 && setShowSuggest(true)}
-            placeholder="输入代码/名称"
-            className="h-[24px] w-full rounded bg-slate-800/60 px-2 text-[11px] text-slate-200 placeholder:text-[9px] placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-cyan-500/50"
+            placeholder="代码/名称，如 600519 或 茅台"
+            className={`h-[24px] min-w-0 flex-1 rounded bg-slate-800/60 px-2 text-[11px] text-slate-200 placeholder:text-[9px] placeholder:text-slate-500 focus:outline-none focus:ring-1 ${
+              invalid ? "focus:ring-rose-500/50 ring-1 ring-rose-500/40" : "focus:ring-cyan-500/50"
+            }`}
           />
+          <button
+            type="button"
+            onClick={submitQuery}
+            className="shrink-0 rounded bg-amber-500/20 px-2 text-[10px] text-amber-200 hover:bg-amber-500/30"
+          >
+            查
+          </button>
           {showSuggest && suggestions.length > 0 && (
-            <div className="absolute left-0 right-0 top-[26px] z-20 overflow-hidden rounded border border-slate-700/60 bg-[#0c1320] shadow-lg">
-              {suggestions.map((s) => (
+            <div className="absolute left-0 right-8 top-[26px] z-20 overflow-hidden rounded border border-slate-700/60 bg-[#0c1320] shadow-lg">
+              {suggestions.map((s, i) => (
                 <button
                   key={s.code}
-                  onClick={() => pickSuggestion(s)}
-                  className="flex h-[22px] w-full items-center gap-2 px-2 text-left hover:bg-slate-800/50"
+                  onMouseDown={(e) => { e.preventDefault(); pickSuggestion(s); }}
+                  className={`flex h-[22px] w-full items-center gap-2 px-2 text-left hover:bg-slate-800/50 ${
+                    i === highlightIdx ? "bg-amber-500/15 text-amber-100" : ""
+                  }`}
                 >
                   <span className="w-[62px] shrink-0 text-[9px] text-slate-500" style={TNUM}>
                     {s.code}
@@ -75,6 +119,9 @@ export function FinCompanyPanel({ className = "", ...zoomProps }: { className?: 
             </div>
           )}
         </div>
+        {invalid && (
+          <p className="shrink-0 text-[9px] text-rose-400">未找到该公司。请输入 A 股 6 位代码(如 600519)或名称搜索。</p>
+        )}
         {/* 最近查看 chips: 单行 18px */}
         {recent.length > 0 && (
           <div className="flex h-[18px] shrink-0 flex-nowrap items-center gap-1 overflow-hidden">
