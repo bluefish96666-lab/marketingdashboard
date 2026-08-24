@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { FileText } from "lucide-react";
 import { ACCENT } from "@/config/branding";
 import { Panel, type PanelZoomProps } from "../Panel";
@@ -8,17 +8,20 @@ import { useFin } from "./FinContext";
 import { AsyncContent } from "../SharedUI";
 import { TNUM, fmtYi, prefixCode, quarterLabel } from "./utils";
 import { useStockSearch } from "@/hooks/useStockSearch";
+import { resolveFinLookup } from "./company-select";
 
 /** 公司财报: 搜索框 + 最近查看 chips + 最新报告期指标卡 2×3 */
 export function FinCompanyPanel({ className = "", ...zoomProps }: { className?: string } & PanelZoomProps) {
-  const { company, recent, select } = useFin();
+  const { company, recent, select, removeRecent } = useFin();
   const { data, error, loading, retry } = useFinMain(company.code);
+  const [invalid, setInvalid] = useState(false);
 
   const boxRef = useRef<HTMLDivElement>(null);
   const {
     input, triggerSearch,
     suggestions, showSuggest, setShowSuggest,
-    onKeyDown,
+    highlightIdx, setHighlightIdx,
+    clear, onKeyDown,
   } = useStockSearch();
 
   // 点击外部关闭候选
@@ -30,9 +33,20 @@ export function FinCompanyPanel({ className = "", ...zoomProps }: { className?: 
     return () => document.removeEventListener("mousedown", handler);
   }, [setShowSuggest]);
 
+  const applyHit = (hit: { code: string; name: string } | null) => {
+    if (!hit) { setInvalid(true); return; }
+    select(hit.code, hit.name);
+    setInvalid(false);
+    clear();
+  };
+
   const pickSuggestion = (s: { code: string; name: string }) => {
-    select(prefixCode(s.code), s.name);
-    setShowSuggest(false);
+    applyHit({ code: prefixCode(s.code), name: s.name });
+  };
+
+  /** 与 /watch「添加」相同: Enter 或点主按钮提交; 名称仍走下拉 */
+  const lookup = () => {
+    applyHit(resolveFinLookup(input, suggestions, highlightIdx));
   };
 
   const r0 = data?.reports?.[0];
@@ -48,23 +62,45 @@ export function FinCompanyPanel({ className = "", ...zoomProps }: { className?: 
       right={<span className="max-w-[110px] truncate text-[10px] text-cyan-300">{displayName}</span>}
     >
       <div className="flex h-full min-h-0 flex-col gap-1 p-1.5">
-        {/* 搜索框 */}
-        <div ref={boxRef} className="relative shrink-0">
+        {/* 搜索框: Enter 或「查」, 与 /watch「添加」同一套主操作 */}
+        <div ref={boxRef} className="relative flex shrink-0 gap-1">
           <input
+            data-testid="fin-company-search"
             value={input}
-            onChange={(e) => triggerSearch(e.target.value)}
-            onKeyDown={(e) => onKeyDown(e, pickSuggestion)}
+            onChange={(e) => { setInvalid(false); triggerSearch(e.target.value); }}
+            onKeyDown={(e) => {
+              if (e.nativeEvent.isComposing) return;
+              if (e.key === "Enter" && !(showSuggest && (highlightIdx >= 0 || suggestions.length > 0))) {
+                e.preventDefault();
+                lookup();
+                return;
+              }
+              onKeyDown(e, pickSuggestion);
+            }}
             onFocus={() => suggestions.length > 0 && setShowSuggest(true)}
-            placeholder="输入代码/名称"
-            className="h-[24px] w-full rounded bg-slate-800/60 px-2 text-[11px] text-slate-200 placeholder:text-[9px] placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-cyan-500/50"
+            placeholder="输入代码/名称, 如 600519 / 茅台"
+            className={`h-[24px] min-w-0 flex-1 rounded bg-slate-800/60 px-2 text-[11px] text-slate-200 placeholder:text-[9px] placeholder:text-slate-500 focus:outline-none ${
+              invalid ? "ring-1 ring-rose-500/60" : "focus:ring-1 focus:ring-cyan-500/50"
+            }`}
           />
+          <button
+            type="button"
+            data-testid="fin-company-lookup"
+            onClick={lookup}
+            className="h-[24px] shrink-0 rounded bg-cyan-500/20 px-2 text-[11px] text-cyan-200 hover:bg-cyan-500/30"
+          >
+            查
+          </button>
           {showSuggest && suggestions.length > 0 && (
             <div className="absolute left-0 right-0 top-[26px] z-20 overflow-hidden rounded border border-slate-700/60 bg-[#0c1320] shadow-lg">
-              {suggestions.map((s) => (
+              {suggestions.map((s, i) => (
                 <button
                   key={s.code}
                   onClick={() => pickSuggestion(s)}
-                  className="flex h-[22px] w-full items-center gap-2 px-2 text-left hover:bg-slate-800/50"
+                  onMouseEnter={() => setHighlightIdx(i)}
+                  className={`flex h-[22px] w-full items-center gap-2 px-2 text-left ${
+                    i === highlightIdx ? "bg-cyan-500/20" : "hover:bg-slate-800/50"
+                  }`}
                 >
                   <span className="w-[62px] shrink-0 text-[9px] text-slate-500" style={TNUM}>
                     {s.code}
@@ -75,21 +111,39 @@ export function FinCompanyPanel({ className = "", ...zoomProps }: { className?: 
             </div>
           )}
         </div>
-        {/* 最近查看 chips: 单行 18px */}
+        {invalid && (
+          <p className="shrink-0 text-[10px] text-rose-400">请输入 6 位代码, 或从下拉中选择名称</p>
+        )}
+        {/* 最近查看 chips: 点名称切换, 点 × 移除 */}
         {recent.length > 0 && (
           <div className="flex h-[18px] shrink-0 flex-nowrap items-center gap-1 overflow-hidden">
             {recent.map((c) => (
-              <button
+              <span
                 key={c.code}
-                onClick={() => select(c.code, c.name)}
-                className={`shrink-0 rounded border px-1.5 text-[9px] leading-[14px] ${
+                className={`inline-flex h-[16px] shrink-0 items-center rounded border ${
                   c.code === company.code
                     ? "border-cyan-500/60 bg-cyan-500/10 text-cyan-300"
-                    : "border-slate-700/60 text-slate-400 hover:border-slate-500 hover:text-slate-200"
+                    : "border-slate-700/60 text-slate-400"
                 }`}
               >
-                {c.name}
-              </button>
+                <button
+                  type="button"
+                  data-testid={`fin-chip-${c.code}`}
+                  onClick={() => select(c.code, c.name)}
+                  className="px-1.5 text-[9px] leading-[14px] hover:text-slate-200"
+                >
+                  {c.name}
+                </button>
+                <button
+                  type="button"
+                  data-testid={`fin-chip-remove-${c.code}`}
+                  aria-label={`移除 ${c.name}`}
+                  onClick={(e) => { e.stopPropagation(); removeRecent(c.code); }}
+                  className="pr-1 text-[9px] leading-[14px] text-slate-500 hover:text-rose-300"
+                >
+                  ×
+                </button>
+              </span>
             ))}
           </div>
         )}
