@@ -18,8 +18,8 @@ export function useStockSearch() {
     setInput(val);
     clearTimeout(timerRef.current);
     const t = val.trim();
-    // 纯数字/代码格式不搜索
-    if (/^[\d]{3,6}$/.test(t) || /^(sh|sz|bj)\d{6}$/i.test(t)) {
+    // 纯数字/已带市场前缀的代码不搜索(由添加逻辑 normalize)
+    if (/^[\d]{1,6}$/.test(t) || /^(sh|sz|bj|nq)\d{6}$/i.test(t) || /^hk\d{1,5}$/i.test(t) || /^us[a-z0-9.]{1,10}$/i.test(t)) {
       setSuggestions([]);
       setShowSuggest(false);
       return;

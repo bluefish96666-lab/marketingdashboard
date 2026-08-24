@@ -1,27 +1,12 @@
-import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import { Star } from "lucide-react";
 import { Panel, type PanelZoomProps } from "./Panel";
 import { QuoteRow } from "./QuoteRow";
 import { useQuote } from "@/lib/market";
 import { type StockSearchResult } from "@/lib/api";
 import { fmtTurnover, fmtWan } from "@/lib/format";
-import { normalizeStockCode } from "@/lib/code";
-import { loadJson, saveJson } from "@/lib/storage";
-import {
-  hostingToken, hostingWatchlist, hostingWatchlistSave,
-  loadWatchlistCache, saveWatchlistCache,
-} from "@/lib/hosting";
 import { useStockSearch } from "@/hooks/useStockSearch";
-
-const LS_KEY = "dash:watchlist";
-/** 默认自选: 沪硅产业 / 沪电股份 / 云天化 / 立讯精密 */
-const DEFAULT_LIST = ["sh688126", "sz002463", "sh600096", "sz002475"];
-
-function load(): string[] {
-  const v = loadJson<string[] | null>(LS_KEY, null);
-  if (Array.isArray(v) && v.every((x) => typeof x === "string" && x)) return v;
-  return DEFAULT_LIST;
-}
+import { useWatchlist } from "@/hooks/useWatchlist";
 
 /** 自选股行: 报价取自统一报价中心(名称/价格/额/换), memo 让未变化的行跳过重渲染 */
 const WatchRow = memo(function WatchRow({
@@ -47,10 +32,8 @@ const WatchRow = memo(function WatchRow({
 
 /** 自选股 / 持仓面板 — 开源版 localStorage 持久化; 托管版走服务端(按租户隔离) */
 export function WatchlistPanel({ className = "", ...zoomProps }: { className?: string } & PanelZoomProps) {
-  const [codes, setCodes] = useState<string[]>(load);
+  const { codes, addCode, removeCode } = useWatchlist();
   const [invalid, setInvalid] = useState(false);
-  // 托管模式(登录态)标志 + 服务端首屏加载完成标志(避免初始覆盖用户本地自选)
-  const [hosted, setHosted] = useState<boolean | null>(null);
   const suggestRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const {
@@ -60,54 +43,15 @@ export function WatchlistPanel({ className = "", ...zoomProps }: { className?: s
     clear, onKeyDown,
   } = useStockSearch();
 
-  // 托管模式: 挂载时从服务端拉取自选(按租户隔离, 不跨租户泄漏)
-  // 服务端为准: 有值用服务端值, 空则空列表(不把本地 localStorage 残留写入租户库)
-  useEffect(() => {
-    if (!hostingToken()) { setHosted(false); return; }
-    let alive = true;
-    (async () => {
-      try {
-        const server = await hostingWatchlist();
-        if (!alive) return;
-        setCodes(Array.isArray(server) ? server : []);
-        setHosted(true);
-      } catch {
-        // 服务端暂不可用: 降级本地缓存, 不阻塞看板
-        if (!alive) return;
-        const cached = loadWatchlistCache();
-        if (cached && cached.length > 0) setCodes(cached);
-        setHosted(true);
-      }
-    })();
-    return () => { alive = false; };
-  }, []);
-
-  // 持久化: 托管模式 → 服务端(PUT, 按租户隔离); 开源模式 → localStorage
-  useEffect(() => {
-    if (hosted === null) return;
-    if (hosted) {
-      hostingWatchlistSave(codes).then((saved) => saveWatchlistCache(saved)).catch(() => {});
-    } else {
-      saveJson(LS_KEY, codes);
-    }
-  }, [codes, hosted]);
-
   const add = (code?: string) => {
-    const c = code || normalizeStockCode(input);
-    const valid = /^(sh|sz|bj|nq)\d{6}$/.test(c);
-    if (!valid) { setInvalid(true); return; }
+    if (!addCode(code || input)) { setInvalid(true); return; }
     setInvalid(false);
     clear();
-    setCodes((cs) => (cs.includes(c) ? cs : [...cs, c]));
   };
 
   const pickSuggestion = (s: StockSearchResult) => {
     add(s.code);
   };
-
-  const removeCode = useCallback((code: string) => {
-    setCodes((cs) => cs.filter((c) => c !== code));
-  }, []);
 
   // 点击外部关闭建议
   useEffect(() => {
@@ -139,7 +83,7 @@ export function WatchlistPanel({ className = "", ...zoomProps }: { className?: s
             onChange={(e) => { setInput(e.target.value); setInvalid(false); triggerSearch(e.target.value); }}
             onKeyDown={(e) => onKeyDown(e, pickSuggestion)}
             onFocus={() => suggestions.length > 0 && setShowSuggest(true)}
-            placeholder="代码/名称/拼音, 如 688126 / 茅台 / gzmt"
+            placeholder="代码/名称/拼音, 如 688126 / hk00700 / usAAPL"
             role="combobox"
             aria-autocomplete="list"
             aria-expanded={showSuggest}

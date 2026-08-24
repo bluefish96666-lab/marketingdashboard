@@ -38,6 +38,7 @@ A-shares / HK / US stocks · Commodities · US Treasury yields · Sector heat ·
 - **⛓️ Industry-chain panorama** — Semiconductors, AI compute, EV, robotics, innovative drugs and more; upstream/midstream/downstream tickers linked to live quotes. Stock lists can be edited manually or fetched automatically from iwencai
 - **🤖 AI cockpit** — OpenRouter daily rankings API tracking token-consumption trends of 50+ global LLM providers (7d–1y ranges), stacked-area share charts by provider/country/region, 60+ day long-range history
 - **💹 LLM price-competition watch** — Four panels on a 2×3 grid: TTSI spend-index trend (weighted / closed-source / open-source price lines on a 0-based axis, multi-month full history from a local `ttsi.csv` CC BY 4.0 archive merged with the daily RSS tail), model price table (~400 models, sortable by intelligence / input / output / task cost), value scatter (intelligence index × task cost on a log axis, vendor colors), and a price-cut / share-shift event feed from TrakToken daily annotations
+- **📋 Stock watch page (/watch)** — Standalone page for searching, adding and removing A / HK / US tickers, with live quotes from the existing quote hub and localStorage persistence. No sector heat, news flash, treasuries, commodities, AI panels, or yield curve.
 - **🪟 Earnings window (/fin)** — Earnings-season macro view: disclosure calendar (14-day rhythm bars + today's list), earnings forecasts (beat/miss stats bar + profit-range details), industry profit ranking (scale × momentum dual encoding), stock profit ranking (by amount / growth), plus per-company 12-quarter trends (revenue/profit bars + ROE/gross/net margin lines)
 - **🏷️ Commodity prices page (/goods)** — Main-contract futures daily trends across 6 groups (precious / base / ferrous / energy-chem / agri / international energy) with 30d–365d ranges, plus Sunsirs spot quotes (accumulated daily) and spot–futures basis tables
 - **📰 7×24 news flash** — Scrolling global financial news with auto-highlighted macro keywords and industry-chain mentions
@@ -246,7 +247,8 @@ During development the frontend talks to the local proxy via `/api`:
 │   ├── MarketCockpit.xcodeproj
 │   └── MarketCockpit/
 ├── src/
-│   ├── App.tsx        # Cockpit layout & routing (/ market cockpit, /ai AI cockpit, /goods commodity prices, /fin earnings window)
+│   ├── App.tsx        # Cockpit layout & routing (/ market cockpit, /watch stock watch, /ai AI cockpit, /goods commodity prices, /fin earnings window)
+│   ├── WatchDashboard.tsx # Standalone stock-watch page (search / add / remove / live quotes; no cockpit widgets)
 │   ├── AiDashboard.tsx    # AI cockpit page (2×3 grid: OpenRouter usage spanning two rows + 4 LLM price panels)
 │   ├── FinDashboard.tsx   # Earnings window page (panels in components/dash/fin/)
 │   ├── GoodsDashboard.tsx # Commodity prices page (6-group trend panels + spot/basis panel)

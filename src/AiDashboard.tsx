@@ -7,6 +7,7 @@ import { InfraRoiPanel } from "@/components/dash/InfraRoiPanel";
 import { useFullscreen } from "@/hooks/useFullscreen";
 import { hostingAiQuota, type HostingAiQuota } from "@/lib/hosting";
 import { useHosting } from "@/lib/hosting-context";
+import { pageLinks } from "@/lib/nav";
 
 // 3×4 网格: Token 消耗(openrouter)与投资回报(ai-infra)各占 2×2, 其余 1×1
 const CELLS = [
@@ -65,12 +66,7 @@ export default function AiDashboard() {
         linkTo="/"
         linkLabel="市场驾驶舱"
         linkBack
-        links={[
-          { to: "/", label: "市场驾驶舱" },
-          { to: "/goods", label: "商品价格" },
-          { to: "/gold", label: "黄金观察" },
-          { to: "/fin", label: "财报窗口" },
-        ]}
+        links={pageLinks("/ai")}
         isFullscreen={isFullscreen}
         onToggleFullscreen={toggle}
       />

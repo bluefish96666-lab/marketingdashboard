@@ -18,10 +18,12 @@ import AiDashboard from "./AiDashboard";
 import GoodsDashboard from "./GoodsDashboard";
 import FinDashboard from "./FinDashboard";
 import GoldDashboard from "./GoldDashboard";
+import WatchDashboard from "./WatchDashboard";
 import ProLanding from "./ProLanding";
 import LoginPage from "./pages/LoginPage";
 import { hostingEnabled, hostingToken } from "@/lib/hosting";
 import { HostingContext, useHosting } from "@/lib/hosting-context";
+import { pageLinks } from "@/lib/nav";
 import { useSharedPolling } from "@/hooks/useSharedPolling";
 import { useQuotes } from "@/lib/market";
 import { useFullscreen } from "@/hooks/useFullscreen";
@@ -98,13 +100,8 @@ function Dashboard() {
   const hosting = useHosting();
   // 托管模式: 过滤 Pro 入口(保留 商品价格/AI 观察/黄金观察/财报窗口); 开源模式: 原样含 Pro(零回归)
   const links = useMemo(() => {
-    const base = [
-      { to: "/goods", label: "商品价格" },
-      { to: "/gold", label: "黄金观察" },
-      { to: "/ai", label: "AI 观察" },
-      { to: "/fin", label: "财报窗口" },
-    ];
-    return hosting ? base : [...base, { to: "/pro", label: "Pro" }];
+    const extra = hosting ? [] : [{ to: "/pro", label: "Pro" }];
+    return pageLinks("/", extra);
   }, [hosting]);
 
   return (
@@ -137,6 +134,7 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/" element={<Dashboard />} />
+      <Route path="/watch" element={<WatchDashboard />} />
       <Route path="/ai" element={<AiDashboard />} />
       <Route path="/goods" element={<GoodsDashboard />} />
       <Route path="/gold" element={<GoldDashboard />} />
