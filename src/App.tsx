@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { Navigate, Routes, Route } from "react-router";
+import { Routes, Route } from "react-router";
 import { TickerTape, type TapeItem } from "@/components/dash/TickerTape";
 import { DashboardHeader } from "@/components/dash/DashboardHeader";
-import { StarHint } from "@/components/dash/StarHint";
 import { DashboardLayout, type PanelRowDef } from "@/components/dash/DashboardLayout";
 import { IndexPanel } from "@/components/dash/IndexPanel";
 import { CommodityPanel } from "@/components/dash/CommodityPanel";
@@ -19,10 +18,9 @@ import GoodsDashboard from "./GoodsDashboard";
 import FinDashboard from "./FinDashboard";
 import GoldDashboard from "./GoldDashboard";
 import WatchDashboard from "./WatchDashboard";
-import ProLanding from "./ProLanding";
 import LoginPage from "./pages/LoginPage";
 import { hostingEnabled, hostingToken } from "@/lib/hosting";
-import { HostingContext, useHosting } from "@/lib/hosting-context";
+import { HostingContext } from "@/lib/hosting-context";
 import { pageLinks } from "@/lib/nav";
 import { useSharedPolling } from "@/hooks/useSharedPolling";
 import { useQuotes } from "@/lib/market";
@@ -97,12 +95,6 @@ const PANEL_ROWS: PanelRowDef[] = [
 
 function Dashboard() {
   const { isFullscreen, toggle } = useFullscreen();
-  const hosting = useHosting();
-  // 托管模式: 过滤 Pro 入口(保留 商品价格/AI 观察/黄金观察/财报窗口); 开源模式: 原样含 Pro(零回归)
-  const links = useMemo(() => {
-    const extra = hosting ? [] : [{ to: "/pro", label: "Pro" }];
-    return pageLinks("/", extra);
-  }, [hosting]);
 
   return (
     <div className="flex min-h-screen flex-col bg-[#070b12] text-slate-200 lg:h-screen lg:overflow-hidden">
@@ -113,14 +105,12 @@ function Dashboard() {
         tagline="沪深港美 · 大宗 · 美债 · 板块 · 资金流 · 快讯 · 产业链"
         linkTo="/ai"
         linkLabel="AI 观察"
-        links={links}
+        links={pageLinks("/")}
         live
-        githubUrl="https://github.com/theBigGavin/marketingdashboard"
         isFullscreen={isFullscreen}
         onToggleFullscreen={toggle}
       />
       <Tape />
-      <StarHint githubUrl="https://github.com/theBigGavin/marketingdashboard" />
       <DashboardLayout rows={PANEL_ROWS} />
     </div>
   );
@@ -130,7 +120,6 @@ function Dashboard() {
  *  (定义在 src/lib/hosting-context.ts, 独立模块避免 AiDashboard ↔ App 循环依赖) */
 
 function AppRoutes() {
-  const hosting = useHosting();
   return (
     <Routes>
       <Route path="/" element={<Dashboard />} />
@@ -139,7 +128,6 @@ function AppRoutes() {
       <Route path="/goods" element={<GoodsDashboard />} />
       <Route path="/gold" element={<GoldDashboard />} />
       <Route path="/fin" element={<FinDashboard />} />
-      <Route path="/pro" element={hosting ? <Navigate to="/" replace /> : <ProLanding />} />
     </Routes>
   );
 }
@@ -172,11 +160,6 @@ function HostingGate({ children }: { children: React.ReactNode }) {
     })();
     return () => { alive = false; };
   }, []);
-  // 托管模式(探测 enabled=true): index.html 静态 footer(id=mrd-foot) 无业务价值 → 移除;
-  // 开源模式(enabled=false): 不动 DOM, 与以往完全一致(零回归)
-  useEffect(() => {
-    if (hosting) document.getElementById("mrd-foot")?.remove();
-  }, [hosting]);
   if (state === "checking") {
     return <div className="flex min-h-screen items-center justify-center bg-[#070b12] text-slate-500">加载中…</div>;
   }
