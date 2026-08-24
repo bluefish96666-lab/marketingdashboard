@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { Navigate, Routes, Route } from "react-router";
+import { Routes, Route } from "react-router";
 import { TickerTape, type TapeItem } from "@/components/dash/TickerTape";
 import { DashboardHeader } from "@/components/dash/DashboardHeader";
-import { StarHint } from "@/components/dash/StarHint";
 import { DashboardLayout, type PanelRowDef } from "@/components/dash/DashboardLayout";
 import { IndexPanel } from "@/components/dash/IndexPanel";
 import { CommodityPanel } from "@/components/dash/CommodityPanel";
@@ -19,12 +18,11 @@ import GoodsDashboard from "./GoodsDashboard";
 import FinDashboard from "./FinDashboard";
 import GoldDashboard from "./GoldDashboard";
 import WatchDashboard from "./WatchDashboard";
-import ProLanding from "./ProLanding";
 import LoginPage from "./pages/LoginPage";
 import { hostingEnabled, hostingToken } from "@/lib/hosting";
 import { selfhostEnabled } from "@/lib/selfhost";
-import { HostingContext, useHosting } from "@/lib/hosting-context";
-import { SelfhostContext, useSelfhost } from "@/lib/selfhost-context";
+import { HostingContext } from "@/lib/hosting-context";
+import { SelfhostContext } from "@/lib/selfhost-context";
 import { BRAND } from "@/config/branding";
 import { pageLinks } from "@/lib/nav";
 import { useSharedPolling } from "@/hooks/useSharedPolling";
@@ -100,13 +98,6 @@ const PANEL_ROWS: PanelRowDef[] = [
 
 function Dashboard() {
   const { isFullscreen, toggle } = useFullscreen();
-  const hosting = useHosting();
-  const selfhost = useSelfhost();
-  // 托管/自部署模式: 过滤 Pro 入口; 开源公开展示: 原样含 Pro
-  const links = useMemo(() => {
-    const extra = hosting || selfhost ? [] : [{ to: "/pro", label: "Pro" }];
-    return pageLinks("/", extra);
-  }, [hosting, selfhost]);
 
   return (
     <div className="flex min-h-screen flex-col bg-[#070b12] text-slate-200 lg:h-screen lg:overflow-hidden">
@@ -117,14 +108,12 @@ function Dashboard() {
         tagline={BRAND.tagline}
         linkTo="/ai"
         linkLabel="AI 观察"
-        links={links}
+        links={pageLinks("/")}
         live
-        githubUrl={selfhost ? undefined : "https://github.com/theBigGavin/marketingdashboard"}
         isFullscreen={isFullscreen}
         onToggleFullscreen={toggle}
       />
       <Tape />
-      {!selfhost && <StarHint githubUrl="https://github.com/theBigGavin/marketingdashboard" />}
       <DashboardLayout rows={PANEL_ROWS} />
     </div>
   );
@@ -134,8 +123,6 @@ function Dashboard() {
  *  (定义在 src/lib/hosting-context.ts, 独立模块避免 AiDashboard ↔ App 循环依赖) */
 
 function AppRoutes() {
-  const hosting = useHosting();
-  const selfhost = useSelfhost();
   return (
     <Routes>
       <Route path="/" element={<Dashboard />} />
@@ -144,7 +131,6 @@ function AppRoutes() {
       <Route path="/goods" element={<GoodsDashboard />} />
       <Route path="/gold" element={<GoldDashboard />} />
       <Route path="/fin" element={<FinDashboard />} />
-      <Route path="/pro" element={hosting || selfhost ? <Navigate to="/" replace /> : <ProLanding />} />
     </Routes>
   );
 }
