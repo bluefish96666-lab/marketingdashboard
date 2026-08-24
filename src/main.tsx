@@ -7,11 +7,11 @@ import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { initTvMode } from '@/lib/tv'
 import { initTvFocus } from '@/lib/tvFocus'
 import { initDesktopMode } from '@/lib/desktop'
-import { initUtmTracking } from '@/lib/utm'
+import { initUtmIfPublic } from '@/lib/utm-init'
 initTvMode()
 initTvFocus()
 initDesktopMode()
-initUtmTracking()
+void initUtmIfPublic()
 
 // PWA: 仅生产环境注册 Service Worker(缓存静态构建产物, 行情接口不缓存)
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {

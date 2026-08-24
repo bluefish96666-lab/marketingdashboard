@@ -11,6 +11,8 @@ RUN apk add --no-cache curl
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000
+# 自部署私有实例: docker run -e SELFHOST=1 ... 去掉 GitHub/官网/Pro 预注册等产品外链
+ENV SELFHOST=
 COPY --from=build --chown=node:node /app/dist ./dist
 COPY --from=build --chown=node:node /app/server ./server
 COPY --from=build /app/node_modules ./node_modules

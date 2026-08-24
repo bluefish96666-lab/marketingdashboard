@@ -13,6 +13,11 @@ const { createCache } = require("./lib/cache.cjs");
 const createFetchAny = require("./lib/fetch-any.cjs");
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// 自部署模式(SELFHOST=1): 私有 VPS 实例 — 去掉 GitHub/官网/Pro 预注册/knock 等产品外链
+const SELFHOST = process.env.SELFHOST === "1";
+const SELFHOST_BLOCKED_ROUTES = new Set(["/api/leads", "/api/repo-stats", "/api/github/stars"]);
+if (SELFHOST) console.log("[selfhost] enabled — product outbound links disabled");
+
 // 分钟线缓存 TTL: 常规 5s(与报价中心同频); 汇率(wh*)降频 2min —
 // 东财 WAF 限流(SSL unexpected eof)主因是频率, 汇率分时 2min 粒度足够且命中率降 24 倍
 const MINUTE_TTL = 5000;
@@ -257,6 +262,7 @@ const routes = {
   },
   "/api/treasury-history": async () => cached("treasury-history", 6 * 3600 * 1000, () => handleTreasuryHistory()),
   "/api/health": async () => ({ status: "up", ts: Date.now(), cache: cache.size }),
+  "/api/selfhost": async () => ({ enabled: SELFHOST }),
   "/api/repo-stats": async () =>
     cached("repo-stats", 3600000, async () => {
       // GitHub repo 元数据(star/forks), 1h 缓存防限流; 失败返回 0 不阻断页面
@@ -486,6 +492,10 @@ const server = http.createServer(async (req, res) => {
     // 升级前排行榜不中断(客户端默认跟随重定向)。GET/HEAD 用 302; POST 用 307(保留方法与 body,
     // 旧版 submit 不被 302 转 GET 丢体)。放在请求处理最前, 先于一切路由/预检分支。
     if (u.pathname.startsWith("/api/v1/knock/")) {
+      if (SELFHOST) {
+        send(res, 404, { ok: false, error: "not found" });
+        return;
+      }
       const rest = u.pathname.slice("/api/v1/knock".length) || "/";
       const loc = "https://hermes.cc.cd/api/v1/knock" + rest + (u.search || "");
       res.writeHead(req.method === "POST" ? 307 : 302, {
@@ -496,6 +506,10 @@ const server = http.createServer(async (req, res) => {
       return res.end();
     }
     if (routes[u.pathname]) {
+      if (SELFHOST && SELFHOST_BLOCKED_ROUTES.has(u.pathname)) {
+        send(res, 404, { ok: false, error: "not found" });
+        return;
+      }
       stats.reqs++;
       const ip = clientIp(req);
       trackActiveIp(ip);
@@ -559,6 +573,10 @@ const server = http.createServer(async (req, res) => {
     if (req.method === "GET" || req.method === "HEAD") {
       if (u.pathname === "/company" || u.pathname.startsWith("/company/")) {
         if (u.pathname !== "/company/opc/status.json") {
+          if (SELFHOST) {
+            send(res, 404, { ok: false, error: "not found" });
+            return;
+          }
           let rest = u.pathname === "/company" ? "" : u.pathname.slice("/company".length);
           if (!rest.startsWith("/")) rest = "/" + rest;
           if (rest.endsWith("/index.html")) rest = rest.slice(0, -"index.html".length);

@@ -123,6 +123,13 @@ docker build -t market-cockpit .
 docker run -p 3000:3000 market-cockpit
 ```
 
+**私有 VPS 自部署**（去掉 GitHub、官网底栏、Pro 预注册、UTM 统计等产品外链）：
+
+```bash
+docker run -p 3000:3000 -e SELFHOST=1 market-cockpit
+# 或: SELFHOST=1 npm start
+```
+
 ### 安装为桌面应用（PWA）
 
 用 Chrome / Edge 打开部署后的页面，点击地址栏右侧的 **安装图标**（或菜单 →「安装市场研究驾驶舱」），即可作为独立桌面应用运行，支持离线缓存静态资源、独立图标。

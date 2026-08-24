@@ -22,7 +22,9 @@ import WatchDashboard from "./WatchDashboard";
 import ProLanding from "./ProLanding";
 import LoginPage from "./pages/LoginPage";
 import { hostingEnabled, hostingToken } from "@/lib/hosting";
+import { selfhostEnabled } from "@/lib/selfhost";
 import { HostingContext, useHosting } from "@/lib/hosting-context";
+import { SelfhostContext, useSelfhost } from "@/lib/selfhost-context";
 import { pageLinks } from "@/lib/nav";
 import { useSharedPolling } from "@/hooks/useSharedPolling";
 import { useQuotes } from "@/lib/market";
@@ -98,11 +100,12 @@ const PANEL_ROWS: PanelRowDef[] = [
 function Dashboard() {
   const { isFullscreen, toggle } = useFullscreen();
   const hosting = useHosting();
-  // 托管模式: 过滤 Pro 入口(保留 商品价格/AI 观察/黄金观察/财报窗口); 开源模式: 原样含 Pro(零回归)
+  const selfhost = useSelfhost();
+  // 托管/自部署模式: 过滤 Pro 入口; 开源公开展示: 原样含 Pro
   const links = useMemo(() => {
-    const extra = hosting ? [] : [{ to: "/pro", label: "Pro" }];
+    const extra = hosting || selfhost ? [] : [{ to: "/pro", label: "Pro" }];
     return pageLinks("/", extra);
-  }, [hosting]);
+  }, [hosting, selfhost]);
 
   return (
     <div className="flex min-h-screen flex-col bg-[#070b12] text-slate-200 lg:h-screen lg:overflow-hidden">
@@ -115,12 +118,12 @@ function Dashboard() {
         linkLabel="AI 观察"
         links={links}
         live
-        githubUrl="https://github.com/theBigGavin/marketingdashboard"
+        githubUrl={selfhost ? undefined : "https://github.com/theBigGavin/marketingdashboard"}
         isFullscreen={isFullscreen}
         onToggleFullscreen={toggle}
       />
       <Tape />
-      <StarHint githubUrl="https://github.com/theBigGavin/marketingdashboard" />
+      {!selfhost && <StarHint githubUrl="https://github.com/theBigGavin/marketingdashboard" />}
       <DashboardLayout rows={PANEL_ROWS} />
     </div>
   );
@@ -131,6 +134,7 @@ function Dashboard() {
 
 function AppRoutes() {
   const hosting = useHosting();
+  const selfhost = useSelfhost();
   return (
     <Routes>
       <Route path="/" element={<Dashboard />} />
@@ -139,7 +143,7 @@ function AppRoutes() {
       <Route path="/goods" element={<GoodsDashboard />} />
       <Route path="/gold" element={<GoldDashboard />} />
       <Route path="/fin" element={<FinDashboard />} />
-      <Route path="/pro" element={hosting ? <Navigate to="/" replace /> : <ProLanding />} />
+      <Route path="/pro" element={hosting || selfhost ? <Navigate to="/" replace /> : <ProLanding />} />
     </Routes>
   );
 }
@@ -160,28 +164,44 @@ export default function App() {
 function HostingGate({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<"checking" | "open" | "login">("checking");
   const [hosting, setHosting] = useState(false);
+  const [selfhost, setSelfhost] = useState(false);
   useEffect(() => {
     let alive = true;
     (async () => {
       let enabled = false;
-      try { enabled = await hostingEnabled(); } catch { enabled = false; }
+      let self = false;
+      try {
+        [enabled, self] = await Promise.all([hostingEnabled(), selfhostEnabled()]);
+      } catch {
+        enabled = false;
+        self = false;
+      }
       if (!alive) return;
       setHosting(enabled);
+      setSelfhost(self);
       if (!enabled) { setState("open"); return; }
       setState(hostingToken() ? "open" : "login");
     })();
     return () => { alive = false; };
   }, []);
-  // 托管模式(探测 enabled=true): index.html 静态 footer(id=mrd-foot) 无业务价值 → 移除;
-  // 开源模式(enabled=false): 不动 DOM, 与以往完全一致(零回归)
+  // 托管/自部署模式: index.html 静态 footer(id=mrd-foot) 无业务价值 → 移除
   useEffect(() => {
-    if (hosting) document.getElementById("mrd-foot")?.remove();
-  }, [hosting]);
+    if (hosting || selfhost) document.getElementById("mrd-foot")?.remove();
+  }, [hosting, selfhost]);
+  // 自部署模式: 移除 Cloudflare Insights beacon(写在静态 index.html 里)
+  useEffect(() => {
+    if (!selfhost) return;
+    document.querySelector('script[src*="cloudflareinsights.com"]')?.remove();
+  }, [selfhost]);
   if (state === "checking") {
     return <div className="flex min-h-screen items-center justify-center bg-[#070b12] text-slate-500">加载中…</div>;
   }
   if (state === "login") {
     return <LoginPage onAuthed={() => setState("open")} />;
   }
-  return <HostingContext.Provider value={hosting}>{children}</HostingContext.Provider>;
+  return (
+    <HostingContext.Provider value={hosting}>
+      <SelfhostContext.Provider value={selfhost}>{children}</SelfhostContext.Provider>
+    </HostingContext.Provider>
+  );
 }
