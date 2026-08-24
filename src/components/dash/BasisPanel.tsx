@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { Table } from "lucide-react";
+import { ACCENT } from "@/config/branding";
 import { Panel, type PanelZoomProps } from "./Panel";
 import { QuoteRow } from "./QuoteRow";
 import { useSharedPolling } from "@/hooks/useSharedPolling";
@@ -56,7 +57,7 @@ export function BasisPanel({ className = "", ...zoomProps }: { className?: strin
       {...zoomProps}
       title="现期对照 · 基差"
       icon={<Table size={14} />}
-      accent="#38bdf8"
+      accent={ACCENT.primary}
       right={<span className="text-[10px] text-slate-500">{data ? `${data.rows.length} 品种` : ""}</span>}
     >
       <div className="h-full min-h-0 overflow-y-auto p-1">

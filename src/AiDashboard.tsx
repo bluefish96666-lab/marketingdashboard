@@ -8,6 +8,7 @@ import { useFullscreen } from "@/hooks/useFullscreen";
 import { hostingAiQuota, type HostingAiQuota } from "@/lib/hosting";
 import { useHosting } from "@/lib/hosting-context";
 import { pageLinks } from "@/lib/nav";
+import { BRAND } from "@/config/branding";
 
 // 3×4 网格: Token 消耗(openrouter)与投资回报(ai-infra)各占 2×2, 其余 1×1
 const CELLS = [
@@ -64,7 +65,7 @@ export default function AiDashboard() {
         accent="violet"
         tagline="AI Token 消耗 · 模型排名 · 厂商份额"
         linkTo="/"
-        linkLabel="市场驾驶舱"
+        linkLabel={BRAND.homeNavLabel}
         linkBack
         links={pageLinks("/ai")}
         isFullscreen={isFullscreen}

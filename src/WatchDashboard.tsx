@@ -12,6 +12,7 @@ import { useStockSearch } from "@/hooks/useStockSearch";
 import { useQuote } from "@/lib/market";
 import { type StockSearchResult } from "@/lib/api";
 import { pageLinks } from "@/lib/nav";
+import { BRAND } from "@/config/branding";
 import {
   normalizeWatchTicker,
   watchMarketLabel,
@@ -122,10 +123,10 @@ export default function WatchDashboard() {
       <DashboardHeader
         title="自选股"
         subtitle="STOCK WATCH"
-        accent="cyan"
+        accent="gold"
         tagline="搜索添加 · 实时报价 · 沪深港美 · 本地保存"
         linkTo="/"
-        linkLabel="市场驾驶舱"
+        linkLabel={BRAND.homeNavLabel}
         linkBack
         links={pageLinks("/watch")}
         live
@@ -220,7 +221,7 @@ export default function WatchDashboard() {
               ]}
               active={filter}
               onChange={setFilter}
-              accent="cyan"
+              accent="amber"
             />
             <span className="text-[10px] text-slate-500">失败报价显示「暂无报价」，不编造价格</span>
           </div>

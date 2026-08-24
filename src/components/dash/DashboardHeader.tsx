@@ -12,6 +12,36 @@ const SUBTITLE_CLASS: Record<Accent, string> = {
   gold: "text-[#f5c542]/80",
 };
 
+const HEADER_BG_CLASS: Record<Accent, string> = {
+  cyan: "from-[#0a1424] via-[#0c1320] to-[#0a1424]",
+  violet: "from-[#0a1424] via-[#0c1320] to-[#0a1424]",
+  gold: "from-[#0f0d08] via-[#12100a] to-[#0f0d08]",
+};
+
+const LOGO_SHADOW_CLASS: Record<Accent, string> = {
+  cyan: "shadow-[0_0_12px_rgba(34,211,238,0.45)]",
+  violet: "shadow-[0_0_12px_rgba(167,139,250,0.35)]",
+  gold: "shadow-[0_0_12px_rgba(245,197,66,0.45)]",
+};
+
+const CLOCK_CLASS: Record<Accent, string> = {
+  cyan: "text-cyan-300",
+  violet: "text-violet-300",
+  gold: "text-[#fde68a]",
+};
+
+const CLOCK_SEC_CLASS: Record<Accent, string> = {
+  cyan: "text-cyan-600",
+  violet: "text-violet-600",
+  gold: "text-[#d4a017]",
+};
+
+const ICON_BTN_HOVER_CLASS: Record<Accent, string> = {
+  cyan: "hover:border-cyan-500/60 hover:text-cyan-300",
+  violet: "hover:border-violet-500/60 hover:text-violet-300",
+  gold: "hover:border-[#f5c542]/60 hover:text-[#fde68a]",
+};
+
 /** 导航链接的 hover 色取与副标题相反的强调色 */
 const LINK_HOVER_CLASS: Record<Accent, string> = {
   cyan: "hover:border-violet-500/60 hover:text-violet-300",
@@ -55,9 +85,9 @@ export function DashboardHeader({
   const week = ["日", "一", "二", "三", "四", "五", "六"][now.getDay()];
 
   return (
-    <header className="titlebar flex h-9 shrink-0 items-center gap-3 border-b border-slate-700/50 bg-gradient-to-r from-[#0a1424] via-[#0c1320] to-[#0a1424]">
+    <header className={`titlebar flex h-9 shrink-0 items-center gap-3 border-b border-slate-700/50 bg-gradient-to-r ${HEADER_BG_CLASS[accent]}`}>
       <div className="flex items-center gap-2.5">
-        <Logo size={22} className="rounded-[6px] shadow-[0_0_12px_rgba(34,211,238,0.45)]" />
+        <Logo size={22} className={`rounded-[6px] ${LOGO_SHADOW_CLASS[accent]}`} />
         <h1 className="text-[13px] font-bold tracking-wider text-slate-100">
           {title}
           <span className={`ml-2 text-[8px] font-medium tracking-[0.2em] ${SUBTITLE_CLASS[accent]}`}>{subtitle}</span>
@@ -91,13 +121,13 @@ export function DashboardHeader({
         <span className="hidden text-[10px] text-slate-400 md:inline" style={{ fontVariantNumeric: "tabular-nums" }}>
           {dateStr} 星期{week}
         </span>
-        <span className="rounded border border-slate-700/60 bg-slate-800/40 px-2 py-px font-mono text-[12px] font-bold text-cyan-300">
-          {hh}:{mm}{isTv ? "" : <span className="text-cyan-600">:{ss}</span>}
+        <span className={`rounded border border-slate-700/60 bg-slate-800/40 px-2 py-px font-mono text-[12px] font-bold ${CLOCK_CLASS[accent]}`}>
+          {hh}:{mm}{isTv ? "" : <span className={CLOCK_SEC_CLASS[accent]}>:{ss}</span>}
         </span>
         <button
           onClick={onToggleFullscreen}
           title={isFullscreen ? "退出全屏" : "全屏显示"}
-          className="flex h-[22px] w-[22px] items-center justify-center rounded border border-slate-700/60 bg-slate-800/40 text-slate-400 transition-colors hover:border-cyan-500/60 hover:text-cyan-300"
+          className={`flex h-[22px] w-[22px] items-center justify-center rounded border border-slate-700/60 bg-slate-800/40 text-slate-400 transition-colors ${ICON_BTN_HOVER_CLASS[accent]}`}
         >
           {isFullscreen ? <Minimize2 size={12} /> : <Maximize2 size={12} />}
         </button>

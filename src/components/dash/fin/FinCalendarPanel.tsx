@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { Panel, type PanelZoomProps } from "../Panel";
+import { ACCENT } from "@/config/branding";
 import { useFinBoard } from "./useFinData";
 import { type FinCalendarItem } from "@/lib/api";
 import { useFin } from "./FinContext";
@@ -104,7 +105,7 @@ export function FinCalendarPanel({ className = "", ...zoomProps }: { className?:
       {...zoomProps}
       title="财报日历"
       icon={<CalendarDays size={14} />}
-      accent="#38bdf8"
+      accent={ACCENT.primary}
       right={
         data && (
           <span className="flex items-center gap-2 text-[10px] text-slate-500" style={TNUM}>

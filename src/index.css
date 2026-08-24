@@ -74,6 +74,76 @@
   }
 }
 
+/* ===== 暖金主题(theme-gold) — 全站 cyan 交互色映射为暖金 ===== */
+html.theme-gold {
+  --accent-primary: #f5c542;
+  --accent-light: #fde68a;
+  --accent-muted: #fbbf24;
+  --accent-dark: #d4a017;
+  --accent-glow: rgba(245, 197, 66, 0.45);
+  --accent-glow-soft: rgba(245, 197, 66, 0.18);
+  --accent-ring: rgba(245, 197, 66, 0.4);
+}
+
+html.theme-gold .text-cyan-100 { color: #fef3c7 !important; }
+html.theme-gold .text-cyan-200 { color: #fde68a !important; }
+html.theme-gold .text-cyan-300 { color: #fde68a !important; }
+html.theme-gold .text-cyan-400 { color: #f5c542 !important; }
+html.theme-gold .text-cyan-500 { color: #fbbf24 !important; }
+html.theme-gold .text-cyan-600 { color: #d4a017 !important; }
+
+html.theme-gold .bg-cyan-400 { background-color: #f5c542 !important; }
+html.theme-gold .bg-cyan-500\/5 { background-color: rgba(245, 197, 66, 0.05) !important; }
+html.theme-gold .bg-cyan-500\/10 { background-color: rgba(245, 197, 66, 0.1) !important; }
+html.theme-gold .bg-cyan-500\/15 { background-color: rgba(245, 197, 66, 0.15) !important; }
+html.theme-gold .bg-cyan-500\/20 { background-color: rgba(245, 197, 66, 0.2) !important; }
+html.theme-gold .bg-cyan-500\/25 { background-color: rgba(245, 197, 66, 0.25) !important; }
+html.theme-gold .bg-cyan-500\/50 { background-color: rgba(245, 197, 66, 0.5) !important; }
+html.theme-gold .bg-cyan-500\/60 { background-color: rgba(245, 197, 66, 0.6) !important; }
+html.theme-gold .bg-cyan-600 { background-color: #d4a017 !important; }
+html.theme-gold .bg-cyan-600\/80 { background-color: rgba(212, 160, 23, 0.8) !important; }
+
+html.theme-gold .border-cyan-400 { border-color: #f5c542 !important; }
+html.theme-gold .border-cyan-400\/35 { border-color: rgba(245, 197, 66, 0.35) !important; }
+html.theme-gold .border-cyan-400\/50 { border-color: rgba(245, 197, 66, 0.5) !important; }
+html.theme-gold .border-cyan-400\/70 { border-color: rgba(245, 197, 66, 0.7) !important; }
+html.theme-gold .border-cyan-500 { border-color: #fbbf24 !important; }
+html.theme-gold .border-cyan-500\/25 { border-color: rgba(245, 197, 66, 0.25) !important; }
+html.theme-gold .border-cyan-500\/40 { border-color: rgba(245, 197, 66, 0.4) !important; }
+html.theme-gold .border-cyan-500\/50 { border-color: rgba(245, 197, 66, 0.5) !important; }
+html.theme-gold .border-cyan-500\/60 { border-color: rgba(245, 197, 66, 0.6) !important; }
+
+html.theme-gold .ring-cyan-500\/40 { --tw-ring-color: rgba(245, 197, 66, 0.4) !important; }
+
+html.theme-gold .hover\:border-cyan-400\/50:hover { border-color: rgba(245, 197, 66, 0.5) !important; }
+html.theme-gold .hover\:border-cyan-500\/40:hover { border-color: rgba(245, 197, 66, 0.4) !important; }
+html.theme-gold .hover\:border-cyan-500\/50:hover { border-color: rgba(245, 197, 66, 0.5) !important; }
+html.theme-gold .hover\:border-cyan-500\/60:hover { border-color: rgba(245, 197, 66, 0.6) !important; }
+html.theme-gold .hover\:text-cyan-300:hover { color: #fde68a !important; }
+html.theme-gold .hover\:bg-cyan-500\/20:hover { background-color: rgba(245, 197, 66, 0.2) !important; }
+html.theme-gold .hover\:bg-cyan-500\/25:hover { background-color: rgba(245, 197, 66, 0.25) !important; }
+html.theme-gold .hover\:bg-cyan-500\/30:hover { background-color: rgba(245, 197, 66, 0.3) !important; }
+html.theme-gold .hover\:bg-cyan-500:hover { background-color: #f5c542 !important; }
+html.theme-gold .hover\:shadow-\[inset_0_0_0_1px_rgba\(34\,211\,238\,0\.22\)\]:hover {
+  box-shadow: inset 0 0 0 1px rgba(245, 197, 66, 0.22) !important;
+}
+
+html.theme-gold .focus\:border-cyan-500\/50:focus { border-color: rgba(245, 197, 66, 0.5) !important; }
+html.theme-gold .focus\:border-cyan-500\/60:focus { border-color: rgba(245, 197, 66, 0.6) !important; }
+html.theme-gold .focus\:border-cyan-400\/70:focus { border-color: rgba(245, 197, 66, 0.7) !important; }
+html.theme-gold .focus\:ring-cyan-500\/50:focus { --tw-ring-color: rgba(245, 197, 66, 0.5) !important; }
+
+html.theme-gold .accent-cyan-400 { accent-color: #f5c542 !important; }
+
+html.theme-gold .group:hover .group-hover\:text-cyan-300 { color: #fde68a !important; }
+
+/* TV 焦点环 */
+html.theme-gold.tv [data-tv-focusable]:focus,
+html.theme-gold.tv [data-tv-scroll]:focus {
+  outline-color: #f5c542;
+  box-shadow: 0 0 20px rgba(245, 197, 66, 0.4);
+}
+
 /* ===== 驾驶舱全局样式 ===== */
 html,
 body {
@@ -166,12 +236,12 @@ header.titlebar button {
   overflow: hidden;
 }
 
-/* 遥控器焦点环: 青色描边 + 发光, 覆盖 Tailwind 的 outline-none 等 */
+/* 遥控器焦点环: 暖金描边 + 发光, 覆盖 Tailwind 的 outline-none 等 */
 .tv [data-tv-focusable]:focus,
 .tv [data-tv-scroll]:focus {
-  outline: 2px solid #22d3ee;
+  outline: 2px solid #f5c542;
   outline-offset: 1px;
-  box-shadow: 0 0 20px rgba(34, 211, 238, 0.4);
+  box-shadow: 0 0 20px rgba(245, 197, 66, 0.4);
   position: relative;
   z-index: 10;
 }

@@ -20,7 +20,10 @@ import GoldDashboard from "./GoldDashboard";
 import WatchDashboard from "./WatchDashboard";
 import LoginPage from "./pages/LoginPage";
 import { hostingEnabled, hostingToken } from "@/lib/hosting";
+import { selfhostEnabled } from "@/lib/selfhost";
 import { HostingContext } from "@/lib/hosting-context";
+import { SelfhostContext } from "@/lib/selfhost-context";
+import { BRAND } from "@/config/branding";
 import { pageLinks } from "@/lib/nav";
 import { useSharedPolling } from "@/hooks/useSharedPolling";
 import { useQuotes } from "@/lib/market";
@@ -99,10 +102,10 @@ function Dashboard() {
   return (
     <div className="flex min-h-screen flex-col bg-[#070b12] text-slate-200 lg:h-screen lg:overflow-hidden">
       <DashboardHeader
-        title="市场研究驾驶舱"
-        subtitle="MARKET RESEARCH COCKPIT"
-        accent="cyan"
-        tagline="沪深港美 · 大宗 · 美债 · 板块 · 资金流 · 快讯 · 产业链"
+        title={BRAND.title}
+        subtitle={BRAND.subtitle}
+        accent="gold"
+        tagline={BRAND.tagline}
         linkTo="/ai"
         linkLabel="AI 观察"
         links={pageLinks("/")}
@@ -148,23 +151,44 @@ export default function App() {
 function HostingGate({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<"checking" | "open" | "login">("checking");
   const [hosting, setHosting] = useState(false);
+  const [selfhost, setSelfhost] = useState(false);
   useEffect(() => {
     let alive = true;
     (async () => {
       let enabled = false;
-      try { enabled = await hostingEnabled(); } catch { enabled = false; }
+      let self = false;
+      try {
+        [enabled, self] = await Promise.all([hostingEnabled(), selfhostEnabled()]);
+      } catch {
+        enabled = false;
+        self = false;
+      }
       if (!alive) return;
       setHosting(enabled);
+      setSelfhost(self);
       if (!enabled) { setState("open"); return; }
       setState(hostingToken() ? "open" : "login");
     })();
     return () => { alive = false; };
   }, []);
+  // 托管模式: index.html 静态 footer 无业务价值 → 移除; 自部署保留个人页脚
+  useEffect(() => {
+    if (hosting) document.getElementById("mrd-foot")?.remove();
+  }, [hosting]);
+  // 自部署模式: 移除 Cloudflare Insights beacon(写在静态 index.html 里)
+  useEffect(() => {
+    if (!selfhost) return;
+    document.querySelector('script[src*="cloudflareinsights.com"]')?.remove();
+  }, [selfhost]);
   if (state === "checking") {
     return <div className="flex min-h-screen items-center justify-center bg-[#070b12] text-slate-500">加载中…</div>;
   }
   if (state === "login") {
     return <LoginPage onAuthed={() => setState("open")} />;
   }
-  return <HostingContext.Provider value={hosting}>{children}</HostingContext.Provider>;
+  return (
+    <HostingContext.Provider value={hosting}>
+      <SelfhostContext.Provider value={selfhost}>{children}</SelfhostContext.Provider>
+    </HostingContext.Provider>
+  );
 }

@@ -1,6 +1,7 @@
 // mrd 托管版 · 登录/注册页（邮箱+密码极简账号, 内测版不做 OAuth/邮箱验证码）
 import { useState } from "react";
 import { hostingRegister, hostingLogin, setHostingToken } from "@/lib/hosting";
+import { BRAND } from "@/config/branding";
 
 interface Props {
   onAuthed: () => void;
@@ -38,8 +39,8 @@ export default function LoginPage({ onAuthed }: Props) {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-[#070b12] p-4 text-slate-200">
       <div className="w-full max-w-sm rounded-xl border border-slate-700/50 bg-slate-900/60 p-6 shadow-xl">
-        <div className="mb-1 text-lg font-semibold text-slate-100">市场研究驾驶舱</div>
-        <div className="mb-5 text-[11px] uppercase tracking-widest text-slate-500">MARKET RESEARCH COCKPIT · 内测版</div>
+        <div className="mb-1 text-lg font-semibold text-slate-100">{BRAND.title}</div>
+        <div className="mb-5 text-[11px] uppercase tracking-widest text-slate-500">{BRAND.subtitle}</div>
         <form onSubmit={submit} className="flex flex-col gap-3">
           <label className="flex flex-col gap-1 text-[12px] text-slate-400">
             邮箱

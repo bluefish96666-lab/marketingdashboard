@@ -1,4 +1,5 @@
 import { Globe } from "lucide-react";
+import { ACCENT } from "@/config/branding";
 import { Panel, type PanelZoomProps } from "./Panel";
 import { QuoteRow } from "./QuoteRow";
 import { usePolling } from "@/hooks/usePolling";
@@ -32,7 +33,7 @@ export function IndexPanel({ className = "", ...zoomProps }: { className?: strin
   ];
 
   return (
-    <Panel className={className} {...zoomProps} title="全球关键指数" icon={<Globe size={14} />} accent="#38bdf8"
+    <Panel className={className} {...zoomProps} title="全球关键指数" icon={<Globe size={14} />} accent={ACCENT.primary}
       right={<span className="text-[10px] text-slate-500">5s</span>}>
       <div className="flex h-full flex-col justify-between overflow-y-auto p-1">
         {groups.map((g) => (

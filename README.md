@@ -131,6 +131,13 @@ docker build -t market-cockpit .
 docker run -p 3000:3000 market-cockpit
 ```
 
+**Private VPS / self-host** (strip GitHub, company-site footer, Pro waitlist, UTM tracking):
+
+```bash
+docker run -p 3000:3000 -e SELFHOST=1 market-cockpit
+# or: SELFHOST=1 npm start
+```
+
 ### Install as a desktop app (PWA)
 
 Open the deployed page in Chrome / Edge and click the **install icon** on the right of the address bar (or menu → "Install Market Research Cockpit") to run it as a standalone desktop app with offline-cached static assets and its own icon.
