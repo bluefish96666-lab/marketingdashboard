@@ -13,6 +13,7 @@ import { FinTrendPanel } from "@/components/dash/fin/FinTrendPanel";
 import { FinPeerPanel } from "@/components/dash/fin/FinPeerPanel";
 import { useFullscreen } from "@/hooks/useFullscreen";
 import { pageLinks } from "@/lib/nav";
+import { BRAND } from "@/config/branding";
 
 const PANEL_ROWS: PanelRowDef[] = [
   {
@@ -84,7 +85,7 @@ export default function FinDashboard() {
         accent="cyan"
         tagline="财报日历 · 业绩预告 · 盈利榜 · 公司深度 · 同业对比"
         linkTo="/"
-        linkLabel="市场驾驶舱"
+        linkLabel={BRAND.homeNavLabel}
         linkBack
         links={pageLinks("/fin")}
         isFullscreen={isFullscreen}

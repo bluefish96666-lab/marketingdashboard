@@ -25,6 +25,7 @@ import { hostingEnabled, hostingToken } from "@/lib/hosting";
 import { selfhostEnabled } from "@/lib/selfhost";
 import { HostingContext, useHosting } from "@/lib/hosting-context";
 import { SelfhostContext, useSelfhost } from "@/lib/selfhost-context";
+import { BRAND } from "@/config/branding";
 import { pageLinks } from "@/lib/nav";
 import { useSharedPolling } from "@/hooks/useSharedPolling";
 import { useQuotes } from "@/lib/market";
@@ -110,10 +111,10 @@ function Dashboard() {
   return (
     <div className="flex min-h-screen flex-col bg-[#070b12] text-slate-200 lg:h-screen lg:overflow-hidden">
       <DashboardHeader
-        title="市场研究驾驶舱"
-        subtitle="MARKET RESEARCH COCKPIT"
+        title={BRAND.title}
+        subtitle={BRAND.subtitle}
         accent="cyan"
-        tagline="沪深港美 · 大宗 · 美债 · 板块 · 资金流 · 快讯 · 产业链"
+        tagline={BRAND.tagline}
         linkTo="/ai"
         linkLabel="AI 观察"
         links={links}
@@ -184,10 +185,10 @@ function HostingGate({ children }: { children: React.ReactNode }) {
     })();
     return () => { alive = false; };
   }, []);
-  // 托管/自部署模式: index.html 静态 footer(id=mrd-foot) 无业务价值 → 移除
+  // 托管模式: index.html 静态 footer 无业务价值 → 移除; 自部署保留个人页脚
   useEffect(() => {
-    if (hosting || selfhost) document.getElementById("mrd-foot")?.remove();
-  }, [hosting, selfhost]);
+    if (hosting) document.getElementById("mrd-foot")?.remove();
+  }, [hosting]);
   // 自部署模式: 移除 Cloudflare Insights beacon(写在静态 index.html 里)
   useEffect(() => {
     if (!selfhost) return;

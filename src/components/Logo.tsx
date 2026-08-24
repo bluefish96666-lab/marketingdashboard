@@ -1,4 +1,6 @@
 /** 应用 Logo: K线 + 上升趋势箭头(与 PWA 图标同源) */
+import { BRAND } from "@/config/branding";
+
 export function Logo({ size = 22, className }: { size?: number; className?: string }) {
   return (
     <svg
@@ -7,7 +9,7 @@ export function Logo({ size = 22, className }: { size?: number; className?: stri
       viewBox="0 0 512 512"
       className={className}
       role="img"
-      aria-label="市场研究驾驶舱"
+      aria-label={BRAND.title}
     >
       <defs>
         <linearGradient id="logo-g" x1="0" y1="1" x2="1" y2="0">

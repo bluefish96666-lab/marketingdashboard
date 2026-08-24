@@ -10,6 +10,7 @@ import { useElementSize } from "@/hooks/useElementSize";
 import { useFullscreen } from "@/hooks/useFullscreen";
 import { api } from "@/lib/api";
 import { pageLinks } from "@/lib/nav";
+import { BRAND } from "@/config/branding";
 import { TNUM, clsChg, bgChg, fmtPct } from "@/lib/format";
 import { POLL } from "@/lib/intervals";
 import {
@@ -663,7 +664,7 @@ export default function GoldDashboard() {
         accent="gold"
         tagline="金价实时 · 走势 · 美债收益率 · 实际利率 · 央行购金 · 通胀与 Fed · 黄金新闻"
         linkTo="/"
-        linkLabel="市场驾驶舱"
+        linkLabel={BRAND.homeNavLabel}
         linkBack
         links={pageLinks("/gold")}
         isFullscreen={isFullscreen}

@@ -10,6 +10,7 @@ import type { PanelZoomProps } from "@/components/dash/Panel";
 import { useFullscreen } from "@/hooks/useFullscreen";
 import { GOODS_GROUPS, type GoodsGroupId } from "@/config/goods";
 import { pageLinks } from "@/lib/nav";
+import { BRAND } from "@/config/branding";
 
 /** 为每个品种组生成稳定引用的面板组件(避免每次渲染重建导致面板状态重置) */
 function makeTrendPanel(group: GoodsGroupId) {
@@ -110,7 +111,7 @@ export default function GoodsDashboard() {
         accent="cyan"
         tagline="期货主力日线趋势 · 现货报价 · 现期基差"
         linkTo="/"
-        linkLabel="市场驾驶舱"
+        linkLabel={BRAND.homeNavLabel}
         linkBack
         links={pageLinks("/goods")}
         isFullscreen={isFullscreen}
