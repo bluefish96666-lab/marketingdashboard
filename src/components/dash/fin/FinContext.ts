@@ -9,6 +9,8 @@ interface FinCtx {
   company: FinCompany;
   recent: FinCompany[];
   select: (code: string, name: string) => void;
+  /** 从「最近查看」移除; 若删的是当前公司则切到列表下一项 */
+  removeRecent: (code: string) => void;
   /** 宏观面板报告期(当期=披露中, 上一期=全市场完整数据) */
   period: string;
   setPeriod: (p: string) => void;
@@ -51,6 +53,7 @@ const FinContext = createContext<FinCtx>({
   company: DEFAULT_COMPANY,
   recent: [],
   select: () => {},
+  removeRecent: () => {},
   period: CUR,
   setPeriod: () => {},
   periods: PERIOD_OPTIONS,
@@ -83,9 +86,18 @@ export function FinProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  const removeRecent = useCallback((code: string) => {
+    setRecent((rs) => {
+      const next = rs.filter((r) => r.code !== code);
+      try { localStorage.setItem(LS_KEY, JSON.stringify(next)); } catch { /* 隐私模式/配额满时忽略 */ }
+      setCompany((cur) => (cur.code === code ? (next[0] ?? DEFAULT_COMPANY) : cur));
+      return next;
+    });
+  }, []);
+
   const value = useMemo(
-    () => ({ company, recent, select, period, setPeriod, periods: PERIOD_OPTIONS }),
-    [company, recent, select, period]
+    () => ({ company, recent, select, removeRecent, period, setPeriod, periods: PERIOD_OPTIONS }),
+    [company, recent, select, removeRecent, period]
   );
   // .ts 文件不可用 JSX, 用 createElement 挂载 Provider
   return createElement(FinContext.Provider, { value }, children);

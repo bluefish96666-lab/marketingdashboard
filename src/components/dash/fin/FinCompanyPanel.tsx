@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { FileText } from "lucide-react";
+import { FileText, X } from "lucide-react";
 import { ACCENT } from "@/config/branding";
 import { Panel, type PanelZoomProps } from "../Panel";
 import { useFinMain } from "./useFinData";
@@ -11,7 +11,7 @@ import { useStockSearch } from "@/hooks/useStockSearch";
 
 /** 公司财报: 搜索框 + 最近查看 chips + 最新报告期指标卡 2×3 */
 export function FinCompanyPanel({ className = "", ...zoomProps }: { className?: string } & PanelZoomProps) {
-  const { company, recent, select } = useFin();
+  const { company, recent, select, removeRecent } = useFin();
   const { data, error, loading, retry } = useFinMain(company.code);
   const [invalid, setInvalid] = useState(false);
 
@@ -122,22 +122,46 @@ export function FinCompanyPanel({ className = "", ...zoomProps }: { className?: 
         {invalid && (
           <p className="shrink-0 text-[9px] text-rose-400">未找到该公司。请输入 A 股 6 位代码(如 600519)或名称搜索。</p>
         )}
-        {/* 最近查看 chips: 单行 18px */}
+        {!invalid && (
+          <p className="shrink-0 text-[8px] text-slate-600">添加：输入代码/名称 → 回车或点「查」</p>
+        )}
+        {/* 最近查看: 点名称切换，× 从列表移除 */}
         {recent.length > 0 && (
-          <div className="flex h-[18px] shrink-0 flex-nowrap items-center gap-1 overflow-hidden">
-            {recent.map((c) => (
-              <button
-                key={c.code}
-                onClick={() => select(c.code, c.name)}
-                className={`shrink-0 rounded border px-1.5 text-[9px] leading-[14px] ${
-                  c.code === company.code
-                    ? "border-cyan-500/60 bg-cyan-500/10 text-cyan-300"
-                    : "border-slate-700/60 text-slate-400 hover:border-slate-500 hover:text-slate-200"
-                }`}
-              >
-                {c.name}
-              </button>
-            ))}
+          <div className="shrink-0">
+            <div className="mb-0.5 text-[8px] text-slate-600">最近查看 · 点名称切换，× 移除</div>
+            <div className="flex max-h-[36px] flex-wrap gap-1 overflow-y-auto">
+              {recent.map((c) => {
+                const active = c.code === company.code;
+                return (
+                  <span
+                    key={c.code}
+                    className={`inline-flex max-w-full items-center rounded border text-[9px] leading-[14px] ${
+                      active
+                        ? "border-amber-500/60 bg-amber-500/10 text-amber-200"
+                        : "border-slate-700/60 text-slate-400"
+                    }`}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => select(c.code, c.name)}
+                      className="max-w-[72px] truncate px-1.5 py-px hover:text-slate-100"
+                      title={c.name}
+                    >
+                      {c.name || c.code}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => removeRecent(c.code)}
+                      className="flex h-[16px] w-[16px] shrink-0 items-center justify-center border-l border-slate-700/40 text-slate-500 hover:bg-rose-500/10 hover:text-rose-300"
+                      title={`移除 ${c.name || c.code}`}
+                      aria-label={`移除 ${c.name || c.code}`}
+                    >
+                      <X size={10} />
+                    </button>
+                  </span>
+                );
+              })}
+            </div>
           </div>
         )}
         {/* 指标卡区: 3列×3行, 卡高 32px */}
