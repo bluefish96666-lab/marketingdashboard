@@ -2,12 +2,15 @@ import { useState, type ReactNode } from "react";
 import { ZoomIn, ZoomOut } from "lucide-react";
 import { isTv } from "@/lib/tv";
 import { ACCENT } from "@/config/branding";
+import { useTerminalOptional } from "@/lib/terminal-context";
 import { ZoomCtx } from "./ZoomCtx";
 
 export interface PanelZoomProps {
   panelId?: string;
   isZoomed?: boolean;
   onToggleZoom?: (id: string) => void;
+  /** 终端模式: 面板序号标签 01/02… */
+  panelLabel?: string;
 }
 
 interface PanelProps extends PanelZoomProps {
@@ -32,7 +35,11 @@ export function Panel({
   panelId,
   isZoomed = false,
   onToggleZoom,
+  panelLabel,
 }: PanelProps) {
+  const terminal = useTerminalOptional();
+  const editMode = terminal?.editMode ?? false;
+  const isSelected = terminal?.selectedPanelId === panelId;
   // TV: 放大 = 全屏浮层(兄弟面板尺寸不变, 零重排; 老电视GPU上整屏reflow是缩放卡顿主因)
   const tvOverlay = isTv && isZoomed;
   // 记录放大前的原始尺寸(state, 带相等守卫防循环), 浮层用 CSS zoom 按同比例放大内容
@@ -71,7 +78,7 @@ export function Panel({
         style={overlayStyle}
         className={`flex min-h-0 flex-col rounded-md border bg-[#0c1320]/90 shadow-[0_0_24px_rgba(0,0,0,0.35)] backdrop-blur transition-all duration-300 ${
           isZoomed ? "border-[#f5c542]/50 shadow-[0_0_32px_rgba(245,197,66,0.18)]" : "border-slate-700/40"
-        } ${tvOverlay ? "bg-[#0c1320]" : ""} ${className}`}
+        } ${editMode ? "ring-1 ring-[#f5c542]/20" : ""} ${isSelected ? "ring-2 ring-[#f5c542]/50" : ""} ${tvOverlay ? "bg-[#0c1320]" : ""} ${className}`}
       {...(isTv && panelId && onToggleZoom
         ? {
             // TV 模式: 面板整体可聚焦, OK 键 = 放大(还原仅通过缩小按钮/返回键)
@@ -122,11 +129,19 @@ export function Panel({
         : {})}
     >
       <ZoomCtx.Provider value={zoom}>
-        <header className="flex h-8 shrink-0 items-center gap-2 border-b border-slate-700/40 px-2.5">
+        <header
+          className={`flex h-8 shrink-0 cursor-default items-center gap-2 border-b border-slate-700/40 px-2.5 ${
+            editMode && panelId ? "cursor-pointer hover:bg-slate-800/30" : ""
+          }`}
+          onClick={editMode && panelId ? () => terminal?.selectPanel(panelId) : undefined}
+        >
+          {panelLabel && (
+            <span className="shrink-0 font-mono text-[9px] tabular-nums text-slate-600">{panelLabel}</span>
+          )}
           <span className="inline-block h-3.5 w-1 shrink-0 rounded-sm" style={{ background: accent }} />
           {icon && <span className="shrink-0" style={{ color: accent, display: "inline-flex", alignItems: "center" }}>{icon}</span>}
           {/* min-w-0 + truncate: 长标题收缩省略, 不再把右侧控件挤出面板 */}
-          <h2 className="min-w-0 flex-1 truncate text-[12px] font-semibold tracking-wide text-slate-200">{title}</h2>
+          <h2 className="min-w-0 flex-1 truncate font-mono text-[11px] font-semibold tracking-wide text-slate-200">{title}</h2>
           <div className="flex shrink-0 items-center gap-2">
             {right}
             {panelId && onToggleZoom && (

@@ -33,6 +33,13 @@ import { useFullscreen } from "@/hooks/useFullscreen";
 import { api } from "@/lib/api";
 import { POLL } from "@/lib/intervals";
 import { INDICES, FOREX, COMMODITIES } from "@/config/dashboard";
+import { TerminalProvider, useTerminal } from "@/lib/terminal-context";
+import { useTerminalShortcuts } from "@/hooks/useTerminalShortcuts";
+import { TerminalToolbar } from "@/components/terminal/TerminalToolbar";
+import { TerminalHelp } from "@/components/terminal/TerminalHelp";
+import { TerminalInspector } from "@/components/terminal/TerminalInspector";
+import { TerminalStatusBar } from "@/components/terminal/TerminalStatusBar";
+import { isTv } from "@/lib/tv";
 
 function Tape() {
   const codes = useMemo(() => [...INDICES.map((i) => i.code), ...FOREX.map((i) => i.code)], []);
@@ -98,35 +105,63 @@ const PANEL_ROWS: PanelRowDef[] = [
   },
 ];
 
+function HomeTerminalShortcuts() {
+  const { toggleHelp, toggleEditMode, toggleInspector, setHelpOpen, setInspectorOpen, setEditMode, selectPanel } = useTerminal();
+  useTerminalShortcuts({
+    toggleHelp,
+    toggleEditMode,
+    toggleInspector,
+    closeOverlays: () => {
+      setHelpOpen(false);
+      setInspectorOpen(false);
+      setEditMode(false);
+      selectPanel(null);
+    },
+  });
+  return null;
+}
+
 function Dashboard() {
   const { isFullscreen, toggle } = useFullscreen();
   const hosting = useHosting();
   const selfhost = useSelfhost();
-  // 托管/自部署模式: 过滤 Pro 入口; 开源公开展示: 原样含 Pro
   const links = useMemo(() => {
     const extra = hosting || selfhost ? [] : [{ to: "/pro", label: "Pro" }];
     return pageLinks("/", extra);
   }, [hosting, selfhost]);
 
   return (
-    <div className="flex min-h-screen flex-col bg-[#070b12] text-slate-200 lg:h-screen lg:overflow-hidden">
-      <DashboardHeader
-        title={BRAND.title}
-        subtitle={BRAND.subtitle}
-        accent="gold"
-        tagline={BRAND.tagline}
-        linkTo="/ai"
-        linkLabel="AI 观察"
-        links={links}
-        live
-        githubUrl={selfhost ? undefined : "https://github.com/theBigGavin/marketingdashboard"}
-        isFullscreen={isFullscreen}
-        onToggleFullscreen={toggle}
-      />
-      <Tape />
-      {!selfhost && <StarHint githubUrl="https://github.com/theBigGavin/marketingdashboard" />}
-      <DashboardLayout rows={PANEL_ROWS} />
-    </div>
+    <TerminalProvider>
+      <HomeTerminalShortcuts />
+      <div className="terminal-shell flex min-h-screen flex-col bg-[#070b12] text-slate-200 lg:h-screen lg:overflow-hidden">
+        <DashboardHeader
+          title={BRAND.title}
+          subtitle={BRAND.subtitle}
+          accent="gold"
+          tagline={BRAND.tagline}
+          linkTo="/ai"
+          linkLabel="AI 观察"
+          links={links}
+          live
+          githubUrl={selfhost ? undefined : "https://github.com/theBigGavin/marketingdashboard"}
+          isFullscreen={isFullscreen}
+          onToggleFullscreen={toggle}
+        />
+        {!isTv && <TerminalToolbar />}
+        <Tape />
+        {!selfhost && <StarHint githubUrl="https://github.com/theBigGavin/marketingdashboard" />}
+        <div className={`relative flex min-h-0 flex-1 flex-col ${!isTv ? "md:mr-0" : ""}`}>
+          <DashboardLayout rows={PANEL_ROWS} />
+        </div>
+        {!isTv && (
+          <>
+            <TerminalHelp />
+            <TerminalInspector />
+            <TerminalStatusBar />
+          </>
+        )}
+      </div>
+    </TerminalProvider>
   );
 }
 

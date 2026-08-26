@@ -1,5 +1,8 @@
 /** 站点品牌 — 改名字/标语/主色只动这一处 */
 export const BRAND = {
+  /** GMT 风格终端前缀 */
+  terminalPrefix: "LST",
+  version: "2.0",
   title: "老孙的交易台",
   subtitle: "CINDY DESK",
   shortName: "老孙台",

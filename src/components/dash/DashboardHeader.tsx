@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import { ArrowLeft, Github, Maximize2, Minimize2 } from "lucide-react";
 import { Logo } from "@/components/Logo";
+import { BRAND } from "@/config/branding";
 import { useClock } from "@/hooks/useClock";
 import { isTv } from "@/lib/tv";
 
@@ -105,9 +106,13 @@ export function DashboardHeader({
     <header className={`titlebar flex h-9 shrink-0 items-center gap-3 border-b border-slate-700/50 bg-gradient-to-r ${HEADER_BG_CLASS[accent]}`}>
       <div className="flex items-center gap-2.5">
         <Logo size={22} className={`rounded-[6px] ${LOGO_SHADOW_CLASS[accent]}`} />
-        <h1 className="text-[13px] font-bold tracking-wider text-slate-100">
-          {title}
-          <span className={`ml-2 text-[8px] font-medium tracking-[0.2em] ${SUBTITLE_CLASS[accent]}`}>{subtitle}</span>
+        <h1 className="font-mono text-[13px] font-bold tracking-wide text-slate-100">
+          <span className={SUBTITLE_CLASS[accent]}>{BRAND.terminalPrefix}</span>
+          <span className="text-slate-600">//</span>
+          {title.replace(/^LST\/\//, "")}
+          <span className={`ml-2 text-[8px] font-medium tracking-[0.15em] ${SUBTITLE_CLASS[accent]}`}>
+            {subtitle} · v{BRAND.version}
+          </span>
         </h1>
       </div>
       <div className="mx-1 h-4 w-px bg-slate-700" />
@@ -127,12 +132,12 @@ export function DashboardHeader({
           </Link>
         ))}
         {live && (
-          <span className="flex items-center gap-1.5 text-[10px] text-emerald-400">
+          <span className="flex items-center gap-1.5 font-mono text-[10px] text-emerald-400">
             <span className="relative flex h-1.5 w-1.5">
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
               <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400" />
             </span>
-            实时行情
+            实时
           </span>
         )}
         <span className="hidden text-[10px] text-slate-400 md:inline" style={{ fontVariantNumeric: "tabular-nums" }}>

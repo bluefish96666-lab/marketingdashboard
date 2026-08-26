@@ -85,6 +85,23 @@ html.theme-gold {
   --accent-ring: rgba(245, 197, 66, 0.4);
 }
 
+/* GMT 风格终端壳 */
+html.theme-gold .terminal-shell {
+  background: linear-gradient(180deg, #070b12 0%, #060910 100%);
+}
+html.theme-gold .terminal-toolbar,
+html.theme-gold .terminal-status {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+}
+html.theme-gold .terminal-inspector-open main {
+  margin-right: 0;
+}
+@media (min-width: 768px) {
+  html.theme-gold .terminal-shell:has(.terminal-inspector) main {
+    padding-right: 0;
+  }
+}
+
 html.theme-gold .text-cyan-100 { color: #fef3c7 !important; }
 html.theme-gold .text-cyan-200 { color: #fde68a !important; }
 html.theme-gold .text-cyan-300 { color: #fde68a !important; }
