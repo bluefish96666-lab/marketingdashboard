@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Navigate, Routes, Route } from "react-router";
+import { Navigate, Routes, Route, useSearchParams } from "react-router";
 import { TickerTape, type TapeItem } from "@/components/dash/TickerTape";
 import { DashboardHeader } from "@/components/dash/DashboardHeader";
 import { StarHint } from "@/components/dash/StarHint";
@@ -21,6 +21,7 @@ import GoldDashboard from "./GoldDashboard";
 import WatchDashboard from "./WatchDashboard";
 import ProLanding from "./ProLanding";
 import LoginPage from "./pages/LoginPage";
+import HeatmapDemo from "./pages/HeatmapDemo";
 import { hostingEnabled, hostingToken } from "@/lib/hosting";
 import { selfhostEnabled } from "@/lib/selfhost";
 import { HostingContext, useHosting } from "@/lib/hosting-context";
@@ -171,6 +172,8 @@ function Dashboard() {
 function AppRoutes() {
   const hosting = useHosting();
   const selfhost = useSelfhost();
+  const [params] = useSearchParams();
+  if (params.get("demo") === "heatmap") return <HeatmapDemo />;
   return (
     <Routes>
       <Route path="/" element={<Dashboard />} />
@@ -179,6 +182,7 @@ function AppRoutes() {
       <Route path="/goods" element={<GoodsDashboard />} />
       <Route path="/gold" element={<GoldDashboard />} />
       <Route path="/fin" element={<FinDashboard />} />
+      <Route path="/demo/heatmap" element={<Navigate to="/?demo=heatmap" replace />} />
       <Route path="/pro" element={hosting || selfhost ? <Navigate to="/" replace /> : <ProLanding />} />
     </Routes>
   );

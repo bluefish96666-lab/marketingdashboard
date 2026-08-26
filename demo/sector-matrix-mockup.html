@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>方案 B Demo — 板块面板矩阵视图</title>
+<style>
+:root{
+  --bg:#070b12; --panel:#0c1320; --line:#334155; --gold:#f5c542; --gold-dim:#d4a017;
+  --up:#fb7185; --down:#34d399; --fg:#e2e8f0; --dim:#64748b;
+  --mono:'JetBrains Mono','SF Mono',Menlo,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--fg);font-family:system-ui,sans-serif;font-size:12px;padding:16px}
+.badge{display:inline-block;border:1px solid var(--gold);color:var(--gold);font-size:10px;padding:2px 8px;margin-bottom:8px;font-family:var(--mono)}
+h1{font-size:14px;color:var(--gold);font-family:var(--mono);margin-bottom:4px}
+.sub{font-size:11px;color:var(--dim);margin-bottom:12px}
+.panel{border:1px solid var(--line);border-radius:8px;background:var(--panel);overflow:hidden;height:520px;display:flex;flex-direction:column;box-shadow:0 0 32px rgba(0,0,0,.4)}
+.p-head{display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid var(--line);background:linear-gradient(90deg,#0f0d08,#12100a)}
+.p-head h2{font-size:12px;font-weight:600;color:var(--fg)}
+.p-head .right{margin-left:auto;display:flex;gap:6px;align-items:center}
+.chip{border:1px solid var(--line);background:#0a101c;color:var(--dim);font-size:10px;padding:2px 8px;border-radius:4px}
+.chip.on{background:rgba(245,197,66,.15);border-color:var(--gold);color:var(--gold);font-weight:600}
+.search{border:1px solid var(--line);background:#0a101c;color:var(--fg);font-size:10px;padding:2px 6px;border-radius:4px;width:72px}
+.body{flex:1;display:flex;min-height:0}
+.matrix{flex:1;position:relative;background:#000;padding:6px}
+.group{position:absolute;border:1px solid #3a3a3a;background:#050505}
+.gtitle{height:14px;font-size:9px;font-weight:700;color:var(--gold);background:#000;border-bottom:1px solid #292929;padding:0 4px;line-height:14px;white-space:nowrap;overflow:hidden}
+.tile{position:absolute;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:var(--mono);font-size:9px;border:1px solid #000;text-align:center;line-height:1.2}
+.sidebar{width:38%;border-left:1px solid var(--line);display:flex;flex-direction:column;background:#0a101c}
+.sb-head{padding:8px 10px;border-bottom:1px solid var(--line)}
+.sb-head .name{font-size:12px;font-weight:600;color:var(--gold)}
+.sb-head .pct{font-size:12px;font-weight:700;color:var(--up);float:right}
+.row{display:grid;grid-template-columns:1fr 64px 56px;gap:4px;padding:4px 10px;border-bottom:1px solid #1e293b;font-size:11px;align-items:center}
+.row:hover{background:rgba(245,197,66,.06)}
+.row.sel{background:rgba(245,197,66,.12);outline:1px solid rgba(245,197,66,.35)}
+.row .n{color:var(--fg)} .row .c{color:var(--dim);font-size:10px;font-family:var(--mono)}
+.up{color:var(--up)} .down{color:var(--down)}
+.note{margin-top:12px;font-size:10px;color:var(--dim);line-height:1.6;max-width:900px}
+.legend{display:flex;gap:8px;padding:4px 10px;border-top:1px solid var(--line);font-size:9px;color:var(--dim);align-items:center}
+.bar{width:100px;height:8px;border:1px solid #3a3a3a;background:linear-gradient(90deg,#004D30,#141414,#5A1416)}
+</style>
+</head>
+<body>
+<span class="badge">方案 B · MOCKUP</span>
+<h1>市场板块 — 矩阵 / 列表 双视图</h1>
+<p class="sub">在现有 SectorPanel 顶栏增加「矩阵 | 列表」切换；矩阵占主区域，右侧保留成分股侧栏（选中色块联动高亮）</p>
+
+<section class="panel">
+  <header class="p-head">
+    <h2>◈ 市场板块实时热点</h2>
+    <div class="right">
+      <span class="chip on">矩阵</span>
+      <span class="chip">列表</span>
+      <span class="chip">行业</span>
+      <span class="chip">概念</span>
+      <span class="chip">领涨</span>
+      <input class="search" placeholder="搜索板块" value=""/>
+    </div>
+  </header>
+  <div class="body">
+    <div class="matrix" id="m"></div>
+    <aside class="sidebar">
+      <div class="sb-head">
+        <span class="name">AI·算力</span>
+        <span class="pct">+2.14%</span>
+        <div style="clear:both;font-size:10px;color:var(--dim);margin-top:4px">5日 +4.2% · 20日 +8.1%</div>
+      </div>
+      <div class="row sel"><div><div class="n">中际旭创</div><div class="c">300308</div></div><div class="up" style="text-align:right">168.50</div><div class="up" style="text-align:right">+4.82%</div></div>
+      <div class="row"><div><div class="n">寒武纪</div><div class="c">688256</div></div><div class="up" style="text-align:right">612.00</div><div class="up" style="text-align:right">+5.67%</div></div>
+      <div class="row"><div><div class="n">科大讯飞</div><div class="c">002230</div></div><div class="up" style="text-align:right">52.30</div><div class="up" style="text-align:right">+3.21%</div></div>
+      <div class="row"><div><div class="n">海康威视</div><div class="c">002415</div></div><div style="text-align:right">31.50</div><div class="down" style="text-align:right">-0.32%</div></div>
+      <div class="row"><div><div class="n">景嘉微</div><div class="c">300474</div></div><div class="up" style="text-align:right">89.20</div><div class="up" style="text-align:right">+1.88%</div></div>
+      <div style="padding:8px 10px;font-size:9px;color:var(--dim);margin-top:auto">← 点击矩阵色块 · 侧栏同步切换成分股</div>
+    </aside>
+  </div>
+  <div class="legend">
+    <span>-4%</span><span class="bar"></span><span>+4%</span>
+    <span style="margin-left:8px">矩阵模式 · 左：板块热力 · 右：选中板块成分股（现有侧栏逻辑保留）</span>
+  </div>
+</section>
+
+<p class="note">
+  <strong>与方案 A 的区别：</strong>不新增独立面板，而是在「市场板块实时热点」内增加视图切换。
+  列表模式 = 现有左栏榜单 + 右栏成分股；矩阵模式 = 左栏替换为 treemap，右栏逻辑不变。
+  适合希望保留板块轮播/搜索/行业概念 Tab 的用户。
+</p>
+
+<script>
+const data=[
+  {g:'AI·算力',x:0,y:0,w:55,h:58,avg:'+2.14%',tiles:[
+    {c:'300308',p:'+4.8%',pr:'168.5',up:1,x:2,y:16,w:28,h:22},
+    {c:'688256',p:'+5.7%',pr:'612',up:1,x:32,y:16,w:20,h:22},
+    {c:'002230',p:'+3.2%',pr:'52.3',up:1,x:2,y:40,w:18,h:16},
+    {c:'603019',p:'+2.5%',pr:'58.9',up:1,x:22,y:40,w:16,h:16},
+    {c:'002415',p:'-0.3%',pr:'31.5',up:0,x:40,y:40,w:12,h:16},
+  ]},
+  {g:'半导体',x:57,y:0,w:43,h:32,avg:'+1.68%',tiles:[
+    {c:'688981',p:'+2.1%',pr:'52.8',up:1,x:59,y:16,w:22,h:14},
+    {c:'002371',p:'+1.0%',pr:'398',up:1,x:83,y:16,w:15,h:14},
+    {c:'688012',p:'-2.9%',pr:'156',up:-1,x:59,y:32,w:18,h:12},
+  ]},
+  {g:'新能源',x:57,y:34,w:43,h:24,avg:'-0.42%',tiles:[
+    {c:'300750',p:'-1.2%',pr:'198',up:-1,x:59,y:50,w:24,h:12},
+    {c:'002594',p:'+0.9%',pr:'268',up:1,x:85,y:50,w:13,h:12},
+  ]},
+  {g:'银行',x:0,y:60,w:100,h:38,avg:'+0.35%',tiles:[
+    {c:'601398',p:'+0.4%',pr:'5.82',up:1,x:2,y:76,w:30,h:20},
+    {c:'600036',p:'+0.7%',pr:'38.2',up:1,x:34,y:76,w:28,h:20},
+    {c:'601288',p:'+0.3%',pr:'4.95',up:1,x:64,y:76,w:32,h:20},
+  ]},
+];
+const m=document.getElementById('m');
+const W=m.clientWidth,H=m.clientHeight;
+function col(up){if(up>0)return'rgb(180,40,45)';if(up<0)return'rgb(0,120,80)';return'#333'}
+data.forEach(G=>{
+  const el=document.createElement('div');el.className='group';
+  el.style.cssText=`left:${G.x/100*W}px;top:${G.y/100*H}px;width:${G.w/100*W}px;height:${G.h/100*H}px`;
+  el.innerHTML=`<div class="gtitle">${G.g} · 均 ${G.avg}</div>`;
+  G.tiles.forEach(t=>{
+    const d=document.createElement('div');d.className='tile';
+    d.style.cssText=`left:${t.x/100*W}px;top:${t.y/100*H}px;width:${t.w/100*W}px;height:${t.h/100*H}px;background:${col(t.up)};color:#fff`;
+    d.innerHTML=`<b>${t.c.slice(-6)}</b><span>${t.p}</span><span style="opacity:.8;font-size:8px">${t.pr}</span>`;
+    el.appendChild(d);
+  });
+  m.appendChild(el);
+});
+</script>
+</body>
+</html>
