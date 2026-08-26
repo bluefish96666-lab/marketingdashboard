@@ -24,6 +24,7 @@ import LoginPage from "./pages/LoginPage";
 import HeatmapDemo from "./pages/HeatmapDemo";
 import HeatmapDemoV2 from "./pages/HeatmapDemoV2";
 import HeatmapDemoV3 from "./pages/HeatmapDemoV3";
+import GmtFullDemo from "./pages/GmtFullDemo";
 import { hostingEnabled, hostingToken } from "@/lib/hosting";
 import { selfhostEnabled } from "@/lib/selfhost";
 import { HostingContext, useHosting } from "@/lib/hosting-context";
@@ -178,6 +179,7 @@ function AppRoutes() {
   if (params.get("demo") === "heatmap") return <HeatmapDemo />;
   if (params.get("demo") === "heatmap-v2") return <HeatmapDemoV2 />;
   if (params.get("demo") === "heatmap-v3") return <HeatmapDemoV3 />;
+  if (params.get("demo") === "gmt-full") return <GmtFullDemo />;
   return (
     <Routes>
       <Route path="/" element={<Dashboard />} />
@@ -189,6 +191,7 @@ function AppRoutes() {
       <Route path="/demo/heatmap" element={<Navigate to="/?demo=heatmap" replace />} />
       <Route path="/demo/heatmap-v2" element={<Navigate to="/?demo=heatmap-v2" replace />} />
       <Route path="/demo/heatmap-v3" element={<Navigate to="/?demo=heatmap-v3" replace />} />
+      <Route path="/demo/gmt-full" element={<Navigate to="/?demo=gmt-full" replace />} />
       <Route path="/pro" element={hosting || selfhost ? <Navigate to="/" replace /> : <ProLanding />} />
     </Routes>
   );

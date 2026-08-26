@@ -1,4 +1,5 @@
 import { api, type Board, type BoardStock } from "@/lib/api";
+import { CHAINS } from "@/config/dashboard";
 
 export interface HeatStock {
   code: string;
@@ -43,6 +44,42 @@ async function loadBoardGroup(board: Board): Promise<HeatGroup> {
     ? stocks.reduce((a, s) => a + s.pct, 0) / stocks.length
     : board.pct;
   return { id: board.code, name: board.name, avgPct, stocks };
+}
+
+/** GMT 全页 demo：产业链分组（更像 Kimi 的 AI/能源/金融） */
+export async function fetchChainHeatmapGroups(): Promise<HeatGroup[]> {
+  const chainIds = ["llm", "semi", "newenergy", "pharma"] as const;
+  const picked = CHAINS.filter((c) => chainIds.includes(c.id as (typeof chainIds)[number]));
+  const codes = [...new Set(picked.flatMap((c) => c.segments.flatMap((s) => s.stocks.map((st) => st.code))))];
+  let quotes: Awaited<ReturnType<typeof api.quotes>> = {};
+  try {
+    quotes = await api.quotes(codes);
+  } catch {
+    return MOCK_HEAT_GROUPS;
+  }
+  const groups: HeatGroup[] = picked.map((chain) => {
+    const seen = new Set<string>();
+    const stocks: HeatStock[] = [];
+    for (const seg of chain.segments) {
+      for (const st of seg.stocks) {
+        if (seen.has(st.code)) continue;
+        seen.add(st.code);
+        const q = quotes[st.code];
+        if (!q || !q.price) continue;
+        stocks.push({
+          code: st.code.replace(/^(sh|sz)/i, ""),
+          name: st.name,
+          pct: q.pct,
+          price: q.price,
+          circMv: Math.max(q.amount ? q.amount / 10000 : 100, 50),
+          amount: (q.amount ?? 0) * 10000,
+        });
+      }
+    }
+    const avgPct = stocks.length ? stocks.reduce((a, s) => a + s.pct, 0) / stocks.length : 0;
+    return { id: chain.id, name: chain.name, avgPct, stocks };
+  });
+  return groups.filter((g) => g.stocks.length > 0);
 }
 
 /** 拉取领涨行业 Top N 板块 + 成分股(方案 A demo 数据源) */
