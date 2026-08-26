@@ -18,6 +18,7 @@ export default defineConfig({
   },
   server: {
     port: 3000,
+    strictPort: true,
     proxy: {
       // 后端数据代理见 server/index.cjs(开发时由 `npm run dev` 自动以 PORT=3001 启动)
       "/api": {

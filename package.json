@@ -9,6 +9,7 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "start": "node server/index.cjs",
+    "demo:gmt": "npm run build && node -e \"console.log('\\n  GMT demo → http://localhost:3000/?demo=gmt-full\\n  (需先释放 3000 端口; Ctrl+C 停止)\\n')\" && SELFHOST=1 npm start",
     "test": "vitest run && node --test server/*.test.cjs"
   },
   "dependencies": {

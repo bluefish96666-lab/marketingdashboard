@@ -1,5 +1,4 @@
-/** GMT 全页终端样式 */
-@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&display=swap");
+/** GMT 全页终端样式 — 使用系统 monospace，避免 CSP 拦截 Google Fonts */
 
 .gmt-terminal {
   --gmt-bg: #000;

@@ -175,11 +175,6 @@ function Dashboard() {
 function AppRoutes() {
   const hosting = useHosting();
   const selfhost = useSelfhost();
-  const [params] = useSearchParams();
-  if (params.get("demo") === "heatmap") return <HeatmapDemo />;
-  if (params.get("demo") === "heatmap-v2") return <HeatmapDemoV2 />;
-  if (params.get("demo") === "heatmap-v3") return <HeatmapDemoV3 />;
-  if (params.get("demo") === "gmt-full") return <GmtFullDemo />;
   return (
     <Routes>
       <Route path="/" element={<Dashboard />} />
@@ -198,6 +193,12 @@ function AppRoutes() {
 }
 
 export default function App() {
+  const [params] = useSearchParams();
+  const demo = params.get("demo");
+  if (demo === "heatmap") return <HeatmapDemo />;
+  if (demo === "heatmap-v2") return <HeatmapDemoV2 />;
+  if (demo === "heatmap-v3") return <HeatmapDemoV3 />;
+  if (demo === "gmt-full") return <GmtFullDemo />;
   return (
     <HostingGate>
       <AppRoutes />
