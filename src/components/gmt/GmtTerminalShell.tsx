@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router";
 import { useSharedPolling } from "@/hooks/useSharedPolling";
 import { useQuotes } from "@/lib/market";
 import { api } from "@/lib/api";
@@ -7,10 +6,17 @@ import { INDICES, FOREX, COMMODITIES } from "@/config/dashboard";
 import { POLL } from "@/lib/intervals";
 import { clsChg, fmtPct, fmtPrice } from "@/lib/format";
 import { BRAND } from "@/config/branding";
+import { useUiModeContext } from "@/lib/ui-mode-context";
+import { detectBackend, onBackendChange, selfhostSyncKey, setSelfhostSyncKey, syncBackend, type SyncBackend } from "@/lib/layout-sync";
+import { ModeToggle } from "@/components/ModeToggle";
 import { GMT_PRESETS, GMT_WIDGET_META, WIDGET_IDS, useGmtDemo } from "./gmt-context";
 import { GmtGrid } from "./GmtGrid";
 import { GmtInspector } from "./GmtInspector";
 import { GmtStatusWidget } from "./widgets/GmtStatusWidget";
+import "@fontsource/ibm-plex-mono/400.css";
+import "@fontsource/ibm-plex-mono/500.css";
+import "@fontsource/ibm-plex-mono/600.css";
+import "@fontsource/ibm-plex-mono/700.css";
 import "./gmt-terminal.css";
 
 function useClock() {
@@ -160,7 +166,7 @@ function GmtHelp() {
       <p style={{ marginTop: 10 }}>
         <b style={{ color: "var(--gmt-amber)" }}>编辑布局 [E]</b>：拖标题移动 · 拖右下角缩放 · ▲▼ 上下移一行 · 🔓 锁定 · — 最小化 · ⤢ 放大 · ✕ 关闭；重叠时其它组件自动下推；布局与预设保存在本机。
       </p>
-      <p className="note">[F1] / [?] 帮助 · [E] 编辑 · [D] 数据源 · [I] 检查器 · [Esc] 关闭浮层 / 退出编辑 / 还原放大</p>
+      <p className="note">[F1] / [?] 帮助 · [E] 编辑 · [D] 数据源 · [I] 检查器 · [S] 同步 · [T] 经典看板 · [Esc] 关闭浮层 / 退出编辑 / 还原放大</p>
     </Overlay>
   );
 }
@@ -178,9 +184,66 @@ function GmtData() {
   );
 }
 
+function useSyncBackend(): SyncBackend {
+  const [b, setB] = useState<SyncBackend>(syncBackend());
+  useEffect(() => {
+    void detectBackend().then(setB);
+    return onBackendChange(setB);
+  }, []);
+  return b;
+}
+
+const BACKEND_LABEL: Record<SyncBackend, string> = { hosting: "账号同步", selfhost: "VPS 同步", local: "仅本机" };
+
+/** [S] 同步设置：自部署密钥录入 + 当前后端状态 */
+function GmtSync({ onClose }: { onClose: () => void }) {
+  const backend = useSyncBackend();
+  const [key, setKey] = useState(() => selfhostSyncKey());
+  const [msg, setMsg] = useState("");
+  const save = async () => {
+    setSelfhostSyncKey(key.trim());
+    const b = await detectBackend();
+    setMsg(b === "selfhost" ? "已连接 VPS 同步，布局 / 自选 / 形态偏好将跨设备同步。" : b === "hosting" ? "当前为托管账号同步。" : key.trim() ? "连接失败：密钥不匹配或服务端未配置 SELFHOST_SYNC_KEY。" : "已清除密钥，退回仅本机保存。");
+  };
+  return (
+    <Overlay title="同步设置" onClose={onClose}>
+      <table className="gmt-kv">
+        <tbody>
+          <tr>
+            <td>当前后端</td>
+            <td>
+              <b style={{ color: backend === "local" ? "var(--gmt-dim)" : "var(--gmt-cyan)" }}>{BACKEND_LABEL[backend]}</b>
+            </td>
+          </tr>
+          <tr>
+            <td>同步内容</td>
+            <td>GMT 布局与预设 · 经典面板缩放 · 自选股 · 经典/终端形态偏好</td>
+          </tr>
+        </tbody>
+      </table>
+      {backend !== "hosting" && (
+        <>
+          <p style={{ marginTop: 10, color: "var(--gmt-dim)" }}>自部署实例：在服务器 <code>server/.env</code> 设置 <code>SELFHOST_SYNC_KEY=…</code> 后，在每台设备填同一密钥；或打开 <code>/?mode=gmt&amp;syncKey=…</code> 一次自动录入。</p>
+          <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+            <input type="password" className="gmt-search" style={{ margin: 0, flex: 1, width: "auto" }} value={key} onChange={(e) => setKey(e.target.value)} placeholder="SELFHOST_SYNC_KEY" aria-label="同步密钥" />
+            <button type="button" className="gmt-tb-btn on" onClick={save}>
+              连接
+            </button>
+          </div>
+          {msg && <p className="note">{msg}</p>}
+        </>
+      )}
+      <p className="note">密钥只存本机浏览器；服务端文件 server/data/selfhost-layout.json（gitignore）。</p>
+    </Overlay>
+  );
+}
+
 /** 全页 GMT 终端 shell：命令栏 + 行情带 + 工具栏 + grid + 检查器（对齐 Kimi K3 v2.2） */
 export function GmtTerminalShell() {
   const { editMode, setEditMode, preset, applyPreset, resetLayout, setHelpOpen, setDataOpen, inspectorOpen, setInspectorOpen, setZoomed, sources } = useGmtDemo();
+  const { setMode } = useUiModeContext();
+  const [syncOpen, setSyncOpen] = useState(false);
+  const backend = useSyncBackend();
   const now = useClock();
 
   useEffect(() => {
@@ -194,16 +257,19 @@ export function GmtTerminalShell() {
       if (e.key === "e" || e.key === "E") setEditMode((v) => !v);
       if (e.key === "d" || e.key === "D") setDataOpen((v) => !v);
       if (e.key === "i" || e.key === "I") setInspectorOpen((v) => !v);
+      if (e.key === "s" || e.key === "S") setSyncOpen((v) => !v);
+      if (e.key === "t" || e.key === "T") setMode("classic");
       if (e.key === "Escape") {
         setHelpOpen(false);
         setDataOpen(false);
+        setSyncOpen(false);
         setEditMode(false);
         setZoomed(null);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [setEditMode, setHelpOpen, setDataOpen, setInspectorOpen, setZoomed]);
+  }, [setEditMode, setHelpOpen, setDataOpen, setInspectorOpen, setZoomed, setMode]);
 
   useEffect(() => {
     document.body.classList.toggle("gmt-editing", editMode);
@@ -223,15 +289,19 @@ export function GmtTerminalShell() {
           <span className="logo">
             GMT<b>//</b>{BRAND.title}
           </span>
-          <span className="ver">v4 · K3</span>
+          <span className="ver">v{BRAND.version}</span>
         </span>
         <div className="cmd-mid">
           <button type="button" className="gmt-cmd-btn" onClick={() => setHelpOpen(true)}>[F1] 帮助</button>
           <button type="button" className={`gmt-cmd-btn${editMode ? " on" : ""}`} onClick={() => setEditMode((v) => !v)}>[E] 编辑</button>
           <button type="button" className="gmt-cmd-btn" onClick={() => setDataOpen(true)}>[D] 数据</button>
           <button type="button" className={`gmt-cmd-btn${inspectorOpen ? " on" : ""}`} onClick={() => setInspectorOpen((v) => !v)}>[I] 检查</button>
+          <button type="button" className={`gmt-cmd-btn${backend !== "local" ? " on" : ""}`} onClick={() => setSyncOpen(true)} title={BACKEND_LABEL[backend]}>
+            [S] 同步{backend !== "local" ? " ●" : ""}
+          </button>
         </div>
         <div className="cmd-right">
+          <ModeToggle variant="gmt" />
           <span className="gmt-mode-badge">实时行情</span>
           <span className="gmt-conn" style={{ color: live ? "#003a1c" : stats.length ? "#3a0000" : "#222" }}>{conn}</span>
           <span className="gmt-clock">{clock}</span>
@@ -266,10 +336,11 @@ export function GmtTerminalShell() {
       <GmtInspector />
       <GmtHelp />
       <GmtData />
+      {syncOpen && <GmtSync onClose={() => setSyncOpen(false)} />}
 
-      <Link to="/" className="gmt-back-link">
-        ← 返回主看板
-      </Link>
+      <button type="button" className="gmt-back-link" onClick={() => setMode("classic")}>
+        ← 经典看板 [T]
+      </button>
     </div>
   );
 }

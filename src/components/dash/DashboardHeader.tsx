@@ -64,7 +64,10 @@ export function DashboardHeader({
   githubUrl,
   isFullscreen,
   onToggleFullscreen,
+  leading,
 }: {
+  /** 导航链接前的自定义插槽(如 经典|终端 切换) */
+  leading?: React.ReactNode;
   title: string;
   subtitle: string;
   accent: Accent;
@@ -120,6 +123,7 @@ export function DashboardHeader({
         <span>{tagline}</span>
       </div>
       <div className="ml-auto flex items-center gap-3">
+        {leading}
         {(links ?? [{ to: linkTo, label: linkLabel }]).map((l, i) => (
           <Link
             key={l.to}

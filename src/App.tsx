@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { Navigate, Routes, Route, useSearchParams } from "react-router";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+import { Navigate, Routes, Route } from "react-router";
 import { TickerTape, type TapeItem } from "@/components/dash/TickerTape";
 import { DashboardHeader } from "@/components/dash/DashboardHeader";
 import { StarHint } from "@/components/dash/StarHint";
@@ -21,11 +21,10 @@ import GoldDashboard from "./GoldDashboard";
 import WatchDashboard from "./WatchDashboard";
 import ProLanding from "./ProLanding";
 import LoginPage from "./pages/LoginPage";
-import HeatmapDemo from "./pages/HeatmapDemo";
-import HeatmapDemoV2 from "./pages/HeatmapDemoV2";
-import HeatmapDemoV3 from "./pages/HeatmapDemoV3";
-import GmtFullDemo from "./pages/GmtFullDemo";
 import { hostingEnabled, hostingToken } from "@/lib/hosting";
+import { useUiMode } from "@/lib/ui-mode";
+import { UiModeContext } from "@/lib/ui-mode-context";
+import { ModeToggle } from "@/components/ModeToggle";
 import { selfhostEnabled } from "@/lib/selfhost";
 import { HostingContext, useHosting } from "@/lib/hosting-context";
 import { SelfhostContext, useSelfhost } from "@/lib/selfhost-context";
@@ -44,6 +43,9 @@ import { TerminalHelp } from "@/components/terminal/TerminalHelp";
 import { TerminalInspector } from "@/components/terminal/TerminalInspector";
 import { TerminalStatusBar } from "@/components/terminal/TerminalStatusBar";
 import { isTv } from "@/lib/tv";
+
+// GMT 终端整包懒加载：经典用户首屏不下载终端代码与字体
+const GmtTerminal = lazy(() => import("./pages/GmtTerminal"));
 
 function Tape() {
   const codes = useMemo(() => [...INDICES.map((i) => i.code), ...FOREX.map((i) => i.code)], []);
@@ -130,7 +132,7 @@ function Dashboard() {
   const hosting = useHosting();
   const selfhost = useSelfhost();
   const links = useMemo(() => {
-    const extra = [{ to: "/?demo=gmt-full", label: "GMT 终端" }, ...(hosting || selfhost ? [] : [{ to: "/pro", label: "Pro" }])];
+    const extra = hosting || selfhost ? [] : [{ to: "/pro", label: "Pro" }];
     return pageLinks("/", extra);
   }, [hosting, selfhost]);
 
@@ -146,6 +148,7 @@ function Dashboard() {
           linkTo="/ai"
           linkLabel="AI 观察"
           links={links}
+          leading={<ModeToggle variant="classic" />}
           live
           githubUrl={selfhost ? undefined : "https://github.com/theBigGavin/marketingdashboard"}
           isFullscreen={isFullscreen}
@@ -172,33 +175,42 @@ function Dashboard() {
 /** 托管模式上下文: HostingGate 探测结果(enabled) 复用同一次探测, 供 Dashboard/路由消费
  *  (定义在 src/lib/hosting-context.ts, 独立模块避免 AiDashboard ↔ App 循环依赖) */
 
+/** 首页形态门：经典看板 | GMT 终端（?mode= → 服务端偏好 → 本机 → 默认） */
+function ModeGate() {
+  const [mode, setMode] = useUiMode();
+  const ctx = useMemo(() => ({ mode, setMode }), [mode, setMode]);
+  return (
+    <UiModeContext.Provider value={ctx}>
+      {mode === "gmt" ? (
+        <Suspense fallback={<div className="flex min-h-screen items-center justify-center bg-black font-mono text-[11px] text-[#8a8a8a]">GMT 终端加载中…</div>}>
+          <GmtTerminal />
+        </Suspense>
+      ) : (
+        <Dashboard />
+      )}
+    </UiModeContext.Provider>
+  );
+}
+
 function AppRoutes() {
   const hosting = useHosting();
   const selfhost = useSelfhost();
   return (
     <Routes>
-      <Route path="/" element={<Dashboard />} />
+      <Route path="/" element={<ModeGate />} />
       <Route path="/watch" element={<WatchDashboard />} />
       <Route path="/ai" element={<AiDashboard />} />
       <Route path="/goods" element={<GoodsDashboard />} />
       <Route path="/gold" element={<GoldDashboard />} />
       <Route path="/fin" element={<FinDashboard />} />
-      <Route path="/demo/heatmap" element={<Navigate to="/?demo=heatmap" replace />} />
-      <Route path="/demo/heatmap-v2" element={<Navigate to="/?demo=heatmap-v2" replace />} />
-      <Route path="/demo/heatmap-v3" element={<Navigate to="/?demo=heatmap-v3" replace />} />
-      <Route path="/demo/gmt-full" element={<Navigate to="/?demo=gmt-full" replace />} />
+      <Route path="/terminal" element={<Navigate to="/?mode=gmt" replace />} />
+      <Route path="/demo/gmt-full" element={<Navigate to="/?mode=gmt" replace />} />
       <Route path="/pro" element={hosting || selfhost ? <Navigate to="/" replace /> : <ProLanding />} />
     </Routes>
   );
 }
 
 export default function App() {
-  const [params] = useSearchParams();
-  const demo = params.get("demo");
-  if (demo === "heatmap") return <HeatmapDemo />;
-  if (demo === "heatmap-v2") return <HeatmapDemoV2 />;
-  if (demo === "heatmap-v3") return <HeatmapDemoV3 />;
-  if (demo === "gmt-full") return <GmtFullDemo />;
   return (
     <HostingGate>
       <AppRoutes />

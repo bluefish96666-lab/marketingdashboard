@@ -1,8 +1,8 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import type { HeatGroup, HeatStock, MoversFilter, AreaMode } from "@/lib/heatmap-data";
 import { MOCK_HEAT_GROUPS } from "@/lib/heatmap-data";
 import type { NewsItem } from "@/lib/api";
-import { loadJson, saveJson } from "@/lib/storage";
+import { readCached, readRemote, write } from "@/lib/layout-sync";
 
 export type GmtPreset = "GLOBAL" | "EQUITIES" | "METALS" | "NEWS";
 export const GMT_PRESETS: { id: GmtPreset; label: string }[] = [
@@ -92,8 +92,14 @@ interface GmtCtx {
 
 const GmtContext = createContext<GmtCtx | null>(null);
 
-const LAYOUT_KEY = "gmt.layout.v3";
-const PRESET_KEY = "gmt.preset.v3";
+/** 同步层 key：整份 GMT 偏好一个 key，服务端按 key merge，last-write-wins 看 updatedAt */
+const SYNC_KEY = "gmt.v1";
+
+interface GmtPersist {
+  preset: GmtPreset;
+  layout: Partial<Record<WidgetId, WidgetLayoutItem>>;
+  updatedAt: number;
+}
 
 export const DEFAULT_GMT_LAYOUT: Record<WidgetId, WidgetLayoutItem> = {
   heatmap: { x: 0, y: 0, w: 8, h: 6, visible: true },
@@ -181,12 +187,16 @@ function resolveCollisions(layout: Record<WidgetId, WidgetLayoutItem>, movedId: 
   return next;
 }
 
-function loadLayout(): Record<WidgetId, WidgetLayoutItem> {
-  const saved = loadJson<Partial<Record<WidgetId, WidgetLayoutItem>> | null>(LAYOUT_KEY, null);
+function mergeLayout(saved: Partial<Record<WidgetId, WidgetLayoutItem>> | null | undefined): Record<WidgetId, WidgetLayoutItem> {
   if (!saved) return DEFAULT_GMT_LAYOUT;
   const out = { ...DEFAULT_GMT_LAYOUT };
   for (const id of WIDGET_IDS) if (saved[id]) out[id] = clampItem({ ...out[id], ...saved[id]! });
   return out;
+}
+
+function loadPersist(): GmtPersist | null {
+  const p = readCached<GmtPersist | null>(SYNC_KEY, null);
+  return p && typeof p === "object" ? p : null;
 }
 
 export function GmtDemoProvider({ children }: { children: ReactNode }) {
@@ -201,15 +211,39 @@ export function GmtDemoProvider({ children }: { children: ReactNode }) {
   const [helpOpen, setHelpOpen] = useState(false);
   const [dataOpen, setDataOpen] = useState(false);
   const [editMode, setEditMode] = useState(false);
-  const [preset, setPreset] = useState<GmtPreset>(() => loadJson<GmtPreset>(PRESET_KEY, "GLOBAL"));
-  const [layout, setLayout] = useState(loadLayout);
+  const [preset, setPreset] = useState<GmtPreset>(() => loadPersist()?.preset ?? "GLOBAL");
+  const [layout, setLayout] = useState(() => mergeLayout(loadPersist()?.layout));
   const [focused, setFocused] = useState<WidgetId | null>(null);
   const [zoomed, setZoomed] = useState<WidgetId | null>(null);
   const [tapePaused, setTapePaused] = useState(false);
   const [sources, setSources] = useState<Record<string, SourceStat>>({});
 
-  useEffect(() => saveJson(LAYOUT_KEY, layout), [layout]);
-  useEffect(() => saveJson(PRESET_KEY, preset), [preset]);
+  // 持久化：本机秒开 → 服务端更新的值覆盖 → 用户改动 debounce 写回（首个渲染与远端回填不写）
+  const skipWriteRef = useRef(true);
+  const updatedAtRef = useRef<number>(loadPersist()?.updatedAt ?? 0);
+  useEffect(() => {
+    let alive = true;
+    readRemote<GmtPersist>(SYNC_KEY).then((remote) => {
+      if (!alive || !remote?.layout) return;
+      if ((remote.updatedAt ?? 0) <= updatedAtRef.current) return;
+      skipWriteRef.current = true;
+      updatedAtRef.current = remote.updatedAt ?? 0;
+      setPreset(remote.preset ?? "GLOBAL");
+      setLayout(mergeLayout(remote.layout));
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+  useEffect(() => {
+    if (skipWriteRef.current) {
+      skipWriteRef.current = false;
+      return;
+    }
+    const now = Date.now();
+    updatedAtRef.current = now;
+    write<GmtPersist>(SYNC_KEY, { preset, layout, updatedAt: now });
+  }, [layout, preset]);
 
   const flatStocks = useMemo(() => groups.flatMap((g) => g.stocks), [groups]);
 
