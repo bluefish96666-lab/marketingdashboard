@@ -1,124 +1,93 @@
 import { clsChg, fmtPct, fmtPrice, fmtTime, fmtYuan } from "@/lib/format";
 import { tileLabel } from "@/components/dash/heatmap/heatmap-shared";
-import { useGmtDemo } from "./gmt-context";
+import { useGmtDemo, type GmtInspectTarget } from "./gmt-context";
 
-/** 右侧固定检查器 */
+function KV({ rows }: { rows: [string, string][] }) {
+  return (
+    <table className="gmt-kv">
+      <tbody>
+        {rows.map(([k, v]) => (
+          <tr key={k}>
+            <td>{k}</td>
+            <td>{v}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+function asOfNow(): string {
+  return `${new Date().toLocaleTimeString("zh-CN", { hour12: false, timeZone: "Asia/Shanghai" })}（北京 CST）`;
+}
+
+function Body({ t }: { t: GmtInspectTarget }) {
+  if (t.type === "stock" && t.stock) {
+    const s = t.stock;
+    return (
+      <>
+        <div className="gmt-insp-name">{s.name} · {tileLabel(s.code)}</div>
+        <div className="gmt-insp-sub">A 股 · 流通市值 {s.circMv.toFixed(0)} 亿（成交额÷换手率反推）</div>
+        <div className="gmt-insp-big">
+          {fmtPrice(s.price)} <span className={clsChg(s.pct)} style={{ fontSize: 13 }}>{fmtPct(s.pct)}</span>
+        </div>
+        <KV rows={[["成交额", fmtYuan(s.amount)], ["代码", s.code], ["来源", "腾讯行情 /api/quotes"], ["口径", "日涨跌幅 · 面积=流通市值/成交额"], ["as-of", asOfNow()]]} />
+      </>
+    );
+  }
+  if (t.type === "news" && t.news) {
+    const n = t.news;
+    return (
+      <>
+        <div className="gmt-insp-name">{n.title || "快讯"}</div>
+        <div className="gmt-insp-sub">{fmtTime(n.time)} · 华尔街见闻 7×24</div>
+        <p style={{ lineHeight: 1.6, margin: "8px 0" }}>{n.content}</p>
+        <KV rows={[["来源", "/api/news · WSCN live"], ["ID", String(n.id)], ["时间", n.time]]} />
+      </>
+    );
+  }
+  return (
+    <>
+      <div className="gmt-insp-name">{t.label ?? "—"}</div>
+      <div className="gmt-insp-sub">{t.type === "index" ? "指数 / 汇率" : t.type === "metal" ? "贵金属期货" : "市场 / 口径"}</div>
+      {t.price != null && (
+        <div className="gmt-insp-big">
+          {fmtPrice(t.price)} {t.pct != null && <span className={clsChg(t.pct)} style={{ fontSize: 13 }}>{fmtPct(t.pct)}</span>}
+        </div>
+      )}
+      {t.price == null && t.pct != null && (
+        <div className={`gmt-insp-big ${clsChg(t.pct)}`}>{fmtPct(t.pct)}</div>
+      )}
+      <KV rows={[...(t.rows ?? []), ["as-of", asOfNow()]]} />
+    </>
+  );
+}
+
+/** 右侧固定检查器（K3：▣ 数据 / 来源检查器） */
 export function GmtInspector() {
   const { inspect, inspectorOpen, setInspectorOpen, setInspect } = useGmtDemo();
-
   const close = () => {
     setInspectorOpen(false);
     setInspect(null);
   };
-
   return (
     <aside className="gmt-inspector" hidden={!inspectorOpen}>
       <div className="gmt-insp-head">
-        <span>▣ DATA INSPECTOR</span>
-        <button type="button" onClick={close} aria-label="关闭">
-          ✕
-        </button>
+        <span>▣ 数据 / 来源检查器</span>
+        <button type="button" onClick={close} aria-label="关闭">✕</button>
       </div>
       <div className="gmt-insp-body">
-        {!inspect ? (
-          <p className="gmt-insp-empty">
-            点击热力图个股或快讯条目，在此查看详情与数据来源。
-            <br />
-            <br />
-            快捷键：[I] 切换检查器 · [F1] 帮助
-          </p>
-        ) : inspect.type === "stock" && inspect.stock ? (
-          <StockDetail stock={inspect.stock} />
-        ) : inspect.type === "news" && inspect.news ? (
-          <NewsDetail news={inspect.news} />
-        ) : inspect.type === "index" ? (
-          <>
-            <div className="gmt-insp-name">{inspect.indexLabel}</div>
-            <div className="gmt-insp-sub">指数 / 汇率 · 统一报价中心</div>
-            <div className="gmt-insp-big">
-              {fmtPrice(inspect.indexPrice ?? 0)}{" "}
-              <span className={clsChg(inspect.indexPct ?? 0)} style={{ fontSize: 13 }}>
-                {fmtPct(inspect.indexPct ?? 0)}
-              </span>
-            </div>
-            <table className="gmt-kv">
-              <tbody>
-                <tr>
-                  <td>数据来源</td>
-                  <td>腾讯行情 · /api/quotes</td>
-                </tr>
-                <tr>
-                  <td>刷新</td>
-                  <td>5s（与行情带同帧）</td>
-                </tr>
-              </tbody>
-            </table>
-          </>
+        {inspect ? (
+          <Body t={inspect} />
         ) : (
-          <p className="gmt-insp-empty">无详情</p>
+          <p className="gmt-insp-empty">
+            点击任意股票色块、行情带、新闻、板块条、金属卡或市场行，查看其数值、来源、口径与 as-of 时刻。
+            <br />
+            <br />
+            快捷键：[I] 切换检查器 · [D] 数据源 · [F1] 帮助
+          </p>
         )}
       </div>
     </aside>
-  );
-}
-
-function StockDetail({ stock }: { stock: NonNullable<ReturnType<typeof useGmtDemo>["inspect"]>["stock"] }) {
-  if (!stock) return null;
-  return (
-    <>
-      <div className="gmt-insp-name">
-        {stock.name} · {tileLabel(stock.code)}
-      </div>
-      <div className="gmt-insp-sub">A股 · 流通市值 {stock.circMv.toFixed(0)} 亿</div>
-      <div className="gmt-insp-big">
-        {fmtPrice(stock.price)}{" "}
-        <span className={clsChg(stock.pct)} style={{ fontSize: 13 }}>
-          {fmtPct(stock.pct)}
-        </span>
-      </div>
-      <table className="gmt-kv">
-        <tbody>
-          <tr>
-            <td>成交额</td>
-            <td>{fmtYuan(stock.amount)}</td>
-          </tr>
-          <tr>
-            <td>代码</td>
-            <td>{stock.code}</td>
-          </tr>
-          <tr>
-            <td>数据来源</td>
-            <td>腾讯行情 · 产业链分组</td>
-          </tr>
-          <tr>
-            <td>口径</td>
-            <td>流通市值 · 日涨跌幅</td>
-          </tr>
-        </tbody>
-      </table>
-    </>
-  );
-}
-
-function NewsDetail({ news }: { news: NonNullable<ReturnType<typeof useGmtDemo>["inspect"]>["news"] }) {
-  if (!news) return null;
-  return (
-    <>
-      <div className="gmt-insp-name">{news.title || "快讯"}</div>
-      <div className="gmt-insp-sub">{fmtTime(news.time)} · 华尔街见闻</div>
-      <p style={{ lineHeight: 1.55, marginTop: 8 }}>{news.content}</p>
-      <table className="gmt-kv">
-        <tbody>
-          <tr>
-            <td>来源</td>
-            <td>/api/news · WSCN</td>
-          </tr>
-          <tr>
-            <td>ID</td>
-            <td>{news.id}</td>
-          </tr>
-        </tbody>
-      </table>
-    </>
   );
 }

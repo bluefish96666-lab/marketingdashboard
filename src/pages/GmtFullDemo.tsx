@@ -31,9 +31,11 @@ function GmtDataLoader() {
 
 function GmtFullDemoInner() {
   useEffect(() => {
-    document.title = "GMT 全页终端 · Preview V4";
+    document.title = "GMT//老孙的交易台 · 终端";
+    document.body.classList.add("gmt-active");
     return () => {
       document.title = "老孙的交易台";
+      document.body.classList.remove("gmt-active");
     };
   }, []);
 

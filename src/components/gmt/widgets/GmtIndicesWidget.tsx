@@ -1,40 +1,86 @@
-import { useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuotes } from "@/lib/market";
 import { INDICES, FOREX } from "@/config/dashboard";
 import { clsChg, fmtPct, fmtPrice } from "@/lib/format";
+import { EXCHANGES, STATUS_LABEL, sessionOf } from "../gmt-sessions";
 import { useGmtDemo } from "../gmt-context";
 
 const DEFS = [...INDICES, ...FOREX];
 const CODES = DEFS.map((d) => d.code);
+const REGIONS: { key: string; title: string; regions: string[]; ex?: string }[] = [
+  { key: "us", title: "美洲", regions: ["US"], ex: "NYSE" },
+  { key: "hk", title: "亚太 · 港股", regions: ["HK"], ex: "HKEX" },
+  { key: "cn", title: "亚太 · A 股", regions: ["CN"], ex: "SSE" },
+  { key: "fx", title: "汇率", regions: ["FX"] },
+];
 
-/** 06 — 全球指数（复用统一报价中心，与行情带同帧） */
+/** 08 — 全球指数一览：按地区分组 + 交易时段徽标（复用统一报价中心） */
 export function GmtIndicesWidget() {
   const quotes = useQuotes(CODES);
-  const { setInspect, setInspectorOpen, reportSource } = useGmtDemo();
-  const n = quotes ? Object.keys(quotes).length : 0;
-
+  const { openInspect, reportSource } = useGmtDemo();
+  const [now, setNow] = useState(() => new Date());
   useEffect(() => {
-    reportSource("quotes", "腾讯报价 · 指数/汇率", n > 0, n);
+    const t = window.setInterval(() => setNow(new Date()), 30000);
+    return () => window.clearInterval(t);
+  }, []);
+  const n = quotes ? Object.keys(quotes).length : 0;
+  useEffect(() => {
+    if (n > 0) reportSource("quotes", "指数/汇率 · 统一报价中心", true, n);
   }, [n, reportSource]);
+
+  const statusOf = useMemo(() => {
+    const map: Record<string, { status: string; label: string }> = {};
+    for (const r of REGIONS) {
+      const ex = EXCHANGES.find((e) => e.code === r.ex);
+      if (!ex) {
+        map[r.key] = { status: "OPEN", label: "24h" };
+        continue;
+      }
+      const s = sessionOf(ex, now);
+      map[r.key] = { status: s.status, label: STATUS_LABEL[s.status] };
+    }
+    return map;
+  }, [now]);
 
   return (
     <div className="gmt-rows">
-      {DEFS.map((d) => {
-        const q = quotes?.[d.code];
+      {REGIONS.map((r) => {
+        const defs = DEFS.filter((d) => r.regions.includes(d.region));
+        const st = statusOf[r.key];
         return (
-          <button
-            key={d.code}
-            type="button"
-            className="gmt-row"
-            onClick={() =>
-              q && (setInspect({ type: "index", indexLabel: d.label, indexPrice: q.price, indexPct: q.pct }), setInspectorOpen(true))
-            }
-          >
-            <span className="gmt-row-tag">{d.region}</span>
-            <span className="gmt-row-name">{d.label}</span>
-            <span className="gmt-row-num">{q ? fmtPrice(q.price) : "—"}</span>
-            <span className={`gmt-row-num ${q ? clsChg(q.pct) : "gmt-flat"}`}>{q ? fmtPct(q.pct) : "—"}</span>
-          </button>
+          <div key={r.key}>
+            <div className="gmt-ix-region">
+              {r.title} <span className={`gmt-badge ${st.status}`} style={{ marginLeft: 6 }}>{st.label}</span>
+            </div>
+            <table className="gmt-ix-table">
+              <tbody>
+                {defs.map((d) => {
+                  const q = quotes?.[d.code];
+                  return (
+                    <tr
+                      key={d.code}
+                      onClick={() =>
+                        q &&
+                        openInspect({
+                          type: "index",
+                          label: d.label,
+                          price: q.price,
+                          pct: q.pct,
+                          rows: [["代码", d.code], ["市场状态", st.label], ["来源", "腾讯行情 · 统一报价中心 5s"]],
+                        })
+                      }
+                    >
+                      <td>
+                        {d.label} <span style={{ color: "var(--gmt-faint)" }}>{d.code.replace(/^(sh|sz|hk|us|wh)/, "").toUpperCase()}</span>
+                      </td>
+                      <td className="r">{q ? fmtPrice(q.price) : "—"}</td>
+                      <td className={`r ${q ? clsChg(q.pct) : "gmt-flat"}`}>{q ? fmtPct(q.pct) : "—"}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         );
       })}
     </div>

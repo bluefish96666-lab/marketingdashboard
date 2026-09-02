@@ -6,7 +6,7 @@ import { clsChg, fmtPct, fmtPrice, fmtYuan } from "@/lib/format";
 import { tileLabel } from "@/components/dash/heatmap/heatmap-shared";
 import { useGmtDemo } from "../gmt-context";
 
-/** 07 — 主力净流入 TOP15（东财口径），点击个股联动 04 分时 + 检查器 */
+/** 10 — 主力净流入 TOP15（东财口径，A 股特色），点击个股联动 04 分时 + 检查器 */
 export function GmtFlowWidget() {
   const { selectStock, reportSource } = useGmtDemo();
   const { data, error } = usePolling(() => api.moneyflow(15), POLL.MONEYFLOW, []);

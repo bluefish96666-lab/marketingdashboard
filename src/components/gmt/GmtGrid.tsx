@@ -6,13 +6,16 @@ import { GmtBreadthWidget } from "./widgets/GmtBreadthWidget";
 import { GmtNewsWidget } from "./widgets/GmtNewsWidget";
 import { GmtChartWidget } from "./widgets/GmtChartWidget";
 import { GmtSectorWidget } from "./widgets/GmtSectorWidget";
+import { GmtMetalsWidget } from "./widgets/GmtMetalsWidget";
+import { GmtPulseWidget } from "./widgets/GmtPulseWidget";
 import { GmtIndicesWidget } from "./widgets/GmtIndicesWidget";
-import { GmtFlowWidget } from "./widgets/GmtFlowWidget";
-import { GmtMacroWidget } from "./widgets/GmtMacroWidget";
 import { GmtStatusWidget } from "./widgets/GmtStatusWidget";
+import { GmtFlowWidget } from "./widgets/GmtFlowWidget";
 
 const ROWH = 84;
 const GAP = 8;
+const HEAD_H = 22;
+const STACK_BP = 760;
 
 const WIDGET_BODY: Record<WidgetId, React.ComponentType> = {
   heatmap: GmtHeatmapWidget,
@@ -20,10 +23,11 @@ const WIDGET_BODY: Record<WidgetId, React.ComponentType> = {
   news: GmtNewsWidget,
   chart: GmtChartWidget,
   sector: GmtSectorWidget,
+  metals: GmtMetalsWidget,
+  pulse: GmtPulseWidget,
   indices: GmtIndicesWidget,
-  flow: GmtFlowWidget,
-  macro: GmtMacroWidget,
   status: GmtStatusWidget,
+  flow: GmtFlowWidget,
 };
 
 function widgetStyle(item: WidgetLayoutItem, unit: number): React.CSSProperties {
@@ -31,26 +35,26 @@ function widgetStyle(item: WidgetLayoutItem, unit: number): React.CSSProperties 
     left: item.x * (unit + GAP),
     width: item.w * unit + (item.w - 1) * GAP,
     top: item.y * (ROWH + GAP),
-    height: item.h * ROWH + (item.h - 1) * GAP,
+    height: item.min ? HEAD_H + 2 : item.h * ROWH + (item.h - 1) * GAP,
   };
-}
-
-function asOfLabel(): string {
-  const now = new Date();
-  return `as-of ${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")} ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
 }
 
 type Drag = { id: WidgetId; mode: "move" | "resize"; sx: number; sy: number; start: WidgetLayoutItem };
 
-/** 12 列绝对定位 grid + 01–09 组件；编辑模式下拖标题移动、拖右下角缩放 */
+/** 12 列绝对定位 grid + 01–10 组件；编辑模式下拖标题移动、拖右下角缩放、▲▼ 调序、🔓 锁定；<760px 单列堆叠 */
 export function GmtGrid() {
-  const { layout, editMode, inspectorOpen, updateWidget, removeWidget, zoomed, setZoomed } = useGmtDemo();
-  const asOf = useMemo(() => asOfLabel(), []);
+  const { layout, editMode, inspectorOpen, updateWidget, removeWidget, nudgeWidget, zoomed, setZoomed, focused, setFocused, sources } = useGmtDemo();
   const { ref, size } = useElementSize(40);
   const dragRef = useRef<Drag | null>(null);
+  const [dragging, setDragging] = useState<{ mode: Drag["mode"]; id: WidgetId } | null>(null);
 
-  const innerW = Math.max(0, size.w - GAP * 2 - (inspectorOpen ? 340 : 0));
+  const stacked = size.w > 0 && size.w < STACK_BP;
+  const innerW = Math.max(0, size.w - GAP * 2 - (inspectorOpen && !stacked ? 340 : 0));
   const unit = innerW > 0 ? (innerW - GAP * (GMT_COLS - 1)) / GMT_COLS : 0;
+  const unitRef = useRef(unit);
+  useEffect(() => {
+    unitRef.current = unit;
+  }, [unit]);
 
   const maxRow = useMemo(() => {
     let m = 0;
@@ -60,12 +64,6 @@ export function GmtGrid() {
     }
     return m;
   }, [layout]);
-
-  const [dragging, setDragging] = useState<Drag["mode"] | null>(null);
-  const unitRef = useRef(unit);
-  useEffect(() => {
-    unitRef.current = unit;
-  }, [unit]);
 
   const onPointerMove = useCallback(
     (e: PointerEvent) => {
@@ -96,31 +94,42 @@ export function GmtGrid() {
   }, [dragging, onPointerMove, endDrag]);
 
   const beginDrag = (e: ReactPointerEvent, id: WidgetId, mode: Drag["mode"]) => {
-    if (!editMode || zoomed) return;
+    if (!editMode || zoomed || stacked || layout[id].locked) return;
     e.preventDefault();
     dragRef.current = { id, mode, sx: e.clientX, sy: e.clientY, start: layout[id] };
-    setDragging(mode);
+    setFocused(id);
+    setDragging({ mode, id });
   };
+
+  const ordered = useMemo(() => WIDGET_IDS.filter((id) => layout[id].visible).sort((a, b) => layout[a].y - layout[b].y || layout[a].x - layout[b].x), [layout]);
 
   return (
     <div
       ref={ref}
-      className={`gmt-grid${editMode ? " editing" : ""}`}
-      data-dragging={dragging ?? undefined}
-      style={{ minHeight: maxRow * (ROWH + GAP) + GAP * 2 }}
+      className={`gmt-grid${editMode ? " editing" : ""}${stacked ? " stacked" : ""}`}
+      data-dragging={dragging?.mode}
+      style={stacked ? undefined : { minHeight: maxRow * (ROWH + GAP) + GAP * 2 }}
+      onPointerDown={(e) => {
+        if (e.target === e.currentTarget) setFocused(null);
+      }}
     >
-      {unit > 0 &&
-        WIDGET_IDS.map((id) => {
+      {(stacked || unit > 0) &&
+        ordered.map((id) => {
           const item = layout[id];
-          if (!item.visible) return null;
           const meta = GMT_WIDGET_META[id];
           const Body = WIDGET_BODY[id];
           const isZoom = zoomed === id;
+          const src = Object.values(sources).find((s) => s.label.startsWith(meta.title.split(" · ")[0].slice(0, 2)));
+          const asOf = src ? `as-of ${new Date(src.at).toLocaleTimeString("zh-CN", { hour12: false })}（北京）` : meta.note;
+          const cls = ["gmt-widget", isZoom && "zoomed", focused === id && "focused", item.locked && "locked", item.min && "min", dragging?.id === id && "dragging"]
+            .filter(Boolean)
+            .join(" ");
           return (
             <div
               key={id}
-              className={`gmt-widget${isZoom ? " zoomed" : ""}`}
-              style={isZoom ? undefined : widgetStyle(item, unit)}
+              className={cls}
+              style={isZoom || stacked ? (stacked && !isZoom ? { height: item.min ? HEAD_H + 2 : Math.min(item.h, 6) * ROWH } : undefined) : widgetStyle(item, unit)}
+              onPointerDownCapture={() => setFocused(id)}
             >
               <header
                 className="w-head"
@@ -129,22 +138,36 @@ export function GmtGrid() {
                   beginDrag(e, id, "move");
                 }}
                 onDoubleClick={() => setZoomed(isZoom ? null : id)}
-                title={editMode ? "拖动移动 · 双击放大" : "双击放大"}
+                title={editMode && !item.locked ? "拖动移动 · 双击放大" : "双击放大"}
               >
                 <span className="w-num">{meta.num}</span>
                 <span className="w-title">{meta.title}</span>
                 <span className="w-asof">{asOf}</span>
+                {editMode && !stacked && (
+                  <span className="w-order">
+                    <button type="button" className="w-btn" title="上移一行" onClick={() => nudgeWidget(id, -1)}>▲</button>
+                    <button type="button" className="w-btn" title="下移一行" onClick={() => nudgeWidget(id, 1)}>▼</button>
+                  </span>
+                )}
+                <button type="button" className="w-btn" title={item.locked ? "解锁（允许拖动/缩放）" : "锁定位置与尺寸"} onClick={() => updateWidget(id, { locked: !item.locked })}>
+                  {item.locked ? "🔒" : "🔓"}
+                </button>
+                <button type="button" className="w-btn" title={item.min ? "展开" : "最小化"} onClick={() => updateWidget(id, { min: !item.min })}>
+                  {item.min ? "▭" : "—"}
+                </button>
                 <button type="button" className="w-btn" title={isZoom ? "还原" : "放大"} onClick={() => setZoomed(isZoom ? null : id)}>
                   {isZoom ? "⤡" : "⤢"}
                 </button>
-                <button type="button" className="w-btn" title="关闭组件" onClick={() => removeWidget(id)}>
+                <button type="button" className="w-btn" title="关闭组件（可从 + 添加组件 恢复）" onClick={() => removeWidget(id)}>
                   ✕
                 </button>
               </header>
-              <div className="w-body">
-                <Body />
-              </div>
-              {editMode && !isZoom && (
+              {!item.min && (
+                <div className="w-body">
+                  <Body />
+                </div>
+              )}
+              {editMode && !isZoom && !stacked && !item.locked && !item.min && (
                 <div className="w-resize" onPointerDown={(e) => beginDrag(e, id, "resize")} title="拖动缩放" />
               )}
             </div>
