@@ -301,6 +301,19 @@ const routes = {
   "/api/chain-parse": async (_q, body) => handleChainParse(body || {}),
 };
 
+// ---- 自部署布局同步（SELFHOST=1 且配置 SELFHOST_SYNC_KEY 时挂载）----
+// 单用户跨设备同步 GMT 布局 / 面板缩放 / 自选股; 契约与 /api/hosting/layout 同形, 前端 layout-sync 统一消费。
+// 未配置密钥 → 端点不存在(404), 前端退回 localStorage; 不做账号(账号属托管版 mrd-pro)。
+if (SELFHOST) {
+  const { createSelfhostLayout } = require("./lib/selfhost-layout.cjs");
+  const selfhostLayout = createSelfhostLayout({
+    file: path.join(__dirname, "data", "selfhost-layout.json"),
+    getKey: () => process.env.SELFHOST_SYNC_KEY || "",
+  });
+  Object.assign(routes, selfhostLayout.routes);
+  console.log(process.env.SELFHOST_SYNC_KEY ? "[selfhost] layout sync enabled (/api/selfhost/layout)" : "[selfhost] layout sync disabled — set SELFHOST_SYNC_KEY in server/.env to enable");
+}
+
 // ---- 托管版托管层（HOSTING=1 启用）: 单实例多租户账号系统, 只增不改核心路由 ----
 // 复用本文件数据管道/共享缓存(公开行情只读共享); 新增 /api/hosting/* 账号路由
 // (SQLite users 表, 邮箱+密码, Bearer token; watchlist 等个性化数据按租户隔离)。
