@@ -7,20 +7,23 @@ import { GmtDemoProvider, useGmtDemo } from "@/components/gmt/gmt-context";
 import { GmtTerminalShell } from "@/components/gmt/GmtTerminalShell";
 
 function GmtDataLoader() {
-  const { setGroups } = useGmtDemo();
+  const { setGroups, reportSource } = useGmtDemo();
 
   usePolling(
     async () => {
       try {
         const g = await fetchChainHeatmapGroups();
-        setGroups(g.length ? g : MOCK_HEAT_GROUPS);
+        const live = g.length > 0;
+        setGroups(live ? g : MOCK_HEAT_GROUPS);
+        reportSource("heatmap", "热力矩阵 · 产业链报价", live, g.reduce((a, x) => a + x.stocks.length, 0));
       } catch {
         setGroups(MOCK_HEAT_GROUPS);
+        reportSource("heatmap", "热力矩阵 · 产业链报价", false, 0);
       }
       return null;
     },
     POLL.SECTOR,
-    [setGroups]
+    [setGroups, reportSource]
   );
 
   return null;

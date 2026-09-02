@@ -239,10 +239,14 @@
 }
 
 .gmt-grid {
-  position: absolute;
-  inset: 0;
+  position: relative;
+  width: 100%;
   padding: var(--gmt-gap);
-  overflow: hidden;
+}
+
+/* 绝对定位子元素以 padding 内侧为原点 */
+.gmt-grid > .gmt-widget {
+  margin: var(--gmt-gap) 0 0 var(--gmt-gap);
 }
 
 .gmt-widget {
@@ -293,6 +297,190 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+
+.gmt-widget .w-btn {
+  border: none;
+  background: none;
+  color: var(--gmt-dim);
+  padding: 0 5px;
+  font-size: 10px;
+  line-height: 18px;
+  cursor: pointer;
+  font-family: var(--gmt-mono);
+}
+
+.gmt-widget .w-btn:hover {
+  color: var(--gmt-amber);
+}
+
+/* 编辑模式：虚线边框 + 可拖标题 + 右下角缩放柄 */
+.gmt-grid.editing .gmt-widget {
+  border-style: dashed;
+  border-color: var(--gmt-amber);
+  transition: left 80ms linear, top 80ms linear, width 80ms linear, height 80ms linear;
+}
+
+.gmt-grid.editing .gmt-widget .w-head {
+  cursor: grab;
+  background: var(--gmt-amber-bg);
+}
+
+.gmt-grid[data-dragging="move"],
+.gmt-grid[data-dragging="move"] * {
+  cursor: grabbing !important;
+  user-select: none;
+}
+
+.gmt-grid[data-dragging="resize"],
+.gmt-grid[data-dragging="resize"] * {
+  cursor: nwse-resize !important;
+  user-select: none;
+}
+
+.gmt-widget .w-resize {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 14px;
+  height: 14px;
+  cursor: nwse-resize;
+  background: linear-gradient(135deg, transparent 50%, var(--gmt-amber) 50%);
+  opacity: 0.85;
+}
+
+/* 放大：覆盖整个 grid 区域 */
+.gmt-widget.zoomed {
+  position: absolute;
+  inset: var(--gmt-gap);
+  z-index: 120;
+  border-color: var(--gmt-amber);
+}
+
+.gmt-zoom-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  z-index: 110;
+}
+
+/* 通用行列表（06 指数 / 07 资金流 / 08 商品美债） */
+.gmt-rows {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.gmt-row {
+  display: grid;
+  grid-template-columns: 34px 1fr repeat(auto-fit, minmax(58px, auto));
+  grid-auto-flow: column;
+  gap: 6px;
+  align-items: center;
+  width: 100%;
+  padding: 3px 8px;
+  border: none;
+  border-bottom: 1px solid var(--gmt-line);
+  background: none;
+  color: inherit;
+  font-family: var(--gmt-mono);
+  font-size: 10px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.gmt-row:hover {
+  background: var(--gmt-amber-bg);
+}
+
+.gmt-row-tag {
+  color: var(--gmt-amber);
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.gmt-row-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.gmt-row-num {
+  text-align: right;
+  min-width: 58px;
+  font-weight: 600;
+}
+
+.gmt-row-sec {
+  padding: 3px 8px 1px;
+  font-size: 8px;
+  letter-spacing: 1px;
+  color: var(--gmt-amber);
+  background: var(--gmt-raise);
+}
+
+/* 09 数据状态 */
+.gmt-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  align-items: center;
+  padding: 4px 8px;
+  font-size: 9px;
+  overflow: hidden;
+}
+
+.gmt-status-item {
+  display: inline-flex;
+  gap: 5px;
+  align-items: center;
+  white-space: nowrap;
+}
+
+/* + 添加组件 下拉 */
+.gmt-add-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.gmt-tb-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.gmt-add-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 260;
+  min-width: 220px;
+  background: var(--gmt-panel);
+  border: 1px solid var(--gmt-amber);
+  padding: 4px 0;
+}
+
+.gmt-add-menu button {
+  display: block;
+  width: 100%;
+  padding: 5px 10px;
+  border: none;
+  background: none;
+  color: var(--gmt-fg);
+  font-family: var(--gmt-mono);
+  font-size: 10px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.gmt-add-menu button:hover {
+  background: var(--gmt-amber-bg);
+  color: var(--gmt-amber);
+}
+
+.gmt-add-menu .w-num {
+  color: var(--gmt-amber);
+  font-weight: 700;
+  margin-right: 4px;
 }
 
 .gmt-inspector {
@@ -550,6 +738,11 @@
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.gmt-chart-area svg {
+  width: 100%;
+  height: 100%;
 }
 
 .gmt-back-link {

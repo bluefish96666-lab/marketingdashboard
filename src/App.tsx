@@ -130,7 +130,7 @@ function Dashboard() {
   const hosting = useHosting();
   const selfhost = useSelfhost();
   const links = useMemo(() => {
-    const extra = hosting || selfhost ? [] : [{ to: "/pro", label: "Pro" }];
+    const extra = [{ to: "/?demo=gmt-full", label: "GMT 终端" }, ...(hosting || selfhost ? [] : [{ to: "/pro", label: "Pro" }])];
     return pageLinks("/", extra);
   }, [hosting, selfhost]);
 

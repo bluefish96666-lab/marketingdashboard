@@ -62,16 +62,19 @@ export async function fetchChainHeatmapGroups(): Promise<HeatGroup[]> {
     const stocks: HeatStock[] = [];
     for (const seg of chain.segments) {
       for (const st of seg.stocks) {
-        if (seen.has(st.code)) continue;
+        // 仅 A 股: 港/美股腾讯报价 amount 单位不同(元 vs 万元), 会把面积撑爆
+        if (seen.has(st.code) || !/^(sh|sz)\d{6}$/i.test(st.code)) continue;
         seen.add(st.code);
         const q = quotes[st.code];
         if (!q || !q.price) continue;
+        // 流通市值(亿) ≈ 成交额(万) / 换手率(%) — 报价里没有市值字段, 用换手率反推
+        const circMv = q.turnover > 0 && q.amount > 0 ? q.amount / (q.turnover / 100) / 10000 : 0;
         stocks.push({
           code: st.code.replace(/^(sh|sz)/i, ""),
           name: st.name,
           pct: q.pct,
           price: q.price,
-          circMv: Math.max(q.amount ? q.amount / 10000 : 100, 50),
+          circMv: circMv > 0 ? circMv : 100,
           amount: (q.amount ?? 0) * 10000,
         });
       }

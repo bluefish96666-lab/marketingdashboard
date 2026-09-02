@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { useSharedPolling } from "@/hooks/useSharedPolling";
 import { api, type NewsItem } from "@/lib/api";
 import { POLL } from "@/lib/intervals";
@@ -18,9 +18,13 @@ function tagOf(item: NewsItem): string {
 
 /** 03 — 7×24 快讯 */
 export function GmtNewsWidget() {
-  const { data } = useSharedPolling("gmt:news", () => api.news(40), POLL.NEWS);
-  const { setInspect, setInspectorOpen } = useGmtDemo();
+  const { data, error } = useSharedPolling("gmt:news", () => api.news(40), POLL.NEWS);
+  const { setInspect, setInspectorOpen, reportSource } = useGmtDemo();
   const items = useMemo(() => data?.slice(0, 30) ?? [], [data]);
+
+  useEffect(() => {
+    if (data || error) reportSource("news", "快讯 · /api/news", !error && items.length > 0, items.length);
+  }, [data, error, items.length, reportSource]);
 
   const onPick = (news: NewsItem) => {
     setInspect({ type: "news", news });

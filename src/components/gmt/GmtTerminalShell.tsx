@@ -6,7 +6,7 @@ import { api } from "@/lib/api";
 import { INDICES, FOREX, COMMODITIES } from "@/config/dashboard";
 import { POLL } from "@/lib/intervals";
 import { clsChg, fmtPct, fmtPrice } from "@/lib/format";
-import { useGmtDemo, type GmtPreset } from "./gmt-context";
+import { GMT_WIDGET_META, WIDGET_IDS, useGmtDemo, type GmtPreset } from "./gmt-context";
 import { GmtGrid } from "./GmtGrid";
 import { GmtInspector } from "./GmtInspector";
 import "./gmt-terminal.css";
@@ -34,6 +34,11 @@ function GmtTape() {
   const quotes = useQuotes(codes);
   const futures = useQuotes(futureCodes);
   const { data: treasuries } = useSharedPolling("gmt:treasury", () => api.treasuries(), POLL.TREASURY_LIVE);
+  const { reportSource } = useGmtDemo();
+  const qn = quotes ? Object.keys(quotes).length : 0;
+  useEffect(() => {
+    if (qn > 0) reportSource("tape", "行情带 · 报价中心", true, qn);
+  }, [qn, reportSource]);
 
   const items = useMemo(() => {
     const list: { key: string; label: string; price: number; pct: number; digits?: number }[] = [];
@@ -87,6 +92,41 @@ function GmtTape() {
   );
 }
 
+function AddWidgetMenu() {
+  const { layout, addWidget } = useGmtDemo();
+  const [open, setOpen] = useState(false);
+  const hidden = WIDGET_IDS.filter((id) => !layout[id].visible);
+  return (
+    <span className="gmt-add-wrap">
+      <button
+        type="button"
+        className={`gmt-tb-btn${open ? " on" : ""}`}
+        onClick={() => setOpen((v) => !v)}
+        disabled={!hidden.length}
+        title={hidden.length ? "添加已关闭的组件" : "所有组件已显示"}
+      >
+        + 添加组件{hidden.length ? ` (${hidden.length})` : ""}
+      </button>
+      {open && hidden.length > 0 && (
+        <div className="gmt-add-menu" onMouseLeave={() => setOpen(false)}>
+          {hidden.map((id) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => {
+                addWidget(id);
+                setOpen(false);
+              }}
+            >
+              <span className="w-num">{GMT_WIDGET_META[id].num}</span> {GMT_WIDGET_META[id].title}
+            </button>
+          ))}
+        </div>
+      )}
+    </span>
+  );
+}
+
 function GmtHelp() {
   const { helpOpen, setHelpOpen } = useGmtDemo();
   if (!helpOpen) return null;
@@ -115,8 +155,15 @@ function GmtHelp() {
           <p style={{ marginTop: 6 }}>
             <b style={{ color: "var(--gmt-amber)" }}>05 板块</b> — 行业涨跌榜，点击联动 01 分组。
           </p>
+          <p style={{ marginTop: 6 }}>
+            <b style={{ color: "var(--gmt-amber)" }}>06–09</b> — 全球指数 · 主力净流入 · 商品/美债 · 数据状态。
+          </p>
+          <p style={{ marginTop: 10, color: "var(--gmt-fg)" }}>
+            <b style={{ color: "var(--gmt-amber)" }}>编辑布局 [E]</b>：拖组件标题移动，拖右下角缩放，✕ 关闭；
+            工具栏「+ 添加组件」恢复；布局自动保存到本机。双击标题放大。
+          </p>
           <p className="note">
-            [F1/?] 帮助 · [E] 编辑布局 · [I] 检查器 · [Esc] 关闭浮层
+            [F1/?] 帮助 · [E] 编辑布局 · [I] 检查器 · [Esc] 关闭浮层/退出编辑
             <br />
             PREVIEW V4 · demo only · 未替换首页 /
           </p>
@@ -137,11 +184,14 @@ export function GmtTerminalShell() {
     setHelpOpen,
     inspectorOpen,
     setInspectorOpen,
+    setZoomed,
   } = useGmtDemo();
   const now = useClock();
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement | null)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA") return;
       if (e.key === "F1" || (e.key === "?" && !e.ctrlKey && !e.metaKey)) {
         e.preventDefault();
         setHelpOpen((v) => !v);
@@ -151,11 +201,12 @@ export function GmtTerminalShell() {
       if (e.key === "Escape") {
         setHelpOpen(false);
         setEditMode(false);
+        setZoomed(null);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [setEditMode, setHelpOpen, setInspectorOpen]);
+  }, [setEditMode, setHelpOpen, setInspectorOpen, setZoomed]);
 
   const clock = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}:${String(now.getSeconds()).padStart(2, "0")}`;
 
@@ -207,10 +258,11 @@ export function GmtTerminalShell() {
           </button>
         ))}
         <span className="gmt-tb-sep" />
+        <AddWidgetMenu />
         <button type="button" className="gmt-tb-btn" onClick={resetLayout}>
           RESET
         </button>
-        {editMode && <span className="gmt-edit-hint">编辑模式 · 切换预设调整布局</span>}
+        {editMode && <span className="gmt-edit-hint">编辑模式 · 拖标题移动 · 拖右下角缩放 · ✕ 关闭 · Esc 退出</span>}
         {inspectorOpen && !editMode && (
           <span className="gmt-edit-hint" style={{ color: "var(--gmt-dim)" }}>
             检查器已开

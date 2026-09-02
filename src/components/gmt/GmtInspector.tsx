@@ -31,6 +31,29 @@ export function GmtInspector() {
           <StockDetail stock={inspect.stock} />
         ) : inspect.type === "news" && inspect.news ? (
           <NewsDetail news={inspect.news} />
+        ) : inspect.type === "index" ? (
+          <>
+            <div className="gmt-insp-name">{inspect.indexLabel}</div>
+            <div className="gmt-insp-sub">指数 / 汇率 · 统一报价中心</div>
+            <div className="gmt-insp-big">
+              {fmtPrice(inspect.indexPrice ?? 0)}{" "}
+              <span className={clsChg(inspect.indexPct ?? 0)} style={{ fontSize: 13 }}>
+                {fmtPct(inspect.indexPct ?? 0)}
+              </span>
+            </div>
+            <table className="gmt-kv">
+              <tbody>
+                <tr>
+                  <td>数据来源</td>
+                  <td>腾讯行情 · /api/quotes</td>
+                </tr>
+                <tr>
+                  <td>刷新</td>
+                  <td>5s（与行情带同帧）</td>
+                </tr>
+              </tbody>
+            </table>
+          </>
         ) : (
           <p className="gmt-insp-empty">无详情</p>
         )}

@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { usePolling } from "@/hooks/usePolling";
 import { api, type Board } from "@/lib/api";
 import { POLL } from "@/lib/intervals";
@@ -52,10 +52,14 @@ function SectorRow({ b, maxAbs, active, onClick }: { b: Board; maxAbs: number; a
 
 /** 05 — 板块日内走势 */
 export function GmtSectorWidget() {
-  const { sector, setSector, groups } = useGmtDemo();
-  const { data: boards } = usePolling(() => api.boards("01", 0, 12), POLL.SECTOR, []);
+  const { sector, setSector, groups, reportSource } = useGmtDemo();
+  const { data: boards, error } = usePolling(() => api.boards("01", 0, 12), POLL.SECTOR, []);
 
   const list = useMemo(() => boards?.slice(0, 10) ?? [], [boards]);
+
+  useEffect(() => {
+    if (boards || error) reportSource("boards", "行业板块 · /api/boards", !error && list.length > 0, list.length);
+  }, [boards, error, list.length, reportSource]);
   const maxAbs = useMemo(() => Math.max(...list.map((b) => Math.abs(b.pct)), 0.01), [list]);
 
   const onPickBoard = (b: Board) => {
