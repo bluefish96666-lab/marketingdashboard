@@ -7,5 +7,7 @@ describe("/watch 独立自选页", () => {
     expect(pageLinks("/").some((l) => l.to === "/watch")).toBe(true);
     expect(pageLinks("/watch").some((l) => l.to === "/")).toBe(true);
     expect(pageLinks("/watch").some((l) => l.to === "/watch")).toBe(false);
+    expect(APP_NAV.some((l) => l.to === "/pro")).toBe(false);
+    expect(pageLinks("/").some((l) => l.to === "/pro")).toBe(false);
   });
 });

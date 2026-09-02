@@ -2,7 +2,6 @@ import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { Navigate, Routes, Route } from "react-router";
 import { TickerTape, type TapeItem } from "@/components/dash/TickerTape";
 import { DashboardHeader } from "@/components/dash/DashboardHeader";
-import { StarHint } from "@/components/dash/StarHint";
 import { DashboardLayout, type PanelRowDef } from "@/components/dash/DashboardLayout";
 import { IndexPanel } from "@/components/dash/IndexPanel";
 import { CommodityPanel } from "@/components/dash/CommodityPanel";
@@ -19,15 +18,14 @@ import GoodsDashboard from "./GoodsDashboard";
 import FinDashboard from "./FinDashboard";
 import GoldDashboard from "./GoldDashboard";
 import WatchDashboard from "./WatchDashboard";
-import ProLanding from "./ProLanding";
 import LoginPage from "./pages/LoginPage";
 import { hostingEnabled, hostingToken } from "@/lib/hosting";
 import { useUiMode } from "@/lib/ui-mode";
 import { UiModeContext } from "@/lib/ui-mode-context";
 import { ModeToggle } from "@/components/ModeToggle";
 import { selfhostEnabled } from "@/lib/selfhost";
-import { HostingContext, useHosting } from "@/lib/hosting-context";
-import { SelfhostContext, useSelfhost } from "@/lib/selfhost-context";
+import { HostingContext } from "@/lib/hosting-context";
+import { SelfhostContext } from "@/lib/selfhost-context";
 import { BRAND } from "@/config/branding";
 import { pageLinks } from "@/lib/nav";
 import { useSharedPolling } from "@/hooks/useSharedPolling";
@@ -36,13 +34,6 @@ import { useFullscreen } from "@/hooks/useFullscreen";
 import { api } from "@/lib/api";
 import { POLL } from "@/lib/intervals";
 import { INDICES, FOREX, COMMODITIES } from "@/config/dashboard";
-import { TerminalProvider, useTerminal } from "@/lib/terminal-context";
-import { useTerminalShortcuts } from "@/hooks/useTerminalShortcuts";
-import { TerminalToolbar } from "@/components/terminal/TerminalToolbar";
-import { TerminalHelp } from "@/components/terminal/TerminalHelp";
-import { TerminalInspector } from "@/components/terminal/TerminalInspector";
-import { TerminalStatusBar } from "@/components/terminal/TerminalStatusBar";
-import { isTv } from "@/lib/tv";
 
 // GMT 终端整包懒加载：经典用户首屏不下载终端代码与字体
 const GmtTerminal = lazy(() => import("./pages/GmtTerminal"));
@@ -111,64 +102,27 @@ const PANEL_ROWS: PanelRowDef[] = [
   },
 ];
 
-function HomeTerminalShortcuts() {
-  const { toggleHelp, toggleEditMode, toggleInspector, setHelpOpen, setInspectorOpen, setEditMode, selectPanel } = useTerminal();
-  useTerminalShortcuts({
-    toggleHelp,
-    toggleEditMode,
-    toggleInspector,
-    closeOverlays: () => {
-      setHelpOpen(false);
-      setInspectorOpen(false);
-      setEditMode(false);
-      selectPanel(null);
-    },
-  });
-  return null;
-}
-
 function Dashboard() {
   const { isFullscreen, toggle } = useFullscreen();
-  const hosting = useHosting();
-  const selfhost = useSelfhost();
-  const links = useMemo(() => {
-    const extra = hosting || selfhost ? [] : [{ to: "/pro", label: "Pro" }];
-    return pageLinks("/", extra);
-  }, [hosting, selfhost]);
 
   return (
-    <TerminalProvider>
-      <HomeTerminalShortcuts />
-      <div className="terminal-shell flex min-h-screen flex-col bg-[#070b12] text-slate-200 lg:h-screen lg:overflow-hidden">
-        <DashboardHeader
-          title={BRAND.title}
-          subtitle={BRAND.subtitle}
-          accent="gold"
-          tagline={BRAND.tagline}
-          linkTo="/ai"
-          linkLabel="AI 观察"
-          links={links}
-          leading={<ModeToggle variant="classic" />}
-          live
-          githubUrl={selfhost ? undefined : "https://github.com/theBigGavin/marketingdashboard"}
-          isFullscreen={isFullscreen}
-          onToggleFullscreen={toggle}
-        />
-        {!isTv && <TerminalToolbar />}
-        <Tape />
-        {!selfhost && <StarHint githubUrl="https://github.com/theBigGavin/marketingdashboard" />}
-        <div className={`relative flex min-h-0 flex-1 flex-col ${!isTv ? "md:mr-0" : ""}`}>
-          <DashboardLayout rows={PANEL_ROWS} />
-        </div>
-        {!isTv && (
-          <>
-            <TerminalHelp />
-            <TerminalInspector />
-            <TerminalStatusBar />
-          </>
-        )}
-      </div>
-    </TerminalProvider>
+    <div className="flex min-h-screen flex-col bg-[#070b12] text-slate-200 lg:h-screen lg:overflow-hidden">
+      <DashboardHeader
+        title={BRAND.title}
+        subtitle={BRAND.subtitle}
+        accent="gold"
+        tagline={BRAND.tagline}
+        linkTo="/ai"
+        linkLabel="AI 观察"
+        links={pageLinks("/")}
+        leading={<ModeToggle variant="classic" />}
+        live
+        isFullscreen={isFullscreen}
+        onToggleFullscreen={toggle}
+      />
+      <Tape />
+      <DashboardLayout rows={PANEL_ROWS} />
+    </div>
   );
 }
 
@@ -193,8 +147,6 @@ function ModeGate() {
 }
 
 function AppRoutes() {
-  const hosting = useHosting();
-  const selfhost = useSelfhost();
   return (
     <Routes>
       <Route path="/" element={<ModeGate />} />
@@ -205,7 +157,6 @@ function AppRoutes() {
       <Route path="/fin" element={<FinDashboard />} />
       <Route path="/terminal" element={<Navigate to="/?mode=gmt" replace />} />
       <Route path="/demo/gmt-full" element={<Navigate to="/?mode=gmt" replace />} />
-      <Route path="/pro" element={hosting || selfhost ? <Navigate to="/" replace /> : <ProLanding />} />
     </Routes>
   );
 }

@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState } from "react";
-import { FileText, X } from "lucide-react";
+import { FileText } from "lucide-react";
 import { ACCENT } from "@/config/branding";
 import { Panel, type PanelZoomProps } from "../Panel";
 import { useFinMain } from "./useFinData";
 import { clsChg } from "@/lib/format";
 import { useFin } from "./FinContext";
 import { AsyncContent } from "../SharedUI";
-import { TNUM, fmtYi, prefixCode, resolveFinCompanyQuery, quarterLabel } from "./utils";
+import { TNUM, fmtYi, prefixCode, quarterLabel } from "./utils";
 import { useStockSearch } from "@/hooks/useStockSearch";
+import { resolveFinLookup } from "./company-select";
 
 /** 公司财报: 搜索框 + 最近查看 chips + 最新报告期指标卡 2×3 */
 export function FinCompanyPanel({ className = "", ...zoomProps }: { className?: string } & PanelZoomProps) {
@@ -19,7 +20,7 @@ export function FinCompanyPanel({ className = "", ...zoomProps }: { className?: 
   const {
     input, triggerSearch,
     suggestions, showSuggest, setShowSuggest,
-    highlightIdx,
+    highlightIdx, setHighlightIdx,
     clear, onKeyDown,
   } = useStockSearch();
 
@@ -32,40 +33,20 @@ export function FinCompanyPanel({ className = "", ...zoomProps }: { className?: 
     return () => document.removeEventListener("mousedown", handler);
   }, [setShowSuggest]);
 
-  const pickSuggestion = (s: { code: string; name: string }) => {
-    select(prefixCode(s.code), s.name);
-    setShowSuggest(false);
+  const applyHit = (hit: { code: string; name: string } | null) => {
+    if (!hit) { setInvalid(true); return; }
+    select(hit.code, hit.name);
     setInvalid(false);
     clear();
   };
 
-  const submitQuery = () => {
-    if (showSuggest && highlightIdx >= 0 && highlightIdx < suggestions.length) {
-      pickSuggestion(suggestions[highlightIdx]);
-      return true;
-    }
-    if (suggestions.length > 0) {
-      pickSuggestion(suggestions[0]);
-      return true;
-    }
-    const resolved = resolveFinCompanyQuery(input);
-    if (resolved) {
-      select(resolved.code, resolved.name);
-      setInvalid(false);
-      clear();
-      return true;
-    }
-    setInvalid(true);
-    return false;
+  const pickSuggestion = (s: { code: string; name: string }) => {
+    applyHit({ code: prefixCode(s.code), name: s.name });
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.nativeEvent.isComposing) {
-      e.preventDefault();
-      submitQuery();
-      return;
-    }
-    onKeyDown(e, pickSuggestion);
+  /** 与 /watch「添加」相同: Enter 或点主按钮提交; 名称仍走下拉 */
+  const lookup = () => {
+    applyHit(resolveFinLookup(input, suggestions, highlightIdx));
   };
 
   const r0 = data?.reports?.[0];
@@ -81,33 +62,44 @@ export function FinCompanyPanel({ className = "", ...zoomProps }: { className?: 
       right={<span className="max-w-[110px] truncate text-[10px] text-cyan-300">{displayName}</span>}
     >
       <div className="flex h-full min-h-0 flex-col gap-1 p-1.5">
-        {/* 搜索框: 名称走联想; 6 位代码 / sh600519 回车或点「查」直接载入 */}
-        <div ref={boxRef} className="relative shrink-0 flex gap-1">
+        {/* 搜索框: Enter 或「查」, 与 /watch「添加」同一套主操作 */}
+        <div ref={boxRef} className="relative flex shrink-0 gap-1">
           <input
+            data-testid="fin-company-search"
             value={input}
             onChange={(e) => { setInvalid(false); triggerSearch(e.target.value); }}
-            onKeyDown={handleKeyDown}
+            onKeyDown={(e) => {
+              if (e.nativeEvent.isComposing) return;
+              if (e.key === "Enter" && !(showSuggest && (highlightIdx >= 0 || suggestions.length > 0))) {
+                e.preventDefault();
+                lookup();
+                return;
+              }
+              onKeyDown(e, pickSuggestion);
+            }}
             onFocus={() => suggestions.length > 0 && setShowSuggest(true)}
-            placeholder="代码/名称，如 600519 或 茅台"
-            className={`h-[24px] min-w-0 flex-1 rounded bg-slate-800/60 px-2 text-[11px] text-slate-200 placeholder:text-[9px] placeholder:text-slate-500 focus:outline-none focus:ring-1 ${
-              invalid ? "focus:ring-rose-500/50 ring-1 ring-rose-500/40" : "focus:ring-cyan-500/50"
+            placeholder="输入代码/名称, 如 600519 / 茅台"
+            className={`h-[24px] min-w-0 flex-1 rounded bg-slate-800/60 px-2 text-[11px] text-slate-200 placeholder:text-[9px] placeholder:text-slate-500 focus:outline-none ${
+              invalid ? "ring-1 ring-rose-500/60" : "focus:ring-1 focus:ring-cyan-500/50"
             }`}
           />
           <button
             type="button"
-            onClick={submitQuery}
-            className="shrink-0 rounded bg-amber-500/20 px-2 text-[10px] text-amber-200 hover:bg-amber-500/30"
+            data-testid="fin-company-lookup"
+            onClick={lookup}
+            className="h-[24px] shrink-0 rounded bg-cyan-500/20 px-2 text-[11px] text-cyan-200 hover:bg-cyan-500/30"
           >
             查
           </button>
           {showSuggest && suggestions.length > 0 && (
-            <div className="absolute left-0 right-8 top-[26px] z-20 overflow-hidden rounded border border-slate-700/60 bg-[#0c1320] shadow-lg">
+            <div className="absolute left-0 right-0 top-[26px] z-20 overflow-hidden rounded border border-slate-700/60 bg-[#0c1320] shadow-lg">
               {suggestions.map((s, i) => (
                 <button
                   key={s.code}
-                  onMouseDown={(e) => { e.preventDefault(); pickSuggestion(s); }}
-                  className={`flex h-[22px] w-full items-center gap-2 px-2 text-left hover:bg-slate-800/50 ${
-                    i === highlightIdx ? "bg-amber-500/15 text-amber-100" : ""
+                  onClick={() => pickSuggestion(s)}
+                  onMouseEnter={() => setHighlightIdx(i)}
+                  className={`flex h-[22px] w-full items-center gap-2 px-2 text-left ${
+                    i === highlightIdx ? "bg-cyan-500/20" : "hover:bg-slate-800/50"
                   }`}
                 >
                   <span className="w-[62px] shrink-0 text-[9px] text-slate-500" style={TNUM}>
@@ -120,48 +112,39 @@ export function FinCompanyPanel({ className = "", ...zoomProps }: { className?: 
           )}
         </div>
         {invalid && (
-          <p className="shrink-0 text-[9px] text-rose-400">未找到该公司。请输入 A 股 6 位代码(如 600519)或名称搜索。</p>
+          <p className="shrink-0 text-[10px] text-rose-400">请输入 6 位代码, 或从下拉中选择名称</p>
         )}
-        {!invalid && (
-          <p className="shrink-0 text-[8px] text-slate-600">添加：输入代码/名称 → 回车或点「查」</p>
-        )}
-        {/* 最近查看: 点名称切换，× 从列表移除 */}
+        {/* 最近查看 chips: 点名称切换, 点 × 移除 */}
         {recent.length > 0 && (
-          <div className="shrink-0">
-            <div className="mb-0.5 text-[8px] text-slate-600">最近查看 · 点名称切换，× 移除</div>
-            <div className="flex max-h-[36px] flex-wrap gap-1 overflow-y-auto">
-              {recent.map((c) => {
-                const active = c.code === company.code;
-                return (
-                  <span
-                    key={c.code}
-                    className={`inline-flex max-w-full items-center rounded border text-[9px] leading-[14px] ${
-                      active
-                        ? "border-amber-500/60 bg-amber-500/10 text-amber-200"
-                        : "border-slate-700/60 text-slate-400"
-                    }`}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => select(c.code, c.name)}
-                      className="max-w-[72px] truncate px-1.5 py-px hover:text-slate-100"
-                      title={c.name}
-                    >
-                      {c.name || c.code}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => removeRecent(c.code)}
-                      className="flex h-[16px] w-[16px] shrink-0 items-center justify-center border-l border-slate-700/40 text-slate-500 hover:bg-rose-500/10 hover:text-rose-300"
-                      title={`移除 ${c.name || c.code}`}
-                      aria-label={`移除 ${c.name || c.code}`}
-                    >
-                      <X size={10} />
-                    </button>
-                  </span>
-                );
-              })}
-            </div>
+          <div className="flex h-[18px] shrink-0 flex-nowrap items-center gap-1 overflow-hidden">
+            {recent.map((c) => (
+              <span
+                key={c.code}
+                className={`inline-flex h-[16px] shrink-0 items-center rounded border ${
+                  c.code === company.code
+                    ? "border-cyan-500/60 bg-cyan-500/10 text-cyan-300"
+                    : "border-slate-700/60 text-slate-400"
+                }`}
+              >
+                <button
+                  type="button"
+                  data-testid={`fin-chip-${c.code}`}
+                  onClick={() => select(c.code, c.name)}
+                  className="px-1.5 text-[9px] leading-[14px] hover:text-slate-200"
+                >
+                  {c.name}
+                </button>
+                <button
+                  type="button"
+                  data-testid={`fin-chip-remove-${c.code}`}
+                  aria-label={`移除 ${c.name}`}
+                  onClick={(e) => { e.stopPropagation(); removeRecent(c.code); }}
+                  className="pr-1 text-[9px] leading-[14px] text-slate-500 hover:text-rose-300"
+                >
+                  ×
+                </button>
+              </span>
+            ))}
           </div>
         )}
         {/* 指标卡区: 3列×3行, 卡高 32px */}

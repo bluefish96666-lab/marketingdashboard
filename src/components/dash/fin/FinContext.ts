@@ -1,4 +1,5 @@
 import { createContext, createElement, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
+import { applyRemoveRecent } from "./company-select";
 
 export interface FinCompany {
   code: string; // sh600519 形式
@@ -9,7 +10,7 @@ interface FinCtx {
   company: FinCompany;
   recent: FinCompany[];
   select: (code: string, name: string) => void;
-  /** 从「最近查看」移除; 若删的是当前公司则切到列表下一项 */
+  /** 移除最近查看 chip; 若删的是当前公司则切到下一条 */
   removeRecent: (code: string) => void;
   /** 宏观面板报告期(当期=披露中, 上一期=全市场完整数据) */
   period: string;
@@ -77,23 +78,25 @@ export function FinProvider({ children }: { children: ReactNode }) {
   const [recent, setRecent] = useState<FinCompany[]>(loadRecent);
   const [period, setPeriod] = useState(CUR);
 
+  const persistRecent = (next: FinCompany[]) => {
+    try { localStorage.setItem(LS_KEY, JSON.stringify(next)); } catch { /* 隐私模式/配额满时忽略 */ }
+  };
+
   const select = useCallback((code: string, name: string) => {
     setCompany({ code, name });
     setRecent((rs) => {
       const next = [{ code, name }, ...rs.filter((r) => r.code !== code)].slice(0, MAX_RECENT);
-      try { localStorage.setItem(LS_KEY, JSON.stringify(next)); } catch { /* 隐私模式/配额满时忽略 */ }
+      persistRecent(next);
       return next;
     });
   }, []);
 
   const removeRecent = useCallback((code: string) => {
-    setRecent((rs) => {
-      const next = rs.filter((r) => r.code !== code);
-      try { localStorage.setItem(LS_KEY, JSON.stringify(next)); } catch { /* 隐私模式/配额满时忽略 */ }
-      setCompany((cur) => (cur.code === code ? (next[0] ?? DEFAULT_COMPANY) : cur));
-      return next;
-    });
-  }, []);
+    const result = applyRemoveRecent(recent, company, code);
+    setRecent(result.recent);
+    setCompany(result.company);
+    persistRecent(result.recent);
+  }, [recent, company]);
 
   const value = useMemo(
     () => ({ company, recent, select, removeRecent, period, setPeriod, periods: PERIOD_OPTIONS }),
