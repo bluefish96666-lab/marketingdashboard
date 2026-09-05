@@ -974,3 +974,29 @@ body.gmt-active .mrd-foot {
   .gmt-edit-hint { display: none; }
   .gmt-widget.zoomed { right: 8px; }
 }
+
+/* 04 图表：分时 / 日K 切换 */
+.gmt-mode-tabs {
+  display: inline-flex;
+  gap: 0;
+  border: 1px solid var(--gmt-border, #333);
+  border-radius: 2px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.gmt-mode-tabs button {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: var(--gmt-dim, #8a8a8a);
+  font: inherit;
+  font-size: 10px;
+  padding: 1px 8px;
+  cursor: pointer;
+  letter-spacing: 0.02em;
+}
+.gmt-mode-tabs button + button { border-left: 1px solid var(--gmt-border, #333); }
+.gmt-mode-tabs button.on {
+  background: var(--gmt-amber-bg, rgba(245, 166, 35, 0.15));
+  color: var(--gmt-amber, #f5a623);
+}

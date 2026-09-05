@@ -43,7 +43,7 @@ type Drag = { id: WidgetId; mode: "move" | "resize"; sx: number; sy: number; sta
 
 /** 12 列绝对定位 grid + 01–10 组件；编辑模式下拖标题移动、拖右下角缩放、▲▼ 调序、🔓 锁定；<760px 单列堆叠 */
 export function GmtGrid() {
-  const { layout, editMode, inspectorOpen, updateWidget, removeWidget, nudgeWidget, zoomed, setZoomed, focused, setFocused, sources } = useGmtDemo();
+  const { layout, editMode, inspectorOpen, updateWidget, removeWidget, nudgeWidget, zoomed, setZoomed, focused, setFocused, sources , titleOverrides} = useGmtDemo();
   const { ref, size } = useElementSize(40);
   const dragRef = useRef<Drag | null>(null);
   const [dragging, setDragging] = useState<{ mode: Drag["mode"]; id: WidgetId } | null>(null);
@@ -141,7 +141,7 @@ export function GmtGrid() {
                 title={editMode && !item.locked ? "拖动移动 · 双击放大" : "双击放大"}
               >
                 <span className="w-num">{meta.num}</span>
-                <span className="w-title">{meta.title}</span>
+                <span className="w-title">{titleOverrides[id] ?? meta.title}</span>
                 <span className="w-asof">{asOf}</span>
                 {editMode && !stacked && (
                   <span className="w-order">

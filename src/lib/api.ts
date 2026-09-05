@@ -199,6 +199,14 @@ export interface FutureDaily {
   points: DailyBar[];
 }
 
+/** 个股日K(/api/kline, 东财) */
+export interface StockDaily {
+  code: string;
+  fqt: 0 | 1;
+  points: DailyBar[];
+  source?: string;
+}
+
 /** 生意社现期对照行 */
 export interface SpotRow {
   exchange: string;
@@ -513,6 +521,9 @@ export const api = {
   batchFutureMinute: (codes: string[]) =>
     get<Record<string, MinuteData | null>>(`/api/batch-fmin?codes=${codes.slice(0, 20).join(",")}`),
   futureDaily: (code: string) => get<FutureDaily>(`/api/future-daily?code=${encodeURIComponent(code)}`),
+  /** 个股日K(默认近 60 根前复权) */
+  kline: (code: string, n = 60, fqt: 0 | 1 = 1) =>
+    get<StockDaily>(`/api/kline?code=${encodeURIComponent(code)}&n=${n}&fqt=${fqt}`),
   futuresBatch: (codes: string[]) =>
     get<Record<string, FutureQuote>>(`/api/futures?list=${codes.map(encodeURIComponent).join(",")}`),
   boardFlow: (n = 20) => get<BoardFlow[]>(`/api/board-flow?n=${n}`),

@@ -4,12 +4,13 @@ import { MOCK_HEAT_GROUPS } from "@/lib/heatmap-data";
 import type { NewsItem } from "@/lib/api";
 import { readCached, readRemote, write } from "@/lib/layout-sync";
 
-export type GmtPreset = "GLOBAL" | "EQUITIES" | "METALS" | "NEWS";
+export type GmtPreset = "GLOBAL" | "EQUITIES" | "METALS" | "NEWS" | "CLASSIC";
 export const GMT_PRESETS: { id: GmtPreset; label: string }[] = [
   { id: "GLOBAL", label: "全球" },
   { id: "EQUITIES", label: "股票" },
   { id: "METALS", label: "贵金属" },
   { id: "NEWS", label: "新闻" },
+  { id: "CLASSIC", label: "经典" },
 ];
 
 export interface WidgetLayoutItem {
@@ -88,6 +89,9 @@ interface GmtCtx {
   setTapePaused: Dispatch<SetStateAction<boolean>>;
   sources: Record<string, SourceStat>;
   reportSource: (key: string, label: string, ok: boolean, n: number) => void;
+  /** 组件标题覆盖(如 04 图表显示「600519 · 近 60 个交易日」) */
+  titleOverrides: Partial<Record<WidgetId, string>>;
+  setWidgetTitle: (id: WidgetId, title: string | null) => void;
 }
 
 const GmtContext = createContext<GmtCtx | null>(null);
@@ -154,6 +158,18 @@ const PRESETS: Record<GmtPreset, Record<WidgetId, WidgetLayoutItem>> = {
     metals: HIDDEN,
     flow: HIDDEN,
   },
+  CLASSIC: {
+    heatmap: { x: 0, y: 0, w: 6, h: 6, visible: true },
+    breadth: { x: 6, y: 0, w: 3, h: 3, visible: true },
+    flow: { x: 9, y: 0, w: 3, h: 3, visible: true },
+    sector: { x: 6, y: 3, w: 6, h: 3, visible: true },
+    chart: { x: 0, y: 6, w: 7, h: 5, visible: true },
+    news: { x: 7, y: 6, w: 5, h: 5, visible: true },
+    indices: { x: 0, y: 11, w: 7, h: 4, visible: true },
+    status: { x: 7, y: 11, w: 5, h: 2, visible: true },
+    metals: HIDDEN,
+    pulse: HIDDEN,
+  },
 };
 
 function clampItem(it: WidgetLayoutItem): WidgetLayoutItem {
@@ -217,6 +233,7 @@ export function GmtDemoProvider({ children }: { children: ReactNode }) {
   const [zoomed, setZoomed] = useState<WidgetId | null>(null);
   const [tapePaused, setTapePaused] = useState(false);
   const [sources, setSources] = useState<Record<string, SourceStat>>({});
+  const [titleOverrides, setTitleOverrides] = useState<Partial<Record<WidgetId, string>>>({});
 
   // 持久化：本机秒开 → 服务端更新的值覆盖 → 用户改动 debounce 写回（首个渲染与远端回填不写）
   const skipWriteRef = useRef(true);
@@ -312,6 +329,19 @@ export function GmtDemoProvider({ children }: { children: ReactNode }) {
     [layout, updateWidget]
   );
 
+  const setWidgetTitle = useCallback((id: WidgetId, title: string | null) => {
+    setTitleOverrides((prev) => {
+      if (!title) {
+        if (!(id in prev)) return prev;
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      }
+      if (prev[id] === title) return prev;
+      return { ...prev, [id]: title };
+    });
+  }, []);
+
   const reportSource = useCallback((key: string, label: string, ok: boolean, n: number) => {
     setSources((prev) => ({ ...prev, [key]: { label, ok, n, at: Date.now() } }));
   }, []);
@@ -359,6 +389,8 @@ export function GmtDemoProvider({ children }: { children: ReactNode }) {
       setTapePaused,
       sources,
       reportSource,
+      titleOverrides,
+      setWidgetTitle,
     }),
     [
       groups,
@@ -389,6 +421,8 @@ export function GmtDemoProvider({ children }: { children: ReactNode }) {
       tapePaused,
       sources,
       reportSource,
+      titleOverrides,
+      setWidgetTitle,
     ]
   );
 
@@ -405,7 +439,7 @@ export const GMT_WIDGET_META: Record<WidgetId, { num: string; title: string; not
   heatmap: { num: "01", title: "个股追踪 · 热力矩阵", note: "腾讯行情 · 产业链分组" },
   breadth: { num: "02", title: "市场宽度", note: "样本内实时计算" },
   news: { num: "03", title: "新闻快讯", note: "自动 20s · 华尔街见闻" },
-  chart: { num: "04", title: "选中标的 · 分时", note: "腾讯分时 · 15s" },
+  chart: { num: "04", title: "选中标的 · 分时/日K", note: "腾讯分时 · 东财日K · 15s" },
   sector: { num: "05", title: "板块日内走势", note: "产业链等权 · 15s" },
   metals: { num: "06", title: "贵金属 · GC XAU AU SI", note: "新浪期货 · 5s" },
   pulse: { num: "07", title: "市场脉搏 · 全球时钟", note: "实时时钟 · IANA 时区 · 节假日未核实" },
