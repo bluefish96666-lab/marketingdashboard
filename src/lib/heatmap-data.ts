@@ -47,6 +47,13 @@ async function loadBoardGroup(board: Board): Promise<HeatGroup> {
 }
 
 /** GMT 全页 demo：产业链分组（更像 Kimi 的 AI/能源/金融） */
+const CHAIN_SHORT: Record<string, string> = {
+  llm: "AI·算力",
+  semi: "半导体",
+  newenergy: "新能源",
+  pharma: "创新药",
+};
+
 export async function fetchChainHeatmapGroups(): Promise<HeatGroup[]> {
   const chainIds = ["llm", "semi", "newenergy", "pharma"] as const;
   const picked = CHAINS.filter((c) => chainIds.includes(c.id as (typeof chainIds)[number]));
@@ -80,7 +87,7 @@ export async function fetchChainHeatmapGroups(): Promise<HeatGroup[]> {
       }
     }
     const avgPct = stocks.length ? stocks.reduce((a, s) => a + s.pct, 0) / stocks.length : 0;
-    return { id: chain.id, name: chain.name, avgPct, stocks };
+    return { id: chain.id, name: CHAIN_SHORT[chain.id] || chain.name, avgPct, stocks };
   });
   return groups.filter((g) => g.stocks.length > 0);
 }

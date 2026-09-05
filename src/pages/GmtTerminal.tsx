@@ -1,29 +1,30 @@
 /** GMT 终端（首页 mode=gmt 形态）— K3 对齐版 */
 import { useEffect } from "react";
 import { usePolling } from "@/hooks/usePolling";
-import { fetchChainHeatmapGroups, MOCK_HEAT_GROUPS } from "@/lib/heatmap-data";
+import { fetchChainHeatmapGroups, fetchHeatmapGroups, MOCK_HEAT_GROUPS } from "@/lib/heatmap-data";
 import { POLL } from "@/lib/intervals";
 import { GmtDemoProvider, useGmtDemo } from "@/components/gmt/gmt-context";
 import { GmtTerminalShell } from "@/components/gmt/GmtTerminalShell";
 
 function GmtDataLoader() {
-  const { setGroups, reportSource } = useGmtDemo();
+  const { setGroups, reportSource, heatMode } = useGmtDemo();
 
   usePolling(
     async () => {
+      const label = heatMode === "industry" ? "热力矩阵 · 申万行业" : "热力矩阵 · 产业链";
       try {
-        const g = await fetchChainHeatmapGroups();
+        const g = heatMode === "industry" ? await fetchHeatmapGroups() : await fetchChainHeatmapGroups();
         const live = g.length > 0;
         setGroups(live ? g : MOCK_HEAT_GROUPS);
-        reportSource("heatmap", "热力矩阵 · 产业链报价", live, g.reduce((a, x) => a + x.stocks.length, 0));
+        reportSource("heatmap", label, live, g.reduce((a, x) => a + x.stocks.length, 0));
       } catch {
         setGroups(MOCK_HEAT_GROUPS);
-        reportSource("heatmap", "热力矩阵 · 产业链报价", false, 0);
+        reportSource("heatmap", label, false, 0);
       }
       return null;
     },
     POLL.SECTOR,
-    [setGroups, reportSource]
+    [setGroups, reportSource, heatMode]
   );
 
   return null;

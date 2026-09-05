@@ -24,9 +24,9 @@ export interface WidgetLayoutItem {
 }
 
 /** 编号对齐 Kimi K3：01–09 同名同位；10 主力净流入为 A 股特色补充 */
-export type WidgetId = "heatmap" | "breadth" | "news" | "chart" | "sector" | "metals" | "pulse" | "indices" | "status" | "flow";
+export type WidgetId = "heatmap" | "breadth" | "news" | "chart" | "sector" | "metals" | "pulse" | "indices" | "status" | "flow" | "watchlist" | "treasury";
 
-export const WIDGET_IDS: WidgetId[] = ["heatmap", "breadth", "news", "chart", "sector", "metals", "pulse", "indices", "status", "flow"];
+export const WIDGET_IDS: WidgetId[] = ["heatmap", "breadth", "news", "chart", "sector", "metals", "pulse", "indices", "status", "flow", "watchlist", "treasury"];
 
 export const GMT_COLS = 12;
 
@@ -50,6 +50,9 @@ export interface SourceStat {
 interface GmtCtx {
   groups: HeatGroup[];
   setGroups: (g: HeatGroup[]) => void;
+  /** 热力分组：产业链(Kimi风格) | 申万行业领涨 */
+  heatMode: "chain" | "industry";
+  setHeatMode: (m: "chain" | "industry") => void;
   sector: string;
   setSector: (s: string) => void;
   movers: MoversFilter;
@@ -102,6 +105,7 @@ const SYNC_KEY = "gmt.v1";
 interface GmtPersist {
   preset: GmtPreset;
   layout: Partial<Record<WidgetId, WidgetLayoutItem>>;
+  heatMode?: "chain" | "industry";
   updatedAt: number;
 }
 
@@ -116,6 +120,8 @@ export const DEFAULT_GMT_LAYOUT: Record<WidgetId, WidgetLayoutItem> = {
   indices: { x: 7, y: 16, w: 5, h: 6, visible: true },
   status: { x: 0, y: 17, w: 7, h: 2, visible: true },
   flow: { x: 0, y: 19, w: 7, h: 3, visible: true },
+  watchlist: { x: 7, y: 19, w: 5, h: 3, visible: false },
+  treasury: { x: 0, y: 22, w: 7, h: 4, visible: false },
 };
 
 const HIDDEN: WidgetLayoutItem = { x: 0, y: 0, w: 4, h: 3, visible: false };
@@ -133,6 +139,8 @@ const PRESETS: Record<GmtPreset, Record<WidgetId, WidgetLayoutItem>> = {
     news: HIDDEN,
     metals: HIDDEN,
     pulse: HIDDEN,
+    watchlist: HIDDEN,
+    treasury: HIDDEN,
   },
   METALS: {
     metals: { x: 0, y: 0, w: 8, h: 7, visible: true },
@@ -145,6 +153,8 @@ const PRESETS: Record<GmtPreset, Record<WidgetId, WidgetLayoutItem>> = {
     chart: HIDDEN,
     sector: HIDDEN,
     flow: HIDDEN,
+    watchlist: HIDDEN,
+    treasury: HIDDEN,
   },
   NEWS: {
     news: { x: 0, y: 0, w: 7, h: 8, visible: true },
@@ -157,16 +167,20 @@ const PRESETS: Record<GmtPreset, Record<WidgetId, WidgetLayoutItem>> = {
     sector: HIDDEN,
     metals: HIDDEN,
     flow: HIDDEN,
+    watchlist: HIDDEN,
+    treasury: HIDDEN,
   },
   CLASSIC: {
     heatmap: { x: 0, y: 0, w: 6, h: 6, visible: true },
-    breadth: { x: 6, y: 0, w: 3, h: 3, visible: true },
-    flow: { x: 9, y: 0, w: 3, h: 3, visible: true },
-    sector: { x: 6, y: 3, w: 6, h: 3, visible: true },
+    breadth: { x: 6, y: 0, w: 3, h: 2, visible: true },
+    flow: { x: 9, y: 0, w: 3, h: 2, visible: true },
+    watchlist: { x: 6, y: 2, w: 6, h: 4, visible: true },
     chart: { x: 0, y: 6, w: 7, h: 5, visible: true },
-    news: { x: 7, y: 6, w: 5, h: 5, visible: true },
-    indices: { x: 0, y: 11, w: 7, h: 4, visible: true },
-    status: { x: 7, y: 11, w: 5, h: 2, visible: true },
+    treasury: { x: 7, y: 6, w: 5, h: 5, visible: true },
+    sector: { x: 0, y: 11, w: 6, h: 4, visible: true },
+    news: { x: 6, y: 11, w: 6, h: 4, visible: true },
+    indices: { x: 0, y: 15, w: 7, h: 3, visible: true },
+    status: { x: 7, y: 15, w: 5, h: 2, visible: true },
     metals: HIDDEN,
     pulse: HIDDEN,
   },
@@ -217,6 +231,7 @@ function loadPersist(): GmtPersist | null {
 
 export function GmtDemoProvider({ children }: { children: ReactNode }) {
   const [groups, setGroups] = useState<HeatGroup[]>(MOCK_HEAT_GROUPS);
+  const [heatMode, setHeatModeState] = useState<"chain" | "industry">(() => loadPersist()?.heatMode ?? "chain");
   const [sector, setSector] = useState("ALL");
   const [movers, setMovers] = useState<MoversFilter>("ALL");
   const [area, setArea] = useState<AreaMode>("mcap");
@@ -247,6 +262,7 @@ export function GmtDemoProvider({ children }: { children: ReactNode }) {
       updatedAtRef.current = remote.updatedAt ?? 0;
       setPreset(remote.preset ?? "GLOBAL");
       setLayout(mergeLayout(remote.layout));
+      if (remote.heatMode === "chain" || remote.heatMode === "industry") setHeatModeState(remote.heatMode);
     });
     return () => {
       alive = false;
@@ -259,8 +275,8 @@ export function GmtDemoProvider({ children }: { children: ReactNode }) {
     }
     const now = Date.now();
     updatedAtRef.current = now;
-    write<GmtPersist>(SYNC_KEY, { preset, layout, updatedAt: now });
-  }, [layout, preset]);
+    write<GmtPersist>(SYNC_KEY, { preset, layout, heatMode, updatedAt: now });
+  }, [layout, preset, heatMode]);
 
   const flatStocks = useMemo(() => groups.flatMap((g) => g.stocks), [groups]);
 
@@ -329,6 +345,11 @@ export function GmtDemoProvider({ children }: { children: ReactNode }) {
     [layout, updateWidget]
   );
 
+  const setHeatMode = useCallback((m: "chain" | "industry") => {
+    setHeatModeState(m);
+    setSector("ALL");
+  }, []);
+
   const setWidgetTitle = useCallback((id: WidgetId, title: string | null) => {
     setTitleOverrides((prev) => {
       if (!title) {
@@ -350,6 +371,8 @@ export function GmtDemoProvider({ children }: { children: ReactNode }) {
     () => ({
       groups,
       setGroups,
+      heatMode,
+      setHeatMode,
       sector,
       setSector,
       movers,
@@ -394,6 +417,8 @@ export function GmtDemoProvider({ children }: { children: ReactNode }) {
     }),
     [
       groups,
+      heatMode,
+      setHeatMode,
       sector,
       movers,
       area,
@@ -446,4 +471,6 @@ export const GMT_WIDGET_META: Record<WidgetId, { num: string; title: string; not
   indices: { num: "08", title: "全球指数一览", note: "状态实时计算 · 5s 刷新" },
   status: { num: "09", title: "数据状态 · 数据源", note: "实时刷新" },
   flow: { num: "10", title: "主力净流入", note: "东财口径 · 20s" },
+  watchlist: { num: "11", title: "自选股", note: "与经典看板共用 · 5s" },
+  treasury: { num: "12", title: "美债收益率", note: "美国财政部 · 30s" },
 };

@@ -11,6 +11,8 @@ import { GmtPulseWidget } from "./widgets/GmtPulseWidget";
 import { GmtIndicesWidget } from "./widgets/GmtIndicesWidget";
 import { GmtStatusWidget } from "./widgets/GmtStatusWidget";
 import { GmtFlowWidget } from "./widgets/GmtFlowWidget";
+import { GmtWatchlistWidget } from "./widgets/GmtWatchlistWidget";
+import { GmtTreasuryWidget } from "./widgets/GmtTreasuryWidget";
 
 const ROWH = 84;
 const GAP = 8;
@@ -28,6 +30,8 @@ const WIDGET_BODY: Record<WidgetId, React.ComponentType> = {
   indices: GmtIndicesWidget,
   status: GmtStatusWidget,
   flow: GmtFlowWidget,
+  watchlist: GmtWatchlistWidget,
+  treasury: GmtTreasuryWidget,
 };
 
 function widgetStyle(item: WidgetLayoutItem, unit: number): React.CSSProperties {

@@ -1000,3 +1000,20 @@ body.gmt-active .mrd-foot {
   background: var(--gmt-amber-bg, rgba(245, 166, 35, 0.15));
   color: var(--gmt-amber, #f5a623);
 }
+
+/* 11 自选 / 12 美债 */
+.gmt-watch-wrap, .gmt-treas-wrap { height: 100%; display: flex; flex-direction: column; min-height: 0; }
+.gmt-watch-table { width: 100%; border-collapse: collapse; font-size: 11px; flex: 1; }
+.gmt-watch-table th { text-align: left; color: var(--gmt-amber, #f5a623); font-weight: 600; padding: 2px 6px; border-bottom: 1px solid var(--gmt-border, #333); }
+.gmt-watch-table td { padding: 3px 6px; border-bottom: 1px solid rgba(255,255,255,0.04); cursor: pointer; }
+.gmt-watch-table tr:hover td { background: rgba(245,166,35,0.08); }
+.gmt-watch-table .sym { font-weight: 700; color: var(--gmt-fg, #e8e8e8); }
+.gmt-watch-table .nm { color: var(--gmt-dim, #8a8a8a); max-width: 7em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gmt-treas-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; padding: 4px; }
+.gmt-treas-cell { background: var(--gmt-panel, #121212); border: 1px solid var(--gmt-border, #2a2a2a); color: inherit; font: inherit; text-align: left; padding: 6px 8px; cursor: pointer; }
+.gmt-treas-cell:hover { border-color: var(--gmt-amber, #f5a623); }
+.gmt-treas-cell .tl { font-size: 9px; color: var(--gmt-dim, #8a8a8a); }
+.gmt-treas-cell .tv { font-size: 14px; font-weight: 700; }
+.gmt-treas-cell .tc { font-size: 10px; }
+.gmt-treas-spreads { display: flex; gap: 14px; padding: 4px 8px; font-size: 11px; color: var(--gmt-dim, #8a8a8a); }
+.gmt-treas-spreads b { margin-left: 6px; font-size: 12px; }

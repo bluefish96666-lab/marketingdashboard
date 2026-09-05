@@ -76,6 +76,8 @@ export function GmtHeatmapWidget() {
     groups,
     sector,
     setSector,
+    heatMode,
+    setHeatMode,
     movers,
     setMovers,
     area,
@@ -116,6 +118,12 @@ export function GmtHeatmapWidget() {
     <div className="hm-gmt-widget h-full">
       <div className="w-body h-full">
         <div className="ctl-row">
+          <GmtChip on={heatMode === "chain"} onClick={() => setHeatMode("chain")} title="产业链分组（Kimi风格）">
+            产业链
+          </GmtChip>
+          <GmtChip on={heatMode === "industry"} onClick={() => setHeatMode("industry")} title="申万行业领涨">
+            行业
+          </GmtChip>
           <GmtChip on={sector === "ALL"} onClick={() => setSector("ALL")}>
             全部
           </GmtChip>
