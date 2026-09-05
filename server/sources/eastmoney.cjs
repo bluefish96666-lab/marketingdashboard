@@ -293,5 +293,104 @@ module.exports = function createEastmoney(ctx) {
     });
   }
 
-  return { handleRank, handleMoneyFlow, handleStockBoards, handleMoneyFlowEM, handleBoardMoneyFlow, handleStockFlows, handleBoardFlow, fetchSinaJson };
+/* ---------------- 个股日K — 腾讯前复权主源, 东财兜底(对齐 Kimi 近 60 日) ---------------- */
+  async function handleKline(raw, n = 60, fqt = 1) {
+    const s = String(raw || "").trim().toLowerCase();
+    let market, digits;
+    const m1 = s.match(/^(sh|sz|bj)(\d{6})$/);
+    if (m1) {
+      market = m1[1];
+      digits = m1[2];
+    } else {
+      const m2 = s.match(/^(\d{6})$/);
+      if (!m2) throw Object.assign(new Error(`bad code: ${raw}`), { status: 400 });
+      digits = m2[1];
+      market = toMarketCode6(digits).slice(0, 2);
+    }
+    if (!/^(sh|sz|bj)$/.test(market)) {
+      throw Object.assign(new Error(`kline supports A-share only: ${raw}`), { status: 400 });
+    }
+    const lim = Math.min(500, Math.max(5, parseInt(n, 10) || 60));
+    const adj = fqt === 0 || fqt === "0" ? 0 : 1; // 0 不复权 / 1 前复权
+    const code = `${market}${digits}`;
+
+    const parseTx = (text) => {
+      // web.ifzq JSON 或 proxy JSONP: kline_dayqfq={...}
+      const json = text.trim().startsWith("{")
+        ? JSON.parse(text)
+        : JSON.parse(text.replace(/^[^=]+=/, "").replace(/;$/, ""));
+      const block = json?.data?.[code] || {};
+      const rows = adj ? block.qfqday || block.day || [] : block.day || block.qfqday || [];
+      // 腾讯: [日期, 开, 收, 高, 低, 成交量(手)]
+      return rows
+        .map((r) => ({
+          t: String(r[0]),
+          o: num(r[1]),
+          c: num(r[2]),
+          h: num(r[3]),
+          l: num(r[4]),
+          v: num(r[5]),
+        }))
+        .filter((p) => p.t && p.c > 0);
+    };
+
+    // 1) 腾讯前复权日K(稳定、无需 ut)
+    try {
+      const fq = adj ? "qfq" : "";
+      const url = `https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=${code},day,,,${lim},${fq}`;
+      const text = await fetchWithFallback(url, {
+        referer: "https://finance.qq.com/",
+        hosts: ["web.ifzq.gtimg.cn", "proxy.finance.qq.com"],
+        retries: 1,
+        timeout: 8000,
+        accept: (t) => {
+          try {
+            return parseTx(t).length > 0;
+          } catch {
+            return false;
+          }
+        },
+      });
+      const points = parseTx(text);
+      if (points.length) return { code, fqt: adj, points, source: "tencent" };
+    } catch {
+      /* 走东财兜底 */
+    }
+
+    // 2) 东财兜底(偶发 curl 52 空响应, 加重试)
+    const emM = market === "sh" ? 1 : 0;
+    return emEnqueue(async () => {
+      const url =
+        `https://push2his.eastmoney.com/api/qt/stock/kline/get?secid=${emM}.${digits}` +
+        `&ut=fa5fd1943c7b386f172d6893dbfba10b` +
+        `&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57` +
+        `&klt=101&fqt=${adj}&end=20500101&lmt=${lim}`;
+      const text = await fetchWithFallback(url, {
+        referer: EM_REFERER,
+        hosts: ["push2his.eastmoney.com"],
+        retries: 2,
+        timeout: 12000,
+        accept: (t) => {
+          try {
+            const kl = JSON.parse(t)?.data?.klines;
+            return Array.isArray(kl) && kl.length > 0;
+          } catch {
+            return false;
+          }
+        },
+      });
+      const klines = JSON.parse(text)?.data?.klines || [];
+      const points = klines
+        .map((row) => {
+          const f = String(row).split(",");
+          return { t: f[0], o: num(f[1]), c: num(f[2]), h: num(f[3]), l: num(f[4]), v: num(f[5]) };
+        })
+        .filter((p) => p.t && p.c > 0);
+      if (!points.length) throw Object.assign(new Error("empty kline"), { status: 502 });
+      return { code, fqt: adj, points, source: "eastmoney" };
+    });
+  }
+
+  return { handleRank, handleMoneyFlow, handleStockBoards, handleMoneyFlowEM, handleBoardMoneyFlow, handleStockFlows, handleBoardFlow, handleKline, fetchSinaJson };
+
 };

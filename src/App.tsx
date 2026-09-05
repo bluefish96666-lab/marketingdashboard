@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { Routes, Route } from "react-router";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+import { Navigate, Routes, Route } from "react-router";
 import { TickerTape, type TapeItem } from "@/components/dash/TickerTape";
 import { DashboardHeader } from "@/components/dash/DashboardHeader";
 import { DashboardLayout, type PanelRowDef } from "@/components/dash/DashboardLayout";
@@ -20,6 +20,9 @@ import GoldDashboard from "./GoldDashboard";
 import WatchDashboard from "./WatchDashboard";
 import LoginPage from "./pages/LoginPage";
 import { hostingEnabled, hostingToken } from "@/lib/hosting";
+import { useUiMode } from "@/lib/ui-mode";
+import { UiModeContext } from "@/lib/ui-mode-context";
+import { ModeToggle } from "@/components/ModeToggle";
 import { selfhostEnabled } from "@/lib/selfhost";
 import { HostingContext } from "@/lib/hosting-context";
 import { SelfhostContext } from "@/lib/selfhost-context";
@@ -31,6 +34,9 @@ import { useFullscreen } from "@/hooks/useFullscreen";
 import { api } from "@/lib/api";
 import { POLL } from "@/lib/intervals";
 import { INDICES, FOREX, COMMODITIES } from "@/config/dashboard";
+
+// GMT 终端整包懒加载：经典用户首屏不下载终端代码与字体
+const GmtTerminal = lazy(() => import("./pages/GmtTerminal"));
 
 function Tape() {
   const codes = useMemo(() => [...INDICES.map((i) => i.code), ...FOREX.map((i) => i.code)], []);
@@ -109,6 +115,7 @@ function Dashboard() {
         linkTo="/ai"
         linkLabel="AI 观察"
         links={pageLinks("/")}
+        leading={<ModeToggle variant="classic" />}
         live
         isFullscreen={isFullscreen}
         onToggleFullscreen={toggle}
@@ -122,15 +129,34 @@ function Dashboard() {
 /** 托管模式上下文: HostingGate 探测结果(enabled) 复用同一次探测, 供 Dashboard/路由消费
  *  (定义在 src/lib/hosting-context.ts, 独立模块避免 AiDashboard ↔ App 循环依赖) */
 
+/** 首页形态门：经典看板 | GMT 终端（?mode= → 服务端偏好 → 本机 → 默认） */
+function ModeGate() {
+  const [mode, setMode] = useUiMode();
+  const ctx = useMemo(() => ({ mode, setMode }), [mode, setMode]);
+  return (
+    <UiModeContext.Provider value={ctx}>
+      {mode === "gmt" ? (
+        <Suspense fallback={<div className="flex min-h-screen items-center justify-center bg-black font-mono text-[11px] text-[#8a8a8a]">GMT 终端加载中…</div>}>
+          <GmtTerminal />
+        </Suspense>
+      ) : (
+        <Dashboard />
+      )}
+    </UiModeContext.Provider>
+  );
+}
+
 function AppRoutes() {
   return (
     <Routes>
-      <Route path="/" element={<Dashboard />} />
+      <Route path="/" element={<ModeGate />} />
       <Route path="/watch" element={<WatchDashboard />} />
       <Route path="/ai" element={<AiDashboard />} />
       <Route path="/goods" element={<GoodsDashboard />} />
       <Route path="/gold" element={<GoldDashboard />} />
       <Route path="/fin" element={<FinDashboard />} />
+      <Route path="/terminal" element={<Navigate to="/?mode=gmt" replace />} />
+      <Route path="/demo/gmt-full" element={<Navigate to="/?mode=gmt" replace />} />
     </Routes>
   );
 }

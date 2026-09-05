@@ -130,6 +130,17 @@ docker run -p 3000:3000 -e SELFHOST=1 market-cockpit
 # 或: SELFHOST=1 npm start
 ```
 
+**GMT 终端形态**：首页顶栏「经典 | 终端」可切换（`?mode=gmt` / `?mode=classic` 直达；终端内按 `T` 回经典）。终端为 12 列可拖拽网格：`E` 编辑布局、`+ 添加组件`、预设「全球 / 股票 / 贵金属 / 新闻」、`F1` 帮助、`D` 数据源、`I` 检查器。
+
+**跨设备同步（自部署）**：在 `server/.env` 配置一把密钥后，GMT 布局与预设、经典面板缩放、自选股、经典/终端偏好会经 `/api/selfhost/layout` 在多台设备间同步（存 `server/data/selfhost-layout.json`，单用户、无账号）：
+
+```bash
+# server/.env
+SELFHOST_SYNC_KEY=换成一串足够长的随机字符
+```
+
+每台设备在终端里按 `S` 填同一密钥，或用 `http://<你的VPS>:3000/?mode=gmt&syncKey=<密钥>` 打开一次自动录入（地址栏随即抹掉密钥）。密钥只存本机浏览器；未配置时端点不存在，一切退回本机 localStorage。密钥明文走 HTTP 头，公网部署请在前面挂 TLS 反代。托管版（`HOSTING=1`）则自动走账号级 `/api/hosting/layout`，前端契约相同。
+
 ### 安装为桌面应用（PWA）
 
 用 Chrome / Edge 打开部署后的页面，点击地址栏右侧的 **安装图标**（或菜单 →「安装市场研究驾驶舱」），即可作为独立桌面应用运行，支持离线缓存静态资源、独立图标。

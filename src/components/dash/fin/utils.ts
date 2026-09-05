@@ -5,6 +5,18 @@ import { normalizeStockCode as prefixCode } from "@/lib/code";
 
 export { TNUM, fmtYi, prefixCode };
 
+const A_SHARE = /^(sh|sz|bj|nq)\d{6}$/;
+
+/** 财报搜索框: 裸 6 位或带前缀的 A 股代码 → { code, name } */
+export function resolveFinCompanyQuery(input: string): { code: string; name: string } | null {
+  const t = input.trim();
+  if (!t) return null;
+  const code = prefixCode(t);
+  if (!A_SHARE.test(code)) return null;
+  const name = /^\d{6}$/.test(t) || A_SHARE.test(t) ? "" : t;
+  return { code, name };
+}
+
 /** 报告期标签: "2025-09-30"/"2025Q3" → "25Q3"(趋势图刻度/日历期次) */
 export const quarterLabel = (s: string) => {
   const m = s.match(/(\d{4})-(\d{2})-/);

@@ -66,7 +66,7 @@ const srcEastmoney = require("./sources/eastmoney.cjs")({
   fetchText, fetchWithFallback, cache, cacheSet, num, toMarketCode6,
   entry, failEntry, quoteBackoff, TTLS, qqRank,
 });
-const { handleRank, handleMoneyFlow, handleStockBoards, handleMoneyFlowEM, handleBoardMoneyFlow, handleStockFlows, handleBoardFlow, fetchSinaJson } = srcEastmoney;
+const { handleRank, handleMoneyFlow, handleStockBoards, handleMoneyFlowEM, handleBoardMoneyFlow, handleStockFlows, handleBoardFlow, handleKline, fetchSinaJson } = srcEastmoney;
 
 const srcSina = require("./sources/sina.cjs")({
   fetchTextAny, fetchSinaJson, num, toMarketCode6,
@@ -240,6 +240,14 @@ const routes = {
     handleStockFlows(q.get("code") || "", flowInflight).then((rows) => rows[0] || Promise.reject(new Error("empty stock-flow"))),
   "/api/stock-flows": async (q) => handleStockFlows(q.get("codes") || "", flowInflight),
   "/api/board-flow": async (q) => cached(`bf:${q.get("n")}`, 120000, () => handleBoardFlow(q.get("n") || "20")),
+  // 个股日K(东财, 默认近 60 根前复权); GMT 图表对齐 Kimi「近 60 个交易日」
+    "/api/kline": async (q) => {
+    const code = q.get("code") || "";
+    const n = Math.min(parseInt(q.get("n"), 10) || 60, 500);
+    // 客户端传 fqt(东财字段); 兼容 fqt 别名
+    const fqt = q.get("fqt") === "0" || q.get("fqt") === "0" ? 0 : 1;
+    return cached(`kline:${code}:${n}:${fqt}`, 300000, () => handleKline(code, n, fqt));
+  },
   "/api/stock-boards": async (q) =>
     cached(`sb:${q.get("code")}`, 24 * 3600 * 1000, () => handleStockBoards(q.get("code") || "")),
   "/api/news": async (q) =>
@@ -300,6 +308,19 @@ const routes = {
     cached(`ssearch:${q.get("q")}`, 5000, () => handleStockSearch(q.get("q") || "")), // 前端击键触发, 短缓存防新浪WAF
   "/api/chain-parse": async (_q, body) => handleChainParse(body || {}),
 };
+
+// ---- 自部署布局同步（SELFHOST=1 且配置 SELFHOST_SYNC_KEY 时挂载）----
+// 单用户跨设备同步 GMT 布局 / 面板缩放 / 自选股; 契约与 /api/hosting/layout 同形, 前端 layout-sync 统一消费。
+// 未配置密钥 → 端点不存在(404), 前端退回 localStorage; 不做账号(账号属托管版 mrd-pro)。
+if (SELFHOST) {
+  const { createSelfhostLayout } = require("./lib/selfhost-layout.cjs");
+  const selfhostLayout = createSelfhostLayout({
+    file: path.join(__dirname, "data", "selfhost-layout.json"),
+    getKey: () => process.env.SELFHOST_SYNC_KEY || "",
+  });
+  Object.assign(routes, selfhostLayout.routes);
+  console.log(process.env.SELFHOST_SYNC_KEY ? "[selfhost] layout sync enabled (/api/selfhost/layout)" : "[selfhost] layout sync disabled — set SELFHOST_SYNC_KEY in server/.env to enable");
+}
 
 // ---- 托管版托管层（HOSTING=1 启用）: 单实例多租户账号系统, 只增不改核心路由 ----
 // 复用本文件数据管道/共享缓存(公开行情只读共享); 新增 /api/hosting/* 账号路由

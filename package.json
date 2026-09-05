@@ -9,9 +9,11 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "start": "node server/index.cjs",
+    "selfhost": "npm run build && node -e \"console.log('\\n  经典看板 → http://localhost:3000/\\n  GMT 终端 → http://localhost:3000/?mode=gmt\\n  (需先释放 3000 端口; Ctrl+C 停止)\\n')\" && SELFHOST=1 npm start",
     "test": "vitest run && node --test server/*.test.cjs"
   },
   "dependencies": {
+    "@fontsource/ibm-plex-mono": "^5.3.0",
     "iconv-lite": "^0.7.3",
     "lucide-react": "^0.562.0",
     "react": "^19.2.0",
